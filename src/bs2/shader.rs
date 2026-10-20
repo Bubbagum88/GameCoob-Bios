@@ -61,6 +61,13 @@ impl FastTex {
         f
     }
 
+    /// A clamped texture from `w * h` RGBA bytes (pictures made at run time,
+    /// such as save icons and disc banners).
+    pub fn from_rgba(w: usize, h: usize, rgba: &[u8]) -> FastTex {
+        let texels = rgba.chunks_exact(4).map(|p| [p[0], p[1], p[2], p[3]].map(|c| c as f32 * (1.0 / 255.0))).collect();
+        FastTex { w: w.max(1) as i32, h: h.max(1) as i32, wrap_s: gx::CLAMP, wrap_t: gx::CLAMP, texels }
+    }
+
     /// A white texture with the given coverage as alpha.
     pub fn from_alpha(w: usize, h: usize, a: &[u8]) -> FastTex {
         let texels = a.iter().map(|&v| [1.0, 1.0, 1.0, v as f32 * (1.0 / 255.0)]).collect();

@@ -6,7 +6,7 @@ use super::mtx::{self, Mtx};
 use super::raster::{BlendMode, Prim, SVert, Sh, State};
 use super::render::View;
 use super::shader::FastTex;
-use crate::ipl::glh::{Font, Frame, Pic, Text};
+use crate::ipl::glh::{Font, Frame, Layout, Pic, Str, Text};
 use alloc::vec::Vec;
 
 pub type Rgba = [f32; 4];
@@ -48,6 +48,18 @@ impl UiFont {
     }
 
     /// Coverage 0..1 at glyph-cell pixel (x, y).
+    /// Width and height of (possibly multi-line) text set in pane `p`.
+    pub fn measure(&self, p: &Text, s: &[u8], size: f32) -> (f32, f32) {
+        let line_h = if p.line > 0.0 { p.line.max(size) } else { size };
+        let lines = s.split(|&c| c == b'\n');
+        let (mut w, mut n) = (0.0f32, 0);
+        for l in lines {
+            w = w.max(self.width(l, size, p.spacing));
+            n += 1;
+        }
+        (w, (n as f32 - 1.0) * line_h + size)
+    }
+
     pub fn coverage(&self, c: u8, x: i32, y: i32) -> f32 {
         let f = &self.font;
         let Some(g) = f.glyph(c) else { return 0.0 };
@@ -229,6 +241,23 @@ impl<'a> Ui<'a, '_> {
         }
     }
 
+    /// `Glh_DrawString` (0x8130A39C): STH0 string `st` in its text pane,
+    /// over the pane's background frame (if it has one) sized to the text
+    /// plus 8 units of padding on every side.
+    #[allow(clippy::too_many_arguments)]
+    pub fn string(&mut self, font: &'a UiFont, l: &Layout, bank: &'a [FastTex], st: &Str, c: Rgba, dx: f32, dy: f32) {
+        if c[3] <= 0.0 {
+            return;
+        }
+        let Some(p) = l.texts.get(st.pane as usize) else { return };
+        if let Some(f) = p.bg.and_then(|i| l.frames.get(i as usize)) {
+            let (w, h) = font.measure(p, &st.text, p.size);
+            let (w, h) = (w + 16.0, h + 16.0);
+            self.frame_rect(f, bank, c, f.x - w / 2.0 + dx, f.y - h / 2.0 + dy, w, h);
+        }
+        self.text(font, p, &st.text, c, dx, dy);
+    }
+
     /// Text at a point with no layout pane (left, top).
     pub fn label(&mut self, font: &'a UiFont, x: f32, y: f32, size: f32, s: &[u8], c: Rgba, align: u8) {
         let p = Text {
@@ -244,6 +273,7 @@ impl<'a> Ui<'a, '_> {
             spacing: 0.0,
             line: size + 4.0,
             size,
+            bg: None,
             default: Vec::new(),
         };
         self.text(font, &p, s, c, 0.0, 0.0);

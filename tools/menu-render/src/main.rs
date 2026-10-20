@@ -6,7 +6,7 @@
 //!
 //! The script has one `frame button` pair per line (frames count from boot,
 //! like a Dolphin frame dump): button is one of up, down, left, right, a, b,
-//! start. Lines starting with `#` are ignored. Without frames, every 10th
+//! start, system (F10), eject (D), slot1, slot2. Lines starting with `#` are ignored. Without frames, every 10th
 //! frame up to the last scripted frame + 200 is written.
 //! Env: THREADS=n rasterizes on n threads; SKIP=1 skips the intro.
 
@@ -22,6 +22,7 @@ mod bs2;
 
 mod png;
 
+use bs2::menu::backend::{FakeCards, FakeDrive};
 use bs2::menu::{Menu, MenuAssets, Pad, SysInfo};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -87,7 +88,7 @@ fn main() {
                 intro.update(bs2::Input { a: has("a"), egg: None });
                 if intro.finished() {
                     println!("frame {f}: menu starts");
-                    menu = Some(Menu::new(info(f), intro.wobble_frame, &intro.sin));
+                    menu = Some(Menu::new(info(f), Box::new(FakeDrive::new()), Box::new(FakeCards::new()), intro.wobble_frame, &intro.sin));
                 }
             }
             Some(m) => {
@@ -100,6 +101,9 @@ fn main() {
                     down: has("down"),
                     left: has("left"),
                     right: has("right"),
+                    system: has("system"),
+                    eject: has("eject"),
+                    slot: [has("slot1"), has("slot2")],
                 };
                 if let Some(act) = m.update(&pad, &intro.sin) {
                     println!("frame {f}: action {act:?}");

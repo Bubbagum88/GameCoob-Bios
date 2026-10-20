@@ -2,7 +2,9 @@
 //! `ipl.bin` is on the boot partition, and runs on into the rebuilt cube
 //! menu. Without the dump, the original GameCoob intro and menu play instead.
 
+use crate::bs2::menu::backend::{FakeCards, FakeDrive};
 use crate::bs2::menu::{Action, Menu, MenuAssets, Pad, SysInfo};
+use alloc::boxed::Box;
 use crate::bs2::{Assets, Input, Intro, cube::Jingle, raster::{Job, Target}, render};
 use crate::clock::Clock;
 use crate::gfx::Canvas;
@@ -130,7 +132,9 @@ impl Cores {
 /// Intro: Enter, Space or A is the A button (hold to spin the cube); Z at
 /// boot picks the easter-egg jingle; Escape skips to the menu.
 /// Menu: the arrows are the d-pad, Enter is A, Escape or Backspace is B and
-/// Space or S is START.
+/// Space or S is START. F10 opens the system dialog (firmware setup,
+/// restart, power off); D opens and closes the stand-in disc drive's tray
+/// and 1 / 2 pull, format-break and re-insert the stand-in memory cards.
 pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &Assets, ma: Option<&MenuAssets>) {
     let mut intro = Intro::new(assets);
     let mut menu: Option<Menu> = None;
@@ -160,6 +164,9 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
                         '\r' => pad.a = true,
                         '\u{8}' => pad.b = true,
                         ' ' | 's' | 'S' => pad.start = true,
+                        'd' | 'D' => pad.eject = true,
+                        '1' => pad.slot[0] = true,
+                        '2' => pad.slot[1] = true,
                         _ => {}
                     },
                     Key::Special(ScanCode::UP) => pad.up = true,
@@ -167,6 +174,7 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
                     Key::Special(ScanCode::LEFT) => pad.left = true,
                     Key::Special(ScanCode::RIGHT) => pad.right = true,
                     Key::Special(ScanCode::ESCAPE) => pad.b = true,
+                    Key::Special(ScanCode::FUNCTION_10) => pad.system = true,
                     _ => {}
                 }
                 continue;
@@ -209,7 +217,7 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
             intro.update(Input { a: now < a_until, egg });
             if intro.finished() {
                 let Some(_) = ma else { return };
-                menu = Some(Menu::new(sys_info(), intro.wobble_frame, &intro.sin));
+                menu = Some(Menu::new(sys_info(), Box::new(FakeDrive::new()), Box::new(FakeCards::new()), intro.wobble_frame, &intro.sin));
                 // Keys pressed during the intro don't leak into the menu.
                 pad = Pad::default();
             }

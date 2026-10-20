@@ -61,6 +61,8 @@ pub struct Text {
     pub spacing: f32,
     pub line: f32,
     pub size: f32,
+    /// Frame drawn behind the text, sized to it (`0xFFFF` = none).
+    pub bg: Option<u16>,
     pub default: Vec<u8>,
 }
 
@@ -123,6 +125,7 @@ impl Layout {
                 spacing: be16(b, o + 0x16)? as i16 as f32,
                 line: be16(b, o + 0x18)? as i16 as f32,
                 size: be16(b, o + 0x1A)? as f32,
+                bg: Some(be16(b, o + 0x1C)?).filter(|&i| i != 0xFFFF),
                 default,
             });
         }
