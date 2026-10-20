@@ -1,11 +1,14 @@
 # Boot GameCoob in QEMU on Windows, straight from a downloaded build.
-# Usage: scripts\run-qemu.ps1 [-Boot <folder with EFI\BOOT\BOOTX64.EFI>] [-Fast]
+# Usage: scripts\run-qemu.ps1 [-Boot <folder with EFI\BOOT\BOOTX64.EFI>] [-Fast] [-Slow]
 #   Without -Boot it uses the newest boot files under local\ (an unzipped
 #   GameCoob-boot-files download, or the .zip itself) or target\esp.
-#   -Fast uses Windows Hypervisor Platform for full speed (turn it on in
-#   "Turn Windows features on or off" first).
+#   By default it uses Windows Hypervisor Platform when it is turned on
+#   ("Turn Windows features on or off", then reboot) and falls back to
+#   plain emulation, which is many times slower: GameCoob draws every frame
+#   with floating-point math, which emulation does in software.
+#   -Fast insists on Windows Hypervisor Platform; -Slow skips it.
 # Your dump at local\ipl.bin is added so the real intro plays.
-param([string]$Boot, [switch]$Fast)
+param([string]$Boot, [switch]$Fast, [switch]$Slow)
 $ErrorActionPreference = "Stop"
 $root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 Set-Location $root
@@ -56,8 +59,18 @@ $code = Join-Path $share "edk2-x86_64-code.fd"
 $vars = "local\qemu\vars.fd"
 if (-not (Test-Path $vars)) { Copy-Item (Join-Path $share "edk2-i386-vars.fd") $vars }
 
-$accel = if ($Fast) { @("-accel", "whpx,kernel-irqchip=off") } else { @("-accel", "tcg") }
-& $qemu -machine q35 -m 1024 -smp 4 @accel `
+# QEMU tries each -accel in turn. Emulation runs one host thread per CPU.
+$whpx = @("-accel", "whpx,kernel-irqchip=off")
+$tcg = @("-accel", "tcg,thread=multi,tb-size=512")
+$accel = if ($Fast) { $whpx } elseif ($Slow) { $tcg } else { $whpx + $tcg }
+# The renderer splits each frame across every CPU it is given.
+$cpus = [Math]::Max(2, [Math]::Min(8, [Environment]::ProcessorCount))
+# Show the screen 1:1 instead of stretched to the window, which blurs it.
+$display = @()
+$displays = try { & $qemu -display help 2>$null } catch { @() }
+if ($displays -match "^gtk") { $display = @("-display", "gtk,zoom-to-fit=off") }
+Write-Host "CPUs: $cpus; accelerator: $(($accel | Where-Object { $_ -ne '-accel' }) -join ', then ')"
+& $qemu -machine q35 -m 1024 -smp $cpus @accel @display `
     -drive "if=pflash,format=raw,readonly=on,file=$code" `
     -drive "if=pflash,format=raw,file=$vars" `
     -drive "format=raw,file=fat:rw:$esp" `

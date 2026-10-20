@@ -22,7 +22,8 @@ fi
 [ -f target/qemu/OVMF_VARS.fd ] || cp "$OVMF_VARS_TEMPLATE" target/qemu/OVMF_VARS.fd
 
 exec qemu-system-x86_64 \
-  -machine q35 -m 512M -smp 4 \
+  -machine q35 -m 512M -smp "$(nproc | awk '{n=$1; if (n>8) n=8; if (n<2) n=2; print n}')" \
+  -accel kvm -accel tcg,thread=multi \
   -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
   -drive if=pflash,format=raw,file=target/qemu/OVMF_VARS.fd \
   -drive format=raw,file=fat:rw:target/esp \
