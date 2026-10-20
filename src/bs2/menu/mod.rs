@@ -828,8 +828,9 @@ impl Menu {
         let (ax, ay) = (clampf(self.rot_x), clampf(self.rot_y));
         let front = if ax != ay { Some(ax.max(ay)) } else if ax == 0 { Some(0) } else { None };
         if let Some(m) = front {
+            // Menu_DrawTopFace ignores the menu alpha.
             let fa = (255 - m * 255 / FACE_FADE) as u8;
-            draw_front(ui, ma, self.lang, view, &self.cube, (fa as u32 * alpha as u32 / 255) as u8, s);
+            draw_front(ui, ma, self.lang, view, &self.cube, fa, s);
         }
         let face_a = |r: i16| ((alpha as i32) * (255 - (0x4000 - (r as i32).abs()) * 255 / FACE_FADE) / 255).clamp(0, 255) as f32 / 255.0;
         let l = self.lang;
@@ -1108,9 +1109,11 @@ impl Menu {
         if let Some(p) = g.text(tag(b"mesg")) {
             ui.text(&ma.font, p, &cp1252("The firmware clock."), with_a(WHITE, al[2]), 0.0, 0.0);
         }
+        // Clock_Draw: the row labels use the calendar text colour.
+        let yellow = rgb(255, 255, 0);
         for (i, t) in [(1usize, b"txt1"), (2, b"txt2")] {
             if let (Some(p), Some(st)) = (g.text(tag(t)), s.get(i)) {
-                ui.text(&ma.font, p, &st.text, with_a(WHITE, al[2]), 0.0, 0.0);
+                ui.text(&ma.font, p, &st.text, with_a(yellow, al[2]), 0.0, 0.0);
             }
         }
         for t in [b"bar1", b"bar2"] {

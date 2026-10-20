@@ -118,6 +118,13 @@ fn main() {
         match &mut menu {
             None => {
                 intro.update(bs2::Input { a: has("a"), egg: None });
+                if std::env::var("TRACE").is_ok() {
+                    let sc = &intro.scene;
+                    println!(
+                        "trace f{f} state={:?} spin={} speed={:.3} accel={:.3} wph={} wamp={} t={} mwob={} land={} drop={}",
+                        intro.state, sc.spin, sc.spin_speed, sc.spin_accel, sc.wobble_phase, sc.wobble_amp, intro.spin_frame, intro.wobble_frame, sc.land_impulse, sc.drop_impulse
+                    );
+                }
                 if intro.finished() {
                     println!("frame {f}: menu starts");
                     menu = Some(Menu::new(info(f), Box::new(FakeDrive::new()), Box::new(FakeCards::new()), intro.wobble_frame, &intro.sin));
