@@ -19,11 +19,9 @@ Language: Rust with the [`uefi`](https://crates.io/crates/uefi) crate, `no_std`.
 ## Phase 1: Prototype (done)
 
 - [x] Rust UEFI app that builds to `BOOTX64.EFI` and boots in QEMU/OVMF
-- [x] Software renderer: backbuffer, depth-buffered flat-shaded triangles,
-      pinhole camera, 8x8 bitmap font, fades, one GOP blit per frame
 - [x] Frame-rate-independent animation (TSC timer calibrated against `Stall`)
-- [x] Original cube intro, skippable, with a "press Z" alternate palette
-- [x] Menu: Boot, Settings, Firmware Setup, Restart, Power Off
+- [x] Prototype cube intro and text menu (Boot, Settings, Firmware Setup,
+      Restart, Power Off); since removed in favour of the faithful rebuild
 - [x] Boot any firmware boot entry via `BootNext`
 - [x] Edit the firmware boot `Timeout`
 - [x] Reboot into vendor setup via `OsIndications` (when the firmware supports it)
@@ -96,8 +94,8 @@ are used only by the person who owns the console, from their own dump:
 1. Dump `ipl.bin` from your own GameCube with Swiss.
 2. Copy it to the boot partition as `\EFI\GameCoob\ipl.bin`. GameCoob
    descrambles it at startup and reads the models, textures, animations and
-   the cube's path straight from it (`src/ipl`). Without it, the original
-   GameCoob intro plays instead.
+   the cube's path straight from it (`src/ipl`). Without it, GameCoob says
+   where the dump goes and hands back to the firmware's next boot entry.
 3. For inspecting a dump, the extractor (currently at `tools/ipl-extract` in
    the project's shared files) writes textures, models, fonts, audio and
    strings to a folder.

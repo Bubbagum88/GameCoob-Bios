@@ -44,7 +44,7 @@ if (Test-Path "local\ipl.bin") {
     Copy-Item -Force "local\ipl.bin" "$esp\EFI\GameCoob\ipl.bin"
     Write-Host "Using your dump from local\ipl.bin"
 } else {
-    Write-Host "No local\ipl.bin, so the original GameCoob intro will play"
+    Write-Host "No local\ipl.bin; GameCoob needs your dump and will skip to the next boot entry without it"
 }
 
 $qemu = (Get-Command qemu-system-x86_64 -ErrorAction SilentlyContinue).Source
