@@ -67,6 +67,12 @@ scripts\build.ps1 -Run                    # same, then boot it in QEMU for Windo
 scripts\build.ps1 -Usb F:                 # same, then copy to a FAT32 USB stick
 ```
 
+To try it in **VMware Workstation**, unzip the download (or run
+`scripts\build.ps1`) into `local\`, then run `scripts\make-vm.ps1`. It asks
+for administrator rights, builds a small virtual disk with the boot files and
+your `local\ipl.bin`, and writes `local\vm\GameCoob.vmx`; open that in VMware
+and power it on. Re-run the script after each new download.
+
 On Linux:
 
 ```sh
