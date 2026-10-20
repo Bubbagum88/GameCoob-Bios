@@ -203,15 +203,29 @@ pub trait MemCards {
     /// Called once per menu frame; finishes operations over time.
     fn update(&mut self);
     fn state(&self, slot: usize) -> SlotState;
+    /// Bytes per block (`CARDGetSectorSize`); the browser colours a card's
+    /// blocks by it. Every standard card has 8 KB blocks.
+    fn sector_size(&self, _slot: usize) -> u32 {
+        0x2000
+    }
     fn total_blocks(&self, slot: usize) -> u16;
     fn free_blocks(&self, slot: usize) -> u16;
     /// The card's directory: `DIR_ENTRIES` entries, `None` where free.
     fn files(&self, slot: usize) -> &[Option<Save>];
+    /// Free directory entries.
+    fn free_files(&self, slot: usize) -> usize {
+        self.files(slot).iter().filter(|f| f.is_none()).count()
+    }
+    /// Bumped whenever the slot's state or directory changes (a card goes
+    /// in or out, an operation finishes): the card thread's "dirty" flag.
+    fn version(&self, slot: usize) -> u32;
     /// Start an operation on `file` of `slot` (Copy and Move go to the
     /// other slot). The result comes from [`MemCards::result`].
     fn start(&mut self, op: CardOp, slot: usize, file: usize);
     /// `None` while an operation runs, then its outcome.
     fn result(&self) -> Option<Result<(), CardError>>;
+    /// The directory entry the last Copy or Move wrote on the other card.
+    fn dest_file(&self) -> Option<usize>;
     /// Insert or pull the card in `slot` (a stand-in for the real thing).
     fn cycle(&mut self, _slot: usize) {}
 }
@@ -220,6 +234,11 @@ struct FakeCard {
     state: SlotState,
     total: u16,
     files: Vec<Option<Save>>,
+    version: u32,
+    /// Frames left until an inserted card has mounted.
+    mounting: u32,
+    /// What the card becomes once mounted.
+    mounts_as: SlotState,
 }
 
 impl FakeCard {
@@ -228,30 +247,27 @@ impl FakeCard {
     }
 }
 
-/// Two 251-block cards in RAM with a few made-up saves. Each slot cycles
-/// through: card with saves, no card, unformatted card, and back.
+/// Two 251-block cards in RAM with made-up saves. Each slot cycles
+/// through: card with saves, no card, unformatted card, something that is
+/// not a card, and back.
 pub struct FakeCards {
     cards: [FakeCard; 2],
     busy: Option<(CardOp, usize, usize, u32)>,
     result: Option<Result<(), CardError>>,
+    dest: Option<usize>,
     clock: u32,
 }
 
 /// Frames a fake operation takes.
 const OP_FRAMES: u32 = 90;
+/// Frames an inserted fake card takes to mount.
+const MOUNT_FRAMES: u32 = 20;
 const FAKE_BLOCKS: u16 = 251;
 
 impl FakeCards {
     pub fn new() -> FakeCards {
-        let mut c = FakeCards {
-            cards: [
-                FakeCard { state: SlotState::Ready, total: FAKE_BLOCKS, files: Vec::new() },
-                FakeCard { state: SlotState::Ready, total: FAKE_BLOCKS, files: Vec::new() },
-            ],
-            busy: None,
-            result: Some(Ok(())),
-            clock: 0,
-        };
+        let card = || FakeCard { state: SlotState::Ready, total: FAKE_BLOCKS, files: Vec::new(), version: 1, mounting: 0, mounts_as: SlotState::Ready };
+        let mut c = FakeCards { cards: [card(), card()], busy: None, result: Some(Ok(())), dest: None, clock: 0 };
         c.fill(0);
         c.fill(1);
         c
@@ -300,6 +316,7 @@ impl FakeCards {
         let mut copy = save;
         copy.modified = copy.modified.max(self.clock);
         self.cards[other].files[dst] = Some(copy);
+        self.dest = Some(dst);
         if op == CardOp::Move {
             self.cards[slot].files[file] = None;
         }
@@ -322,6 +339,23 @@ impl MemCards for FakeCards {
             } else {
                 self.busy = None;
                 self.result = Some(self.run(op, slot, file));
+                // The card thread re-reads both directories after an operation.
+                for c in self.cards.iter_mut() {
+                    c.version += 1;
+                }
+            }
+        }
+        for slot in 0..2 {
+            let c = &mut self.cards[slot];
+            if c.mounting > 0 {
+                c.mounting -= 1;
+                if c.mounting == 0 {
+                    c.state = c.mounts_as;
+                    c.version += 1;
+                    if c.state == SlotState::Ready {
+                        self.fill(slot);
+                    }
+                }
             }
         }
     }
@@ -342,8 +376,13 @@ impl MemCards for FakeCards {
         &self.cards[slot & 1].files
     }
 
+    fn version(&self, slot: usize) -> u32 {
+        self.cards[slot & 1].version
+    }
+
     fn start(&mut self, op: CardOp, slot: usize, file: usize) {
         self.result = None;
+        self.dest = None;
         self.busy = Some((op, slot & 1, file, if op == CardOp::Erase { OP_FRAMES / 2 } else { OP_FRAMES }));
     }
 
@@ -351,23 +390,31 @@ impl MemCards for FakeCards {
         self.result
     }
 
+    fn dest_file(&self) -> Option<usize> {
+        self.dest
+    }
+
     fn cycle(&mut self, slot: usize) {
         let slot = slot & 1;
-        if self.busy.is_some() {
+        if self.busy.is_some() || self.cards[slot].mounting > 0 {
             return;
         }
-        match self.cards[slot].state {
+        let c = &mut self.cards[slot];
+        c.version += 1;
+        let insert = |c: &mut FakeCard, as_: SlotState| {
+            c.state = SlotState::Mounting;
+            c.mounting = MOUNT_FRAMES;
+            c.mounts_as = as_;
+        };
+        match c.state {
             SlotState::Ready => {
-                self.cards[slot].state = SlotState::Empty;
-                self.cards[slot].files = vec![None; DIR_ENTRIES];
+                c.state = SlotState::Empty;
+                c.files = vec![None; DIR_ENTRIES];
             }
-            SlotState::Empty => {
-                self.cards[slot].state = SlotState::Broken;
-            }
-            _ => {
-                self.cards[slot].state = SlotState::Ready;
-                self.fill(slot);
-            }
+            SlotState::Empty => insert(c, SlotState::Broken),
+            // Swap the unformatted card for something that is not a card.
+            SlotState::Broken => c.state = SlotState::WrongDevice,
+            _ => insert(c, SlotState::Ready),
         }
     }
 }
@@ -384,6 +431,14 @@ struct Art {
     shape: Shape,
     hue: f32,
     frames: u8,
+    /// Has a banner (otherwise the browser shows the icon).
+    banner: bool,
+    /// May not be copied or moved.
+    locked: bool,
+}
+
+const fn art(game: &'static [u8; 4], title: &'static str, comment: &'static str, blocks: u16, shape: Shape, hue: f32, frames: u8) -> Art {
+    Art { game, title, comment, blocks, shape, hue, frames, banner: true, locked: false }
 }
 
 #[derive(Clone, Copy)]
@@ -395,16 +450,30 @@ enum Shape {
     Moon,
 }
 
-const SLOT_A: [Art; 4] = [
-    Art { game: b"GCR0", title: "Coob Racer", comment: "Lap records", blocks: 3, shape: Shape::Ring, hue: 0.3, frames: 4 },
-    Art { game: b"GPP0", title: "Puzzle Pals", comment: "Chapter 4 - Clocktower", blocks: 2, shape: Shape::Stripes, hue: 2.0, frames: 2 },
-    Art { game: b"GSR0", title: "Starfield Ranger", comment: "Sector 7, 3 lives", blocks: 5, shape: Shape::Star, hue: 4.0, frames: 3 },
-    Art { game: b"GGD0", title: "Garden Days", comment: "Spring, year 2", blocks: 2, shape: Shape::Diamond, hue: 1.2, frames: 1 },
+const SLOT_A: [Art; 18] = [
+    art(b"GCR0", "Coob Racer", "Lap records", 3, Shape::Ring, 0.3, 4),
+    art(b"GPP0", "Puzzle Pals", "Chapter 4 - Clocktower", 2, Shape::Stripes, 2.0, 2),
+    art(b"GSR0", "Starfield Ranger", "Sector 7, 3 lives", 5, Shape::Star, 4.0, 3),
+    art(b"GGD0", "Garden Days", "Spring, year 2", 2, Shape::Diamond, 1.2, 1),
+    Art { locked: true, ..art(b"GTK0", "Tournament Kart", "League ghost data (locked)", 4, Shape::Ring, 5.5, 2) },
+    Art { banner: false, ..art(b"GMM0", "Marble Maze", "Best times", 1, Shape::Moon, 0.9, 3) },
+    art(b"GFF0", "Fjord Fishing", "Lake log, 41 fish", 3, Shape::Stripes, 3.5, 2),
+    art(b"GHH0", "Haunted Hallway", "Floor 3", 2, Shape::Moon, 4.6, 2),
+    art(b"GSK0", "Sky Kite", "Windy hills", 1, Shape::Diamond, 2.6, 1),
+    art(b"GBO0", "Bowling Night", "Lane 4, 212 points", 2, Shape::Ring, 1.7, 2),
+    art(b"GCC0", "Comet Chaser", "Act II", 6, Shape::Star, 3.0, 3),
+    art(b"GTT0", "Tidepool Tales", "Shell collection", 2, Shape::Stripes, 0.6, 2),
+    art(b"GDR0", "Desert Rally", "Stage 5", 4, Shape::Diamond, 5.0, 1),
+    art(b"GPN0", "Penguin Post", "Day 18", 1, Shape::Moon, 2.2, 2),
+    art(b"GVV0", "Volcano Valley", "Base camp", 3, Shape::Star, 0.1, 3),
+    art(b"GRB0", "Robot Band", "Setlist 2", 2, Shape::Ring, 3.9, 4),
+    art(b"GLL0", "Lily Lake", "Pond 6", 1, Shape::Diamond, 2.9, 1),
+    art(b"GOW0", "Owl Watch", "Night survey", 2, Shape::Moon, 4.3, 2),
 ];
 
 const SLOT_B: [Art; 2] = [
-    Art { game: b"GNL0", title: "Night Lighthouse", comment: "Keeper's log, night 12", blocks: 4, shape: Shape::Moon, hue: 3.1, frames: 2 },
-    Art { game: b"GBB0", title: "Block Builder", comment: "Island map", blocks: 1, shape: Shape::Stripes, hue: 5.0, frames: 1 },
+    art(b"GNL0", "Night Lighthouse", "Keeper's log, night 12", 4, Shape::Moon, 3.1, 2),
+    art(b"GBB0", "Block Builder", "Island map", 1, Shape::Stripes, 5.0, 1),
 ];
 
 fn fake_saves(slot: usize) -> Vec<Save> {
@@ -419,11 +488,11 @@ fn fake_saves(slot: usize) -> Vec<Save> {
             comment: a.comment.into(),
             blocks: a.blocks,
             modified: 1000 + i as u32 * 10 + slot as u32,
-            banner: Some(alloc::rc::Rc::new(FastTex::from_rgba(96, 32, &save_banner_art(a.hue)))),
+            banner: a.banner.then(|| alloc::rc::Rc::new(FastTex::from_rgba(96, 32, &save_banner_art(a.hue)))),
             icons: (0..a.frames).map(|f| (alloc::rc::Rc::new(FastTex::from_rgba(32, 32, &icon_art(a.shape, a.hue, f))), 8)).collect(),
             ping_pong: false,
-            no_copy: false,
-            no_move: false,
+            no_copy: a.locked,
+            no_move: a.locked,
         })
         .collect()
 }

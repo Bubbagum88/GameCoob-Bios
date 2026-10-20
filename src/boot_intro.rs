@@ -214,7 +214,7 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
             }
             intro.update(Input { a: now < a_until, egg });
             if intro.finished() {
-                menu = Some(Menu::new(sys_info(), Box::new(FakeDrive::new()), Box::new(FakeCards::new()), intro.wobble_frame, &intro.sin));
+                menu = Some(Menu::new(sys_info(), ma, Box::new(FakeDrive::new()), Box::new(FakeCards::new()), intro.wobble_frame, &intro.sin));
                 // Keys pressed during the intro don't leak into the menu.
                 pad = Pad::default();
             }
