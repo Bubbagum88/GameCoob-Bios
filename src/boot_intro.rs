@@ -75,6 +75,7 @@ fn perform(a: Action) -> Option<String> {
     match a {
         Action::Boot(n) => Some(firmware::boot_entry(n)),
         Action::SetTimeout(s) => firmware::save_timeout(s).err(),
+        Action::SetTime(t) => firmware::set_time(t).err(),
         Action::FirmwareSetup => Some(firmware::firmware_setup()),
         Action::Restart => firmware::restart(),
         Action::PowerOff => firmware::power_off(),
