@@ -493,7 +493,7 @@ pub mod screen {
     pub fn options(b: &mut Build, o: &Options) {
         b.show(g::SOUND_ROW, false);
         b.show(g::OFFSET_ROW, false);
-        for e in [g::OFFSET_LEFT, g::OFFSET_ZERO, g::OFFSET_RIGHT, g::LANG_DASH, g::MONO, g::STEREO] {
+        for e in [g::OFFSET_MINUS, g::OFFSET_PLUS, g::LANG_DASH, g::MONO, g::STEREO] {
             b.show(e, false);
         }
         for e in g::SOUND_ARROWS.iter().chain(&g::OFFSET_ARROWS).chain(&g::LANG_ARROWS) {
@@ -505,12 +505,12 @@ pub mod screen {
             rows[0] = if st { &[g::STEREO] } else { &[g::MONO] };
         }
         if let Some(v) = o.offset {
-            let d = match v.signum() {
-                -1 => g::OFFSET_LEFT,
-                0 => g::OFFSET_ZERO,
-                _ => g::OFFSET_RIGHT,
-            };
-            b.show(d, true);
+            // Like the IPL: an arrow only when the offset is not 0.
+            match v.signum() {
+                -1 => b.show(g::OFFSET_MINUS, true),
+                1 => b.show(g::OFFSET_PLUS, true),
+                _ => {}
+            }
             b.number(&g::OFFSET_DIGITS, v.unsigned_abs().min(99));
             rows[1] = &[g::OFFSET_ROW];
         }

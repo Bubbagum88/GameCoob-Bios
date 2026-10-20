@@ -215,10 +215,12 @@ pub mod glyph {
     /// Digit shapes 0..9 (28-cell masks).
     pub const DIGIT0: usize = 30;
     // Options (set::OPTION).
-    /// Screen position: the diamond with the arrow toward the offset sign.
-    pub const OFFSET_LEFT: usize = 40;
-    pub const OFFSET_ZERO: usize = 41;
-    pub const OFFSET_RIGHT: usize = 42;
+    /// Screen position: the diamond with both arrows (drawn on its own,
+    /// not lit through this table), then the arrow shown for a negative or
+    /// positive offset. An offset of 0 shows neither arrow.
+    pub const OFFSET_DIAMOND: usize = 40;
+    pub const OFFSET_MINUS: usize = 41;
+    pub const OFFSET_PLUS: usize = 42;
     /// The language row's centre dash.
     pub const LANG_DASH: usize = 43;
     pub const MONO: usize = 44;
