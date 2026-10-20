@@ -1,0 +1,14 @@
+[package]
+name = "menu-render"
+version = "0.1.0"
+edition = "2024"
+description = "Host-side check of src/bs2: runs the intro into the rebuilt menu with scripted input and writes frames to PNG"
+
+# Standalone: not part of the UEFI crate. Build with --target x86_64-unknown-linux-gnu.
+[workspace]
+
+[dependencies]
+libm = "0.2.16"
+
+[profile.release]
+opt-level = 3

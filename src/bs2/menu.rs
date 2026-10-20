@@ -1,0 +1,1277 @@
+//! The IPL main menu, rebuilt from the decompiled BS2 menu (PAL 1.0): the
+//! big glass cube with a GLH0 layout on five faces, the frame-exact turn,
+//! zoom and idle wobble, the faders and the button guide. Every number is
+//! a MenuWork default or a timing from the decomp's docs/menu.md.
+//!
+//! The four submenus stand for PC functions instead of the console's:
+//!
+//! | face        | console               | here                              |
+//! |-------------|-----------------------|-----------------------------------|
+//! | Game Play   | boot the disc         | pick a firmware boot entry        |
+//! | Options     | sound, screen, language | boot timeout, menu language     |
+//! | Calendar    | set the clock         | show the firmware clock           |
+//! | Memory Card | manage saves          | firmware setup, restart, power off|
+//!
+//! Submenus are drawn more simply than on the console: the cube-built
+//! "mosaic" text is flat blocks, and the icon cubes are left out.
+
+use super::mtx::{self, Mtx, SinTable};
+use super::raster::Prim;
+use super::render::{self, DrawOpts, View};
+use super::shader::FastTex;
+use super::ui::{self, cp1252, Rgba, Ui, UiFont, SHADOW, WHITE};
+use super::Assets;
+use crate::ipl::glh::{self, tag, Layout, Strings};
+use crate::ipl::{bti, Ipl};
+use alloc::format;
+use alloc::string::String;
+use alloc::vec::Vec;
+
+// ---------------------------------------------------------------------
+// Resources
+// ---------------------------------------------------------------------
+
+/// Per-language resource ids, in SRAM language order: En, De, Fr, Es, It, Nl.
+mod res {
+    pub const FRONT: [u16; 6] = [57, 149, 142, 163, 156, 132];
+    pub const GAME_FACE: [u16; 6] = [56, 148, 141, 162, 155, 131];
+    pub const CARD_FACE: [u16; 6] = [59, 151, 144, 165, 158, 134];
+    pub const CLOCK_FACE: [u16; 6] = [136, 146, 139, 160, 153, 129];
+    pub const OPTION_FACE: [u16; 6] = [138, 152, 145, 166, 159, 135];
+    pub const GUIDE_STR: [u16; 6] = [117, 119, 118, 121, 120, 116];
+    pub const CLOCK_STR: [u16; 6] = [16, 18, 17, 20, 19, 15];
+    pub const OPTION_STR: [u16; 6] = [124, 126, 125, 128, 127, 123];
+    pub const WEEKDAY: [u16; 6] = [49, 71, 62, 171, 80, 40];
+    pub const CLOCK: u16 = 14;
+    pub const GAME: u16 = 21;
+    pub const BACKDROP: u16 = 89;
+    pub const DIGITS: u16 = 91;
+    pub const DIALOG: u16 = 108;
+    pub const GUIDE: u16 = 115;
+    pub const OPTION: u16 = 122;
+    pub const TEX_BANK: u16 = 167;
+}
+
+pub const LANGS: usize = 6;
+
+pub struct MenuAssets {
+    pub bank: Vec<FastTex>,
+    pub front: Vec<Layout>,
+    pub game_face: Vec<Layout>,
+    pub card_face: Vec<Layout>,
+    pub clock_face: Vec<Layout>,
+    pub option_face: Vec<Layout>,
+    pub guide: Layout,
+    pub guide_str: Vec<Strings>,
+    pub clock_str: Vec<Strings>,
+    pub option_str: Vec<Strings>,
+    pub digits: Vec<FastTex>,
+    pub weekday: Vec<Vec<FastTex>>,
+    pub clock: Layout,
+    pub game: Layout,
+    pub option: Layout,
+    pub dialog: Layout,
+    pub backdrop: FastTex,
+    pub font: UiFont,
+}
+
+impl MenuAssets {
+    pub fn load(ipl: &Ipl) -> Option<MenuAssets> {
+        let layout = |id: u16| Layout::parse(&ipl.resource(id).ok()?).ok();
+        let strings = |id: u16| Strings::parse(&ipl.resource(id).ok()?).ok();
+        let tex = |id: u16| Some(FastTex::new_ui(&bti::parse(&ipl.resource(id).ok()?).ok()?));
+        let per_lang = |ids: &[u16; 6]| ids.iter().map(|&i| layout(i)).collect::<Option<Vec<_>>>();
+        let per_lang_s = |ids: &[u16; 6]| ids.iter().map(|&i| strings(i)).collect::<Option<Vec<_>>>();
+        let bank = glh::texture_bank(&ipl.resource(res::TEX_BANK).ok()?).ok()?.iter().map(FastTex::new_ui).collect();
+        let mut backdrop = bti::parse(&ipl.resource(res::BACKDROP).ok()?).ok()?;
+        backdrop.wrap_s = crate::ipl::gx::REPEAT;
+        backdrop.wrap_t = crate::ipl::gx::REPEAT;
+        // Intensity texture: a white grid with coverage alpha, tiled.
+        let backdrop = FastTex::new(&backdrop).intensity_alpha();
+        Some(MenuAssets {
+            bank,
+            front: per_lang(&res::FRONT)?,
+            game_face: per_lang(&res::GAME_FACE)?,
+            card_face: per_lang(&res::CARD_FACE)?,
+            clock_face: per_lang(&res::CLOCK_FACE)?,
+            option_face: per_lang(&res::OPTION_FACE)?,
+            guide: layout(res::GUIDE)?,
+            guide_str: per_lang_s(&res::GUIDE_STR)?,
+            clock_str: per_lang_s(&res::CLOCK_STR)?,
+            option_str: per_lang_s(&res::OPTION_STR)?,
+            digits: (0..10).map(|i| tex(res::DIGITS + i)).collect::<Option<Vec<_>>>()?,
+            weekday: res::WEEKDAY.iter().map(|&b| (0..7).map(|i| tex(b + i)).collect::<Option<Vec<_>>>()).collect::<Option<Vec<_>>>()?,
+            clock: layout(res::CLOCK)?,
+            game: layout(res::GAME)?,
+            option: layout(res::OPTION)?,
+            dialog: layout(res::DIALOG)?,
+            backdrop,
+            font: UiFont::new(glh::Font::parse_rom(ipl.rom()).ok()?),
+        })
+    }
+}
+
+// ---------------------------------------------------------------------
+// Faders
+// ---------------------------------------------------------------------
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Fade {
+    In,
+    Out,
+    Half,
+}
+
+/// `Fader`: an alpha ramp of `length` frames after `delay` frames.
+#[derive(Clone, Copy, Debug)]
+pub struct Fader {
+    pub frame: i16,
+    pub length: i16,
+    pub delay: i16,
+    pub max: u8,
+}
+
+impl Default for Fader {
+    fn default() -> Self {
+        Fader { frame: 0, length: 20, delay: 0, max: 255 }
+    }
+}
+
+impl Fader {
+    pub fn with_delay(delay: i16) -> Fader {
+        Fader { delay, ..Default::default() }
+    }
+
+    pub fn step(&mut self, mode: Fade) {
+        let end = self.delay + self.length;
+        match mode {
+            Fade::In => self.frame = (self.frame + 1).min(end),
+            Fade::Out => {
+                if self.frame > 0 {
+                    self.frame -= 1;
+                }
+                if self.frame < self.delay {
+                    self.frame = 0;
+                }
+            }
+            Fade::Half => {
+                let mid = self.delay + self.length / 2;
+                if self.frame < mid {
+                    self.frame = if self.frame < self.delay { self.delay } else { self.frame + 1 };
+                } else if self.frame > mid {
+                    self.frame -= 1;
+                }
+            }
+        }
+    }
+
+    pub fn alpha(&self) -> i32 {
+        if self.frame <= self.delay {
+            return 0;
+        }
+        self.max as i32 * (self.frame - self.delay) as i32 / self.length as i32
+    }
+
+    pub fn reset(&mut self) {
+        self.frame = 0;
+    }
+
+    pub fn step_if(&mut self, on: bool) {
+        self.step(if on { Fade::In } else { Fade::Out });
+    }
+}
+
+// ---------------------------------------------------------------------
+// Cube motion
+// ---------------------------------------------------------------------
+
+pub const ROT_STEP: i16 = 750;
+pub const ZOOM_IN: i16 = 0x730;
+pub const ZOOM_OUT: i16 = 0x578;
+pub const ZOOM_DEPTH: f32 = -70.0;
+const FACE_HALF: f32 = 144.0;
+const FACE_SHOW: i16 = 0x2E3A;
+const FACE_FADE: i32 = 5000;
+const SUB_DELAY: [i16; 3] = [0, 20, 70];
+const MAX_TIMEOUT: u16 = 30;
+
+/// The idle wobble (Menu_CalcCubeMtx) at wobble frame `t`.
+pub struct Wobble {
+    pub rx: f32,
+    pub ry: f32,
+    pub rz: f32,
+    pub tx: f32,
+    pub ty: f32,
+}
+
+impl Wobble {
+    pub fn at(s: &SinTable, t: i16) -> Wobble {
+        let t = t as i32;
+        Wobble {
+            tx: 15.0 * s.sin(-0x4000 + 25 * t),
+            ty: 6.0 * s.sin(50 * t),
+            rx: 350.0 * s.cos(50 * t),
+            ry: 1000.0 * s.cos(-15000 + 25 * t),
+            rz: 1000.0 * s.cos(25 * t),
+        }
+    }
+
+    pub fn mtx(&self, s: &SinTable) -> Mtx {
+        mtx::rot_trans(s, self.rx as i32, self.ry as i16 as i32, self.rz as i32, [self.tx, self.ty, 0.0])
+    }
+}
+
+/// Move an angle one step towards 0, snapping it onto the step grid first.
+fn toward_zero(a: &mut i16, step: i16) {
+    if *a > 0 {
+        *a = step * (*a / step) - step;
+    }
+    if *a < 0 {
+        *a = step + step * (*a / step);
+    }
+}
+
+// ---------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum St {
+    Top,
+    GameFace,
+    Game,
+    CardFace,
+    Card,
+    OptionFace,
+    Option,
+    ClockFace,
+    Clock,
+}
+
+impl St {
+    fn on_cube(self) -> bool {
+        matches!(self, St::Top | St::GameFace | St::CardFace | St::OptionFace | St::ClockFace)
+    }
+}
+
+/// New presses this frame (directions include key repeat).
+#[derive(Clone, Copy, Default)]
+pub struct Pad {
+    pub a: bool,
+    pub b: bool,
+    pub start: bool,
+    pub up: bool,
+    pub down: bool,
+    pub left: bool,
+    pub right: bool,
+}
+
+/// What the menu shows about this PC; the driver refreshes it.
+#[derive(Clone, Default)]
+pub struct SysInfo {
+    /// year, month 1..12, day, hour, minute, second
+    pub time: [i32; 6],
+    /// (Boot#### number, description) in BootOrder order.
+    pub entries: Vec<(u16, String)>,
+    pub timeout: u16,
+    pub vendor: String,
+    pub fw_ui: bool,
+}
+
+/// Something only the firmware can do.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Action {
+    Boot(u16),
+    SetTimeout(u16),
+    FirmwareSetup,
+    Restart,
+    PowerOff,
+}
+
+const SYS_ITEMS: [&str; 3] = ["Firmware Setup", "Restart", "Power Off"];
+
+pub struct Menu {
+    pub state: St,
+    next: St,
+    pub wobble_frame: i16,
+    pub rot_x: i16,
+    pub rot_y: i16,
+    pub zoom: i16,
+    cube: Mtx,
+    guide_icon: [Fader; 6],
+    guide_text: [Fader; 8],
+    /// [Option, Card, Clock, Game][fx, backdrop, text]
+    sub: [[Fader; 3]; 4],
+    disc_banner: Fader,
+    disc_none: Fader,
+    lang_guide: [Fader; LANGS],
+    guide_alpha: i16,
+    guide_blink: i16,
+    guide_lang: usize,
+    pub lang: usize,
+    slot_glow: [i16; 2],
+    // Submenus.
+    boot_sel: usize,
+    opt_row: usize,
+    opt_edit: bool,
+    opt_timeout: u16,
+    opt_lang: usize,
+    highlight: i16,
+    highlight_up: bool,
+    sys_row: usize,
+    sys_confirm: Option<bool>,
+    message: Option<(String, u32)>,
+    frame: u32,
+    pub info: SysInfo,
+}
+
+const SUB_OPTION: usize = 0;
+const SUB_CARD: usize = 1;
+const SUB_CLOCK: usize = 2;
+const SUB_GAME: usize = 3;
+
+impl Menu {
+    /// Menu_Init, continuing the wobble clock of the spin-out.
+    pub fn new(info: SysInfo, wobble_frame: i16, s: &SinTable) -> Menu {
+        let mut m = Menu {
+            state: St::Top,
+            next: St::Top,
+            wobble_frame,
+            rot_x: 0,
+            rot_y: 0,
+            zoom: 0,
+            cube: mtx::IDENTITY,
+            guide_icon: [Fader::default(); 6],
+            guide_text: [Fader::default(); 8],
+            sub: [[0, 1, 2].map(|i| Fader::with_delay(SUB_DELAY[i])); 4],
+            disc_banner: Fader::default(),
+            disc_none: Fader::default(),
+            lang_guide: [Fader::default(); LANGS],
+            guide_alpha: 0,
+            guide_blink: 0,
+            guide_lang: 0,
+            lang: 0,
+            slot_glow: [0; 2],
+            boot_sel: 0,
+            opt_row: 0,
+            opt_edit: false,
+            opt_timeout: 0,
+            opt_lang: 0,
+            highlight: 50,
+            highlight_up: true,
+            sys_row: 0,
+            sys_confirm: None,
+            message: None,
+            frame: 0,
+            info,
+        };
+        m.calc_cube(s);
+        m
+    }
+
+    /// Show a short note in the current submenu (e.g. a firmware error).
+    pub fn notify(&mut self, msg: String) {
+        self.message = Some((msg, self.frame));
+    }
+
+    fn settled_front(&self) -> bool {
+        self.rot_x == 0 && self.rot_y == 0
+    }
+
+    fn settled_x(&self, a: i16) -> bool {
+        self.rot_x == a && self.zoom == 0
+    }
+
+    fn settled_y(&self, a: i16) -> bool {
+        self.rot_y == a && self.zoom == 0
+    }
+
+    /// Menu_HandleInput: turning between faces and entering submenus.
+    fn handle_input(&mut self, p: &Pad) {
+        use St::*;
+        if p.up {
+            match self.state {
+                Top if self.settled_front() => self.next = GameFace,
+                CardFace if self.settled_x(-0x4000) => self.next = Top,
+                _ => {}
+            }
+        }
+        if p.down {
+            match self.state {
+                Top if self.settled_front() => self.next = CardFace,
+                GameFace if self.settled_x(0x4000) => self.next = Top,
+                _ => {}
+            }
+        }
+        if p.left {
+            match self.state {
+                Top if self.settled_front() => self.next = OptionFace,
+                ClockFace if self.settled_y(-0x4000) => self.next = Top,
+                _ => {}
+            }
+        }
+        if p.right {
+            match self.state {
+                Top if self.settled_front() => self.next = ClockFace,
+                OptionFace if self.settled_y(0x4000) => self.next = Top,
+                _ => {}
+            }
+        }
+        let on_face = match self.state {
+            CardFace => self.settled_x(-0x4000),
+            GameFace => self.settled_x(0x4000),
+            ClockFace => self.settled_y(-0x4000),
+            OptionFace => self.settled_y(0x4000),
+            _ => false,
+        };
+        if on_face && p.a {
+            self.next = match self.state {
+                CardFace => Card,
+                GameFace => Game,
+                ClockFace => Clock,
+                _ => Option,
+            };
+        }
+        if on_face && p.b {
+            self.next = Top;
+        }
+    }
+
+    /// Menu_UpdateRotation.
+    fn update_rotation(&mut self) {
+        let step = ROT_STEP;
+        match self.next {
+            St::Top => {
+                toward_zero(&mut self.rot_x, step);
+                toward_zero(&mut self.rot_y, step);
+            }
+            St::GameFace | St::Game => {
+                self.rot_x = self.rot_x.saturating_add(step).min(0x4000);
+                toward_zero(&mut self.rot_y, step);
+            }
+            St::CardFace | St::Card => {
+                self.rot_x = self.rot_x.saturating_sub(step).max(-0x4000);
+                toward_zero(&mut self.rot_y, step);
+            }
+            St::OptionFace | St::Option => {
+                toward_zero(&mut self.rot_x, step);
+                self.rot_y = self.rot_y.saturating_add(step).min(0x4000);
+            }
+            St::ClockFace | St::Clock => {
+                toward_zero(&mut self.rot_x, step);
+                self.rot_y = self.rot_y.saturating_sub(step).max(-0x4000);
+            }
+        }
+    }
+
+    /// Menu_CalcCubeMtx: rotation, idle wobble, then the zoom push.
+    fn calc_cube(&mut self, s: &SinTable) {
+        let rot = mtx::rot_trans(s, self.rot_x as i32, self.rot_y as i32, 0, [0.0; 3]);
+        let m = mtx::concat(&Wobble::at(s, self.wobble_frame).mtx(s), &rot);
+        self.cube = if self.zoom != 0 {
+            let z = ZOOM_DEPTH * (1.0 - s.cos(self.zoom as i32));
+            mtx::concat(&mtx::trans(0.0, 0.0, z), &m)
+        } else {
+            m
+        };
+    }
+
+    /// Menu_UpdateGuide: which labels and glyph groups show.
+    fn update_guide(&mut self) {
+        use Fade::*;
+        let t = &mut self.guide_text;
+        let ic = &mut self.guide_icon;
+        // Text faders: 0 Menu Selection, 1 Cancel, 2 Confirm, 3 Select,
+        // 4 Change, 5 Cancel, 6 Finish, 7 Confirm.
+        let mut on = [false; 8];
+        let mut icons = [false; 6];
+        match self.state {
+            St::Top => {
+                on[0] = true;
+                icons[3] = true;
+            }
+            St::GameFace | St::CardFace | St::OptionFace | St::ClockFace => {
+                on[1] = true;
+                on[2] = true;
+                icons[4] = true;
+                icons[5] = true;
+            }
+            St::Game => {
+                on[3] = true;
+                on[6] = true;
+                on[7] = true;
+                icons = [true, true, true, false, false, false];
+            }
+            St::Option => {
+                if self.opt_edit {
+                    on[4] = true;
+                    on[5] = true;
+                } else {
+                    on[3] = true;
+                    on[6] = true;
+                }
+                on[7] = true;
+                icons = [true, true, true, false, false, false];
+            }
+            St::Clock => {
+                on[6] = true;
+                icons[1] = true;
+            }
+            St::Card => {
+                on[3] = true;
+                if self.sys_confirm.is_some() {
+                    on[5] = true;
+                } else {
+                    on[6] = true;
+                }
+                on[7] = true;
+                icons = [true, true, true, false, false, false];
+            }
+        }
+        for i in 0..8 {
+            t[i].step(if on[i] { In } else { Out });
+        }
+        for i in 0..6 {
+            ic[i].step(if icons[i] { In } else { Out });
+        }
+        for i in 0..LANGS {
+            self.lang_guide[i].step_if(i == self.guide_lang);
+        }
+    }
+
+    /// One menu frame (Menu_Update). Returns an action for the firmware.
+    pub fn update(&mut self, p: &Pad, s: &SinTable) -> core::option::Option<Action> {
+        self.frame += 1;
+        self.update_rotation();
+        // No memory cards on a PC: the slot glow sinks to its floor.
+        for g in self.slot_glow.iter_mut() {
+            *g = (*g - 4).clamp(60, 255);
+        }
+        self.update_guide();
+        for i in 0..3 {
+            self.sub[SUB_CARD][i].step_if(self.state == St::Card);
+            self.sub[SUB_GAME][i].step_if(self.state == St::Game);
+            self.sub[SUB_OPTION][i].step_if(self.state == St::Option);
+            self.sub[SUB_CLOCK][i].step_if(self.state == St::Clock);
+        }
+        if self.state == St::GameFace && self.next == St::Game {
+            self.boot_sel = 0;
+        }
+        if self.state == St::OptionFace && self.next == St::Option {
+            self.opt_row = 0;
+            self.opt_edit = false;
+        }
+        if self.state == St::CardFace && self.next == St::Card {
+            self.sys_row = 0;
+            self.sys_confirm = None;
+        }
+        if self.state == St::Game && self.next == St::GameFace {
+            self.disc_banner.reset();
+            self.disc_none.reset();
+        }
+        if self.state != self.next {
+            self.message = None;
+        }
+        self.state = self.next;
+
+        let mut action = None;
+        if self.state.on_cube() {
+            if self.zoom > ZOOM_OUT {
+                self.zoom -= ZOOM_OUT;
+            }
+            if self.zoom <= ZOOM_OUT {
+                self.zoom = 0;
+            }
+            self.handle_input(p);
+            self.wobble_frame = self.wobble_frame.wrapping_add(7);
+            self.calc_cube(s);
+            let has = !self.info.entries.is_empty();
+            self.disc_banner.step_if(has);
+            self.disc_none.step_if(!has);
+        } else {
+            if self.zoom < 0x7FFF - ZOOM_IN {
+                self.zoom += ZOOM_IN;
+            }
+            if self.zoom >= 0x7FFF - ZOOM_IN {
+                self.zoom = 0x7FFF;
+            }
+            self.wobble_frame = self.wobble_frame.wrapping_add(7);
+            self.calc_cube(s);
+            let (next, act) = self.update_sub(p);
+            self.next = next;
+            action = act;
+        }
+        // Highlight pulse 50..120 at 2 per frame.
+        self.highlight += if self.highlight_up { 2 } else { -2 };
+        if self.highlight >= 120 {
+            self.highlight_up = false;
+        } else if self.highlight <= 50 {
+            self.highlight_up = true;
+        }
+        action
+    }
+
+    /// The submenus' input; returns the next menu state and any action.
+    fn update_sub(&mut self, p: &Pad) -> (St, core::option::Option<Action>) {
+        // Input waits until the zoom is complete (the IPL also waits for
+        // the mosaic to assemble).
+        if self.zoom != 0x7FFF {
+            return (self.state, None);
+        }
+        let n_entries = self.info.entries.len();
+        match self.state {
+            St::Game => {
+                if p.b {
+                    return (St::GameFace, None);
+                }
+                if p.up && self.boot_sel > 0 {
+                    self.boot_sel -= 1;
+                }
+                if p.down && self.boot_sel + 1 < n_entries {
+                    self.boot_sel += 1;
+                }
+                if (p.a || p.start) && n_entries > 0 {
+                    let num = self.info.entries[self.boot_sel.min(n_entries - 1)].0;
+                    return (St::Game, Some(Action::Boot(num)));
+                }
+                (St::Game, None)
+            }
+            St::Option => {
+                if !self.opt_edit {
+                    if p.b {
+                        return (St::OptionFace, None);
+                    }
+                    if p.up && self.opt_row > 0 {
+                        self.opt_row -= 1;
+                    }
+                    if p.down && self.opt_row < 1 {
+                        self.opt_row += 1;
+                    }
+                    if p.a {
+                        self.opt_edit = true;
+                        self.opt_timeout = self.info.timeout;
+                        self.opt_lang = self.lang;
+                    }
+                    return (St::Option, None);
+                }
+                match self.opt_row {
+                    0 => {
+                        if p.left {
+                            self.opt_timeout = self.opt_timeout.saturating_sub(1);
+                        }
+                        if p.right {
+                            self.opt_timeout = (self.opt_timeout + 1).min(MAX_TIMEOUT);
+                        }
+                        if p.b {
+                            self.opt_edit = false;
+                        }
+                        if p.a {
+                            self.opt_edit = false;
+                            if self.opt_timeout != self.info.timeout {
+                                self.info.timeout = self.opt_timeout;
+                                self.notify(format!("Firmware boot timeout: {} s", self.opt_timeout));
+                                return (St::Option, Some(Action::SetTimeout(self.opt_timeout)));
+                            }
+                        }
+                    }
+                    _ => {
+                        if p.left && self.opt_lang > 0 {
+                            self.opt_lang -= 1;
+                        }
+                        if p.right && self.opt_lang + 1 < LANGS {
+                            self.opt_lang += 1;
+                        }
+                        self.guide_lang = self.opt_lang;
+                        if p.b {
+                            self.opt_edit = false;
+                            self.guide_lang = self.lang;
+                        }
+                        if p.a {
+                            self.opt_edit = false;
+                            self.lang = self.opt_lang;
+                        }
+                    }
+                }
+                (St::Option, None)
+            }
+            St::Clock => {
+                if p.b {
+                    return (St::ClockFace, None);
+                }
+                (St::Clock, None)
+            }
+            _ => {
+                // System (Memory Card face).
+                if let Some(yes) = self.sys_confirm {
+                    if p.up || p.down {
+                        self.sys_confirm = Some(!yes);
+                    }
+                    if p.b {
+                        self.sys_confirm = None;
+                    }
+                    if p.a {
+                        self.sys_confirm = None;
+                        if yes {
+                            let act = match self.sys_row {
+                                0 => Action::FirmwareSetup,
+                                1 => Action::Restart,
+                                _ => Action::PowerOff,
+                            };
+                            return (St::Card, Some(act));
+                        }
+                    }
+                    return (St::Card, None);
+                }
+                if p.b {
+                    return (St::CardFace, None);
+                }
+                if p.up && self.sys_row > 0 {
+                    self.sys_row -= 1;
+                }
+                if p.down && self.sys_row + 1 < SYS_ITEMS.len() {
+                    self.sys_row += 1;
+                }
+                if p.a {
+                    if self.sys_row == 0 && !self.info.fw_ui {
+                        self.notify(String::from("This firmware cannot be asked to open its setup."));
+                    } else {
+                        self.sys_confirm = Some(false);
+                    }
+                }
+                (St::Card, None)
+            }
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // Drawing
+    // -----------------------------------------------------------------
+
+    /// Scene_Draw2DSpinOut's face: the front layout on the spinning cube.
+    pub fn draw_spin_out_face<'a>(list: &mut Vec<Prim<'a>>, ma: &'a MenuAssets, view: &View, cube: &Mtx, alpha: u8, s: &SinTable) {
+        let mut ui = Ui { list, view, mv: mtx::IDENTITY };
+        draw_front(&mut ui, ma, 0, view, cube, alpha, s);
+    }
+
+    /// Scene_Draw2DMenu + Menu_Draw2D.
+    pub fn draw<'a>(&self, list: &mut Vec<Prim<'a>>, a: &'a Assets, ma: &'a MenuAssets, view: &View, s: &SinTable) {
+        let bg = (255 * (0x7FFF - self.zoom as i32) / 0x7FFF) as u8;
+        // The glass cube, translucent as it zooms away.
+        let mut v = View { ambient: [40.0 / 255.0, 40.0 / 255.0, 40.0 / 255.0, 1.0], ..clone_view(view) };
+        v.vp = view.vp;
+        if bg > 0 {
+            let m = mtx::concat(&self.cube, &mtx::scale(1.1, 1.1, 1.1));
+            render::draw_model(list, &a.big_cube, &m, &v, &DrawOpts { alpha: bg, ..Default::default() });
+        }
+        let mut ui = Ui { list, view, mv: mtx::IDENTITY };
+        self.draw_faces(&mut ui, ma, view, bg, s);
+        let mut v2 = View::intro(0.0, false);
+        v2.vp = view.vp;
+        let mut ui = Ui { list: ui.list, view: &v2, mv: screen_2d() };
+        self.draw_submenus(&mut ui, ma);
+        self.draw_guide(&mut ui, ma, 255);
+    }
+
+    fn face_mtx(&self, view: &View, rot: (i32, i32), t: [f32; 3], s: &SinTable) -> Mtx {
+        face_mtx(view, &self.cube, rot, t, s)
+    }
+
+    /// Menu_DrawFaces.
+    fn draw_faces<'a>(&self, ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, view: &View, alpha: u8, s: &SinTable) {
+        let clampf = |r: i16| (r as i32).abs().min(FACE_FADE);
+        let (ax, ay) = (clampf(self.rot_x), clampf(self.rot_y));
+        let front = if ax != ay { Some(ax.max(ay)) } else if ax == 0 { Some(0) } else { None };
+        if let Some(m) = front {
+            let fa = (255 - m * 255 / FACE_FADE) as u8;
+            draw_front(ui, ma, self.lang, view, &self.cube, (fa as u32 * alpha as u32 / 255) as u8, s);
+        }
+        let face_a = |r: i16| ((alpha as i32) * (255 - (0x4000 - (r as i32).abs()) * 255 / FACE_FADE) / 255).clamp(0, 255) as f32 / 255.0;
+        let l = self.lang;
+        let bank = &ma.bank[..];
+        // Bottom: Memory Card.
+        if self.rot_x <= -FACE_SHOW {
+            let a = face_a(self.rot_x);
+            ui.mv = self.face_mtx(view, (0x4000, 0), [-FACE_HALF, -FACE_HALF, FACE_HALF], s);
+            let g = &ma.card_face[l];
+            let c = with_a(WHITE, a * a);
+            for f in g.frame(tag(b"fram")) {
+                ui.frame(f, bank, c);
+            }
+            pics(ui, g, b"titl", bank, c);
+            for slot in 0..2u8 {
+                let c = with_a(WHITE, a);
+                pics(ui, g, &[b't', b'e', b'x', b'a' + slot], bank, c);
+                let glow = self.slot_glow[slot as usize] as f32 / 255.0;
+                for f in g.frame(tag(&[b'm', b'c', b'a' + slot, b'1'])) {
+                    ui.frame(f, bank, with_a(WHITE, a * glow));
+                }
+            }
+        }
+        // Top: Game Play.
+        if self.rot_x >= FACE_SHOW {
+            let a = face_a(self.rot_x);
+            ui.mv = self.face_mtx(view, (-0x4000, 0), [-FACE_HALF, FACE_HALF, -FACE_HALF], s);
+            self.draw_game_face(ui, ma, a);
+        }
+        // Right: Calendar.
+        if self.rot_y <= -FACE_SHOW {
+            let a = face_a(self.rot_y);
+            ui.mv = self.face_mtx(view, (0, 0x4000), [FACE_HALF, FACE_HALF, FACE_HALF], s);
+            self.draw_clock_face(ui, ma, a);
+        }
+        // Left: Options.
+        if self.rot_y >= FACE_SHOW {
+            let a = face_a(self.rot_y);
+            ui.mv = self.face_mtx(view, (0, -0x4000), [-FACE_HALF, FACE_HALF, -FACE_HALF], s);
+            self.draw_option_face(ui, ma, a);
+        }
+    }
+
+    fn draw_game_face<'a>(&self, ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, a: f32) {
+        let g = &ma.game_face[self.lang];
+        let bank = &ma.bank[..];
+        let white = with_a(WHITE, a * a);
+        let shadow = with_a(SHADOW, a);
+        for f in g.frame(tag(b"fram")) {
+            ui.frame(f, bank, white);
+        }
+        pics(ui, g, b"titl", bank, white);
+        // "NO DISC" when there is nothing to boot.
+        let na = self.disc_none.alpha() as f32 / 255.0;
+        if na > 0.0 {
+            pics(ui, g, b"zodi", bank, with_a(shadow, na));
+            pics(ui, g, b"nodi", bank, with_a(white, na));
+        }
+        // Otherwise the first boot entry and the firmware, where the console
+        // shows the disc's name and maker.
+        let ba = self.disc_banner.alpha() as f32 / 255.0;
+        if ba > 0.0 {
+            if let Some((_, name)) = self.info.entries.first() {
+                let name = fit(&ma.font, &cp1252(name), 192.0, 18.0);
+                let vendor = fit(&ma.font, &cp1252(&self.info.vendor), 192.0, 18.0);
+                for (t, s, c) in [
+                    (b"zame", &name, shadow),
+                    (b"game", &name, white),
+                    (b"zakr", &vendor, shadow),
+                    (b"makr", &vendor, white),
+                ] {
+                    if let Some(p) = g.text(tag(t)) {
+                        ui.text(&ma.font, p, s, with_a(c, ba), 0.0, 0.0);
+                    }
+                }
+            }
+        }
+    }
+
+    fn draw_clock_face<'a>(&self, ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, a: f32) {
+        let g = &ma.clock_face[self.lang];
+        let bank = &ma.bank[..];
+        let white = with_a(WHITE, a * a);
+        let shadow = with_a(SHADOW, a);
+        for f in g.frame(tag(b"fram")) {
+            ui.frame(f, bank, white);
+        }
+        let [y, mo, d, h, mi, sec] = self.info.time;
+        let wd = weekday(y, mo, d);
+        let dg = |n: i32| &ma.digits[(n.rem_euclid(10)) as usize];
+        for pass in 0..2 {
+            let c = if pass == 0 { shadow } else { white };
+            let z = |t: &[u8; 4]| -> [u8; 4] { if pass == 0 { [b'z', t[1], t[2], t[3]] } else { *t } };
+            for t in [b"colo", b"slas", b"pare", b"titl"] {
+                pics(ui, g, &z(t), bank, c);
+            }
+            let digits: [(&[u8; 4], i32); 14] = [
+                (b"cal1", 2),
+                (b"cal2", y / 100),
+                (b"cal3", y / 10),
+                (b"cal4", y),
+                (b"cal5", mo / 10),
+                (b"cal6", mo),
+                (b"cal7", d / 10),
+                (b"cal8", d),
+                (b"tim1", h / 10),
+                (b"tim2", h),
+                (b"tim3", mi / 10),
+                (b"tim4", mi),
+                (b"tim5", sec / 10),
+                (b"tim6", sec),
+            ];
+            for (t, n) in digits {
+                for p in g.pic(tag(&z(t))) {
+                    ui.pic_tex(p, dg(n), c);
+                }
+            }
+            for p in g.pic(tag(&z(b"week"))) {
+                ui.pic_tex(p, &ma.weekday[self.lang][wd], c);
+            }
+        }
+    }
+
+    fn draw_option_face<'a>(&self, ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, a: f32) {
+        let g = &ma.option_face[self.lang];
+        let bank = &ma.bank[..];
+        let white = with_a(WHITE, a);
+        let shadow = with_a(SHADOW, a);
+        for f in g.frame(tag(b"fram")) {
+            ui.frame(f, bank, white);
+        }
+        pics(ui, g, b"zitl", bank, shadow);
+        pics(ui, g, b"titl", bank, white);
+        // Rows 1 and 2 hold our settings instead of sound and screen
+        // position: label left, value right, in the ROM font.
+        let rows = [
+            (b"txt1", b"sond", cp1252("Timeout"), cp1252(&format!("{} s", self.info.timeout))),
+            (b"txt2", b"num1", cp1252("Boot entries"), cp1252(&format!("{}", self.info.entries.len()))),
+        ];
+        for (lt, vt, label, value) in rows.iter() {
+            if let (Some(lp), Some(vp)) = (g.pic(tag(lt)).next(), g.pic(tag(vt)).next()) {
+                for (c, d) in [(shadow, 2.0), (white, 0.0)] {
+                    ui.label(&ma.font, lp.x - lp.w / 2.0 + d, lp.y - 9.0 + d, 18.0, label, c, 2);
+                    let vx = if *vt == b"num1" { vp.x + 8.0 } else { vp.x };
+                    ui.label(&ma.font, vx + d, vp.y - 11.0 + d, 22.0, value, c, 0);
+                }
+            }
+        }
+        for t in [b"zxt3", b"zang"] {
+            pics(ui, g, t, bank, shadow);
+        }
+        for t in [b"txt3", b"lang"] {
+            pics(ui, g, t, bank, white);
+        }
+    }
+
+    /// Menu_DrawSubmenus: each is drawn while its first fader is above 0.
+    fn draw_submenus<'a>(&self, ui: &mut Ui<'a, '_>, ma: &'a MenuAssets) {
+        for (k, draw) in [
+            (SUB_CARD, Menu::draw_system as fn(&Menu, &mut Ui<'a, '_>, &'a MenuAssets, [f32; 3])),
+            (SUB_GAME, Menu::draw_boot),
+            (SUB_OPTION, Menu::draw_options),
+            (SUB_CLOCK, Menu::draw_clock),
+        ] {
+            let f = &self.sub[k];
+            let al = [f[0].alpha(), f[1].alpha(), f[2].alpha()].map(|v| v as f32 / 255.0);
+            if al[0] > 0.0 {
+                draw_backdrop(ui, ma, al[1]);
+                draw(self, ui, ma, al);
+                self.draw_message(ui, ma, al[2]);
+            }
+        }
+    }
+
+    fn draw_message<'a>(&self, ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, a: f32) {
+        if let Some((msg, at)) = &self.message {
+            let age = self.frame.saturating_sub(*at) as f32;
+            let k = (1.0 - (age - 180.0) / 30.0).clamp(0.0, 1.0) * a;
+            ui.label(&ma.font, 292.0, 372.0, 18.0, &cp1252(msg), [1.0, 0.93, 0.6, k], 0);
+        }
+    }
+
+    /// Game Play: the firmware's boot entries.
+    fn draw_boot<'a>(&self, ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, al: [f32; 3]) {
+        let g = &ma.game;
+        let light = rgb(130, 50, 160);
+        let dark = rgb(50, 20, 70);
+        let title: &[u8] = if self.info.entries.is_empty() { b"NO DISC" } else { b"BOOT" };
+        ui.mosaic(&ma.font, 292.0, 92.0, 6.0, title, light, dark, al[0]);
+        if let Some(p) = g.text(tag(b"mesg")) {
+            let msg = if self.info.entries.is_empty() { "No boot entries were found." } else { "Choose what to start." };
+            ui.text(&ma.font, p, &cp1252(msg), with_a(WHITE, al[2]), 0.0, 0.0);
+        }
+        let Some(box_) = g.frame(tag(b"mes1")).next() else { return };
+        let n = self.info.entries.len();
+        let rows = 5usize;
+        let line = 25.0;
+        let h = rows as f32 * line + 8.0;
+        let (bx, by, bw) = (box_.x - box_.inner_w / 2.0, 250.0, box_.inner_w);
+        ui.frame_rect(box_, &ma.bank, with_a(WHITE, al[1]), bx, by, bw, h);
+        let first = self.boot_sel.saturating_sub(rows - 1).min(n.saturating_sub(rows));
+        for (i, (num, desc)) in self.info.entries.iter().enumerate().skip(first).take(rows) {
+            let y = by + 4.0 + (i - first) as f32 * line;
+            let sel = i == self.boot_sel;
+            if sel {
+                let k = self.highlight as f32 / 255.0;
+                ui.fill(bx - 6.0, y, bw + 12.0, line - 2.0, [1.0, 1.0, 1.0, k * al[2]]);
+            }
+            let text = cp1252(&format!("{num:04X}  {desc}"));
+            let text = fit(&ma.font, &text, bw - 20.0, 20.0);
+            let c = if sel { WHITE } else { [0.85, 0.8, 0.95, 0.85] };
+            ui.label(&ma.font, bx + 6.0, y + 1.0, 20.0, &text, with_a(c, al[2]), 2);
+        }
+    }
+
+    /// Options: the firmware boot timeout and the menu language.
+    fn draw_options<'a>(&self, ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, al: [f32; 3]) {
+        let g = &ma.option;
+        let green = rgb(0, 255, 120);
+        let pairs = [(rgb(180, 255, 0), rgb(20, 100, 50)), (rgb(120, 220, 35), rgb(0, 80, 25))];
+        if let Some(p) = g.text(tag(b"mesg")) {
+            ui.text(&ma.font, p, &cp1252("Choose GameCoob boot settings."), with_a(WHITE, al[2]), 0.0, 0.0);
+        }
+        let hl = self.highlight as f32 / 120.0;
+        // Row 0: timeout.
+        if let Some(p) = g.text(tag(b"txt1")) {
+            let k = if self.opt_row == 0 { 1.0 } else { 0.55 };
+            ui.text(&ma.font, p, &cp1252("Boot Timeout"), with_a(scale(green, k), al[2]), 0.0, 0.0);
+        }
+        let t = if self.opt_edit && self.opt_row == 0 { self.opt_timeout } else { self.info.timeout };
+        let (l, d) = pairs[0];
+        let blink = if self.opt_edit && self.opt_row == 0 { 0.6 + 0.4 * hl } else { 1.0 };
+        ui.mosaic(&ma.font, 294.0, 128.0, 5.0, &cp1252(&format!("{t:02} SEC")), scale(l, blink), d, al[0]);
+        // Row 1: language.
+        let lang = if self.opt_edit && self.opt_row == 1 { self.opt_lang } else { self.lang };
+        if let Some(p) = g.text(tag(b"txt3")) {
+            let k = if self.opt_row == 1 { 1.0 } else { 0.55 };
+            let s = ma.option_str[self.guide_lang].get(3).map(|s| s.text.clone()).unwrap_or_else(|| cp1252("Language"));
+            ui.text(&ma.font, p, &s, with_a(scale(green, k), al[2]), 0.0, 0.0);
+        }
+        let (l, d) = pairs[1];
+        for i in 0..LANGS {
+            let t = [b'l', b'a', b'n', b'1' + i as u8];
+            let a = if i == lang { 1.0 } else { 0.45 };
+            for p in g.pic(tag(&t)) {
+                if let Some(tex) = ma.bank.get(p.tex as usize) {
+                    ui.pic(p, tex, with_a(WHITE, a * al[2]), 0.0, 0.0);
+                }
+                if i == lang {
+                    ui.fill(p.x - 30.0, p.y + 16.0, 60.0, 4.0, with_a(l, al[0] * if self.opt_row == 1 { 1.0 } else { 0.5 }));
+                    ui.fill(p.x - 30.0, p.y + 20.0, 60.0, 2.0, with_a(d, al[0]));
+                }
+            }
+        }
+        for i in 0..5u8 {
+            for p in g.pic(tag(&[b's', b'l', b'a', b'1' + i])) {
+                if let Some(tex) = ma.bank.get(p.tex as usize) {
+                    ui.pic(p, tex, with_a(WHITE, 0.5 * al[2]), 0.0, 0.0);
+                }
+            }
+        }
+        // Selection marker on the current row.
+        let y = if self.opt_row == 0 { 102.0 } else { 316.0 };
+        ui.fill(150.0, y - 2.0, 6.0, 6.0, with_a(green, hl * al[2]));
+        ui.fill(432.0, y - 2.0, 6.0, 6.0, with_a(green, hl * al[2]));
+    }
+
+    /// Calendar: the firmware clock, read-only.
+    fn draw_clock<'a>(&self, ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, al: [f32; 3]) {
+        let g = &ma.clock;
+        let s = &ma.clock_str[self.lang];
+        if let Some(p) = g.text(tag(b"mesg")) {
+            ui.text(&ma.font, p, &cp1252("The firmware clock."), with_a(WHITE, al[2]), 0.0, 0.0);
+        }
+        for (i, t) in [(1usize, b"txt1"), (2, b"txt2")] {
+            if let (Some(p), Some(st)) = (g.text(tag(t)), s.get(i)) {
+                ui.text(&ma.font, p, &st.text, with_a(WHITE, al[2]), 0.0, 0.0);
+            }
+        }
+        for t in [b"bar1", b"bar2"] {
+            for f in g.frame(tag(t)) {
+                ui.frame(f, &ma.bank, [1.0, 1.0, 0.0, al[1]]);
+            }
+        }
+        let [y, mo, d, h, mi, sec] = self.info.time;
+        let pairs = [(rgb(240, 255, 0), rgb(100, 50, 20)), (rgb(235, 185, 0), rgb(70, 40, 0))];
+        let date = format!("{d:02}/{mo:02}/{y:04}");
+        let time = format!("{h:02}:{mi:02}:{sec:02}");
+        ui.mosaic(&ma.font, 294.0, 138.0, 6.0, &cp1252(&date), pairs[0].0, pairs[0].1, al[0]);
+        ui.mosaic(&ma.font, 294.0, 268.0, 6.0, &cp1252(&time), pairs[1].0, pairs[1].1, al[0]);
+    }
+
+    /// Memory Card: firmware setup, restart and power off.
+    fn draw_system<'a>(&self, ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, al: [f32; 3]) {
+        let light = rgb(90, 110, 255);
+        let dark = rgb(20, 20, 110);
+        ui.mosaic(&ma.font, 292.0, 70.0, 6.0, b"SYSTEM", light, dark, al[0]);
+        let Some(box_) = ma.dialog.frame(tag(b"mes0")).next() else { return };
+        let (bw, bh) = (box_.inner_w, 120.0);
+        let (bx, by) = (292.0 - bw / 2.0, 170.0);
+        ui.frame_rect(box_, &ma.bank, with_a(WHITE, al[1]), bx, by, bw, bh);
+        if let Some(yes) = self.sys_confirm {
+            let q = match self.sys_row {
+                0 => "Restart into firmware setup?",
+                1 => "Restart this PC now?",
+                _ => "Power this PC off now?",
+            };
+            ui.label(&ma.font, 292.0, by + 8.0, 24.0, &cp1252(q), with_a(WHITE, al[2]), 0);
+            for (i, (lbl, on)) in [("Yes", yes), ("No", !yes)].iter().enumerate() {
+                let y = by + 50.0 + i as f32 * 32.0;
+                if *on {
+                    ui.fill(232.0, y - 2.0, 120.0, 28.0, [1.0, 1.0, 1.0, self.highlight as f32 / 255.0 * al[2]]);
+                }
+                ui.label(&ma.font, 292.0, y, 24.0, &cp1252(lbl), with_a(WHITE, al[2]), 0);
+            }
+            return;
+        }
+        for (i, item) in SYS_ITEMS.iter().enumerate() {
+            let y = by + 10.0 + i as f32 * 36.0;
+            let sel = i == self.sys_row;
+            if sel {
+                ui.fill(bx + 10.0, y - 3.0, bw - 20.0, 32.0, [1.0, 1.0, 1.0, self.highlight as f32 / 255.0 * al[2]]);
+            }
+            let dim = i == 0 && !self.info.fw_ui;
+            let c = if dim { [0.6, 0.6, 0.7, 0.7] } else { WHITE };
+            ui.label(&ma.font, 292.0, y, 26.0, &cp1252(item), with_a(c, al[2]), 0);
+        }
+    }
+
+    /// Menu_DrawGuide: the button guide along the bottom.
+    fn draw_guide<'a>(&self, ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, alpha: u8) {
+        let gl = &ma.guide;
+        let bank = &ma.bank[..];
+        let blink = self.guide_blink as i32;
+        let g: [i32; 6] = self.guide_icon.map(|f| f.alpha());
+        let pulse = if blink % 256 > 127 { 100 + (blink % 128) * 155 / 127 } else { 255 - (blink % 128) * 155 / 127 };
+        let base = pulse * alpha as i32 / 255;
+        let col = |rgb: [u8; 3], a: i32| [rgb[0] as f32 / 255.0, rgb[1] as f32 / 255.0, rgb[2] as f32 / 255.0, a as f32 / 255.0];
+        for i in 0..2u8 {
+            let k = i as usize * 3;
+            pics(ui, gl, &[b'b', b'a', b'c', b'1' + i * 3], bank, col([150, 150, 150], base * g[k] / 255));
+            pics(ui, gl, &[b'b', b'a', b'c', b'2' + i * 3], bank, col([210, 0, 70], base * g[k + 1] / 255));
+            pics(ui, gl, &[b'b', b'a', b'c', b'3' + i * 3], bank, col([0, 200, 140], base * g[k + 2] / 255));
+        }
+        // The stick cross-fades between neutral and a tilted sprite.
+        let k = (blink / 128) % 8;
+        let f = if k % 2 == 0 { (blink % 128) * 255 / 127 } else { 255 - (blink % 128) * 255 / 127 };
+        let fa = f * alpha as i32 / 255;
+        for i in 0..2u8 {
+            let gi = g[i as usize * 3];
+            let tilt = b'0' + i * 5 + (((k + 1) / 2 + 3) % 4 + 1) as u8;
+            pics(ui, gl, &[b's', b't', b'k', tilt], bank, with_a(WHITE, ((255 - fa) * gi / 255) as f32 / 255.0));
+            pics(ui, gl, &[b's', b't', b'k', b'0' + i * 5], bank, with_a(WHITE, (fa * gi / 255) as f32 / 255.0));
+        }
+        let fa = (alpha as i32 * self.guide_alpha as i32 / 255) as f32 / 255.0;
+        for (t, d, gi) in [(b"butb", b"dot2", 1), (b"butc", b"dot5", 4), (b"buta", b"dot3", 2), (b"butd", b"dot6", 5)] {
+            let c = with_a(WHITE, fa * g[gi] as f32 / 255.0);
+            pics(ui, gl, t, bank, c);
+            pics(ui, gl, d, bank, c);
+        }
+        pics(ui, gl, b"dot1", bank, with_a(WHITE, fa * g[0] as f32 / 255.0));
+        pics(ui, gl, b"dot4", bank, with_a(WHITE, fa * g[3] as f32 / 255.0));
+        // Labels, once per language for the cross-fade.
+        const IDS: [usize; 8] = [0, 1, 2, 4, 13, 8, 11, 6];
+        for lang in 0..LANGS {
+            let la = self.lang_guide[lang].alpha() as f32 / 255.0 * alpha as f32 / 255.0;
+            if la <= 0.0 {
+                continue;
+            }
+            for (i, f) in self.guide_text.iter().enumerate() {
+                let a = f.alpha() as f32 / 255.0 * la;
+                if a <= 0.0 {
+                    continue;
+                }
+                let Some(st) = ma.guide_str[lang].get(IDS[i]) else { continue };
+                if let Some(p) = gl.texts.get(st.pane as usize) {
+                    ui.text(&ma.font, p, &st.text, with_a(WHITE, a), 0.0, 0.0);
+                }
+            }
+        }
+    }
+
+    /// Per-frame bookkeeping of Menu_DrawGuide (it advances its own clocks).
+    pub fn tick_guide(&mut self) {
+        self.guide_alpha = (self.guide_alpha + 4).min(255);
+        self.guide_blink = self.guide_blink.wrapping_add(1);
+    }
+}
+
+fn clone_view(v: &View) -> View {
+    View { view: v.view, ortho: v.ortho, fovy: v.fovy, aspect: v.aspect, near: v.near, far: v.far, light: v.light, ambient: v.ambient, vp: v.vp }
+}
+
+/// The 2D screen of Setup2DView: 584 x 448 layout units, y down, at z 0
+/// in front of a camera 224 / tan(fovy / 2) away.
+pub fn screen_2d() -> Mtx {
+    let s = mtx::scale(1.0, -1.0, 1.0);
+    mtx::concat(&mtx::concat(&View::intro(0.0, false).view, &mtx::trans(-292.0, 224.0, 0.0)), &s)
+}
+
+/// `view · cube · SRT` of a face layout (scale (1, -1, 1)).
+fn face_mtx(view: &View, cube: &Mtx, rot: (i32, i32), t: [f32; 3], s: &SinTable) -> Mtx {
+    let srt = mtx::concat(&mtx::rot_trans(s, rot.0, rot.1, 0, t), &mtx::scale(1.0, -1.0, 1.0));
+    mtx::concat(&mtx::concat(&view.view, cube), &srt)
+}
+
+/// The front face (Menu_DrawTopFace / Menu_DrawSpinOutFace); its alpha is
+/// applied twice.
+fn draw_front<'a>(ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, lang: usize, view: &View, cube: &Mtx, alpha: u8, s: &SinTable) {
+    if alpha == 0 {
+        return;
+    }
+    let a = alpha as f32 / 255.0;
+    ui.mv = face_mtx(view, cube, (0, 0), [-FACE_HALF, FACE_HALF, FACE_HALF], s);
+    let g = &ma.front[lang];
+    for p in g.pics.iter() {
+        if let Some(t) = ma.bank.get(p.tex as usize) {
+            ui.pic(p, t, with_a(WHITE, a * a), 0.0, 0.0);
+        }
+    }
+}
+
+/// Backdrop_Draw, simplified: the 8x8 grid tile repeated over the screen,
+/// lit by a soft spot from the centre instead of the GX spot light.
+fn draw_backdrop<'a>(ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, a: f32) {
+    if a <= 0.0 {
+        return;
+    }
+    const N: usize = 12;
+    let (x0, y0, w, h) = (-30.0f32, -20.0f32, 644.0f32, 488.0f32);
+    let cell = 20.0;
+    for j in 0..N {
+        for i in 0..N {
+            let p = |ii: usize, jj: usize| [x0 + w * ii as f32 / N as f32, y0 + h * jj as f32 / N as f32];
+            let lit = |q: [f32; 2]| {
+                let (dx, dy) = ((q[0] - 296.0) / 420.0, (q[1] - 224.0) / 420.0);
+                let k = (1.0 - (dx * dx + dy * dy) * 1.6).max(0.0);
+                let v = 0.12 + 0.36 * k;
+                [v, v, v, a]
+            };
+            let q = [p(i, j), p(i + 1, j), p(i + 1, j + 1), p(i, j + 1)];
+            let uv = q.map(|v| [v[0] / cell, v[1] / cell]);
+            let col = q.map(lit);
+            ui.quad(q, uv, col, super::raster::Sh::Modulate { tex: &ma.backdrop });
+        }
+    }
+}
+
+fn pics<'a>(ui: &mut Ui<'a, '_>, g: &Layout, t: &[u8; 4], bank: &'a [FastTex], c: Rgba) {
+    if c[3] <= 0.0 {
+        return;
+    }
+    for p in g.pic(tag(t)) {
+        if let Some(tex) = bank.get(p.tex as usize) {
+            ui.pic(p, tex, c, 0.0, 0.0);
+        }
+    }
+}
+
+fn with_a(c: Rgba, a: f32) -> Rgba {
+    ui::with_alpha(c, a)
+}
+
+fn rgb(r: u8, g: u8, b: u8) -> Rgba {
+    ui::rgba8([r, g, b, 255])
+}
+
+fn scale(c: Rgba, k: f32) -> Rgba {
+    [c[0] * k, c[1] * k, c[2] * k, c[3]]
+}
+
+/// Cut `s` with "..." so it fits `w` at glyph size `size`.
+fn fit(font: &UiFont, s: &[u8], w: f32, size: f32) -> Vec<u8> {
+    if font.width(s, size, 0.0) <= w {
+        return s.to_vec();
+    }
+    let mut v: Vec<u8> = s.to_vec();
+    while !v.is_empty() && font.width(&v, size, 0.0) + font.width(b"...", size, 0.0) > w {
+        v.pop();
+    }
+    v.extend_from_slice(b"...");
+    v
+}
+
+/// Day of the week, 0 = Sunday (Sakamoto).
+pub fn weekday(y: i32, m: i32, d: i32) -> usize {
+    const T: [i32; 12] = [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4];
+    let y = if m < 3 { y - 1 } else { y };
+    let m = (m - 1).clamp(0, 11) as usize;
+    ((y + y / 4 - y / 100 + y / 400 + T[m] + d).rem_euclid(7)) as usize
+}

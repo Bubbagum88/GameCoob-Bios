@@ -71,8 +71,10 @@ impl Target {
 pub enum Sh<'a> {
     /// A model material; `alpha` is the model alpha multiplier.
     Mat { shader: &'a Shader, texs: &'a [FastTex], alpha: f32 },
-    /// Vertex color times texture (the intro's trail tiles).
+    /// Vertex color times texture (the intro's trail tiles, 2D panes).
     Modulate { tex: &'a FastTex },
+    /// Vertex color only (untextured 2D boxes).
+    Flat,
 }
 
 /// One triangle ready to rasterize.
@@ -96,6 +98,7 @@ impl Sh<'_> {
                 let t = tex.sample(f.uv[0][0], f.uv[0][1]);
                 Some([f.color[0] * t[0], f.color[1] * t[1], f.color[2] * t[2], f.color[3] * t[3]])
             }
+            Sh::Flat => Some(f.color),
         }
     }
 }

@@ -15,6 +15,7 @@
 #![allow(dead_code)]
 
 pub mod bti;
+pub mod glh;
 pub mod gx;
 pub mod j3d;
 pub mod yay0;

@@ -7,11 +7,13 @@
 
 pub mod anim;
 pub mod cube;
+pub mod menu;
 pub mod mtx;
 pub mod raster;
 pub mod render;
 pub mod scene;
 pub mod shader;
+pub mod ui;
 
 use crate::ipl::{bti, j3d::Model, Ipl};
 use alloc::vec::Vec;
@@ -88,6 +90,8 @@ pub const SPINOUT_SETTLE: i32 = 50;
 pub const SPINOUT_TURNS: i32 = 3;
 pub const SPINOUT_FADE: i32 = 30;
 pub const SPINOUT_END: i32 = SPINOUT_KEEP + SPINOUT_BRAKE + SPINOUT_SETTLE;
+/// Frames before the end of the spin-out that the front face starts fading in.
+pub const SPINOUT_FACE: i32 = 100;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum State0 {
@@ -105,6 +109,9 @@ pub struct Intro {
     pub spin_frame: i32,
     spin_start: i16,
     pub frame: u32,
+    /// The menu's idle-wobble clock (MenuWork.wobbleFrame): restarts with
+    /// the spin-out and keeps running into the menu.
+    pub wobble_frame: i16,
 }
 
 impl Intro {
@@ -118,6 +125,7 @@ impl Intro {
             spin_frame: 0,
             spin_start: 0,
             frame: 0,
+            wobble_frame: 0,
         }
     }
 
@@ -142,7 +150,13 @@ impl Intro {
                 }
             }
             State0::SpinOut => {
+                // Scene_CalcSpinOutMtx restarts the wobble clock on the first
+                // spin-out frame and advances it by 7 per frame.
+                if self.spin_frame == 0 {
+                    self.wobble_frame = 0;
+                }
                 self.update_spin_out();
+                self.wobble_frame = self.wobble_frame.wrapping_add(7);
                 self.scene.update_wobble();
                 if self.spin_frame > SPINOUT_END {
                     self.state = State0::Done;
@@ -190,8 +204,31 @@ impl Intro {
         par(&job);
     }
 
+    /// Render the intro with the menu cube's front face fading in during the
+    /// spin-out, or the menu once it has taken over.
+    pub fn render_with_menu(&self, t: &mut Target, a: &Assets, ma: &menu::MenuAssets, m: Option<&menu::Menu>, par: &dyn Fn(&raster::Job)) {
+        let mut list = Vec::new();
+        let vp = [t.w as f32, t.h as f32];
+        match m {
+            Some(m) => m.draw(&mut list, a, ma, &self.spin_out_view(vp), &self.sin),
+            None => {
+                self.draw(&mut list, a, vp);
+                // Scene_Draw2DSpinOut: the front face fades in over the
+                // last 100 frames of the spin-out.
+                let f = self.spin_frame - (SPINOUT_END - SPINOUT_FACE);
+                if self.state != State0::Intro && f > 0 {
+                    let alpha = (255 * f.min(SPINOUT_FACE) / SPINOUT_FACE) as u8;
+                    menu::Menu::draw_spin_out_face(&mut list, ma, &self.spin_out_view(vp), &self.spin_out_mtx(), alpha, &self.sin);
+                }
+            }
+        }
+        t.clear([0.0; 3]);
+        let job = raster::Job::new(t, &list, 16);
+        par(&job);
+    }
+
     /// Build the frame's display list (Scene_DrawWorld + Scene_Draw2DNoDisc).
-    fn draw<'a>(&self, t: &mut Vec<Prim<'a>>, a: &'a Assets, vp: [f32; 2]) {
+    pub fn draw<'a>(&self, t: &mut Vec<Prim<'a>>, a: &'a Assets, vp: [f32; 2]) {
         if self.state != State0::Intro {
             return self.draw_spin_out(t, a, vp);
         }
@@ -275,17 +312,9 @@ impl Intro {
             render::draw_model(t, &a.bg_inner, &world, &view, &DrawOpts { alpha: a_in, ..Default::default() });
             self.draw_text(t, a, &text_view, a_in);
         }
-        // The glass cube: faces the camera once the spin settles.
-        let tilt = (1.0 - sc.spin_tilt_k()) * k;
-        let wob = sc.wobble_amp as f32 * s.sin(90 * sc.wobble_phase as i32);
-        let rot = mtx::rot_trans(
-            s,
-            mtx::to_s16(tilt * (8191.0 + wob)) as i32,
-            mtx::to_s16(tilt * -6371.0) as i32,
-            mtx::to_s16(tilt * -5461.0) as i32,
-            [0.0; 3],
-        );
-        let m = mtx::concat(&mtx::rot_trans(s, 0, sc.spin as i32, 0, [0.0; 3]), &rot);
+        // The glass cube (Scene_SpinOut): faces the camera once the spin
+        // settles, already wobbling like the menu cube it becomes.
+        let m = self.spin_out_mtx();
         let base = 1.1 * (1.0 - k);
         let sxz = base + sc.squash_xz * k;
         let sy = base + (1.0 + sc.stretch_y) * k;
@@ -293,6 +322,40 @@ impl Intro {
         let cube_a = if f <= fade { (255 * f / fade) as u8 } else { 255 };
         view.ambient = [40.0 / 255.0, 40.0 / 255.0, 40.0 / 255.0, 1.0];
         render::draw_model(t, &a.big_cube, &m, &view, &DrawOpts { alpha: cube_a, ..Default::default() });
+    }
+
+    /// The camera of the spin-out and the menu (perspective, rising to y -10).
+    pub fn spin_out_view(&self, vp: [f32; 2]) -> View {
+        let f = self.spin_frame.min(SPINOUT_END);
+        let yoff = if f <= SPINOUT_FADE { -55.0 + 45.0 * f as f32 / SPINOUT_FADE as f32 } else { -10.0 };
+        let mut view = View::intro(yoff, false);
+        view.vp = vp;
+        view
+    }
+
+    /// Scene_SpinOut's cube matrix without the model scale: `RotY(spin) ·
+    /// Scene_CalcSpinOutMtx`. The latter blends the scene's spin tilt (and
+    /// its wobble) with the menu's idle wobble (MenuWork defaults) by
+    /// `f = (1 - spinTilt) · spinSpeed / threshold`, so as the spin brakes
+    /// the cube settles into exactly the matrix the menu starts from.
+    pub fn spin_out_mtx(&self) -> Mtx {
+        let s = &self.sin;
+        let sc = &self.scene;
+        let k = sc.spin_speed / sc.spin_threshold;
+        let f = (1.0 - sc.spin_tilt_k()) * k;
+        let amp = sc.wobble_amp as f32;
+        let ph = sc.wobble_phase as i32;
+        // Drawn from the matrix computed before this frame's +7.
+        let w = menu::Wobble::at(s, self.wobble_frame.wrapping_sub(7));
+        let blend = |tilt: f32, speed: i32, menu: f32| mtx::to_s16(f * (tilt + amp * s.sin(ph * speed)) + (1.0 - f) * menu) as i32;
+        let rot = mtx::rot_trans(
+            s,
+            blend(8191.0, 90, w.rx),
+            blend(-6371.0, 60, w.ry),
+            blend(-5461.0, 70, w.rz),
+            [w.tx, w.ty, 0.0],
+        );
+        mtx::concat(&mtx::rot_trans(s, 0, sc.spin as i32, 0, [0.0; 3]), &rot)
     }
 
     /// Cube_DrawTiles: one textured quad per live cell on the three faces.
