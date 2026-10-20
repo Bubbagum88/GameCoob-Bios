@@ -1,6 +1,6 @@
 //! Plays the real GameCube intro, rebuilt from BS2, when the user's own
 //! `ipl.bin` is on the boot partition, and runs on into the rebuilt cube
-//! menu. Without the dump, the original GameCoob intro and menu play instead.
+//! menu. Without a usable dump, `main` explains where to put it.
 
 use crate::bs2::menu::backend::{FakeCards, FakeDrive};
 use crate::bs2::menu::{Action, Menu, MenuAssets, Pad, SysInfo};
@@ -30,7 +30,7 @@ fn read_dump() -> Option<Vec<u8>> {
 }
 
 /// Load the dump and its intro and menu assets, if present and valid.
-pub fn load() -> Option<(Assets, Option<MenuAssets>)> {
+pub fn load() -> Option<(Assets, MenuAssets)> {
     let rom = read_dump()?;
     let ipl = match Ipl::parse(&rom) {
         Ok(i) => i,
@@ -43,10 +43,10 @@ pub fn load() -> Option<(Assets, Option<MenuAssets>)> {
         log::warn!("ipl.bin parsed but the intro assets are missing");
         return None;
     };
-    let m = MenuAssets::load(&ipl);
-    if m.is_none() {
+    let Some(m) = MenuAssets::load(&ipl) else {
         log::warn!("ipl.bin parsed but the menu assets are missing");
-    }
+        return None;
+    };
     Some((a, m))
 }
 
@@ -55,7 +55,7 @@ fn sys_info() -> SysInfo {
     SysInfo {
         time: now_time(),
         entries: crate::vars::boot_entries().into_iter().map(|e| (e.num, e.desc)).collect(),
-        timeout: crate::vars::timeout().unwrap_or(5).min(crate::menu::MAX_TIMEOUT),
+        timeout: crate::vars::timeout().unwrap_or(5).min(crate::firmware::MAX_TIMEOUT),
         vendor: system::firmware_vendor().to_string(),
         fw_ui: crate::vars::firmware_ui_supported(),
     }
@@ -70,13 +70,13 @@ fn now_time() -> [i32; 6] {
 
 /// Carry out a menu action; the ones that reset only come back on failure.
 fn perform(a: Action) -> Option<String> {
-    use crate::menu;
+    use crate::firmware;
     match a {
-        Action::Boot(n) => Some(menu::boot_entry(n)),
-        Action::SetTimeout(s) => menu::save_timeout(s).err(),
-        Action::FirmwareSetup => Some(menu::firmware_setup()),
-        Action::Restart => menu::restart(),
-        Action::PowerOff => menu::power_off(),
+        Action::Boot(n) => Some(firmware::boot_entry(n)),
+        Action::SetTimeout(s) => firmware::save_timeout(s).err(),
+        Action::FirmwareSetup => Some(firmware::firmware_setup()),
+        Action::Restart => firmware::restart(),
+        Action::PowerOff => firmware::power_off(),
     }
 }
 
@@ -126,8 +126,8 @@ impl Cores {
     }
 }
 
-/// Run the intro at 60 logic frames per second, then (with the menu assets)
-/// the cube menu, which never returns: its actions boot or reset.
+/// Run the intro at 60 logic frames per second, then the cube menu. Never
+/// returns: the menu's actions boot or reset.
 ///
 /// Intro: Enter, Space or A is the A button (hold to spin the cube); Z at
 /// boot picks the easter-egg jingle; Escape skips to the menu.
@@ -135,7 +135,7 @@ impl Cores {
 /// Space or S is START. F10 opens the system dialog (firmware setup,
 /// restart, power off); D opens and closes the stand-in disc drive's tray
 /// and 1 / 2 pull, format-break and re-insert the stand-in memory cards.
-pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &Assets, ma: Option<&MenuAssets>) {
+pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &Assets, ma: &MenuAssets) -> ! {
     let mut intro = Intro::new(assets);
     let mut menu: Option<Menu> = None;
     let cores = Cores::open();
@@ -187,9 +187,6 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
                     _ => {}
                 },
                 Key::Special(ScanCode::ESCAPE) => {
-                    if ma.is_none() {
-                        return;
-                    }
                     // Skip straight to the menu.
                     while !intro.finished() {
                         intro.update(Input { a: false, egg: None });
@@ -219,7 +216,6 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
             }
             intro.update(Input { a: now < a_until, egg });
             if intro.finished() {
-                let Some(_) = ma else { return };
                 menu = Some(Menu::new(sys_info(), Box::new(FakeDrive::new()), Box::new(FakeCards::new()), intro.wobble_frame, &intro.sin));
                 // Keys pressed during the intro don't leak into the menu.
                 pad = Pad::default();
@@ -239,10 +235,7 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
             Some(c) => c.run(job),
             None => job.work(),
         };
-        match ma {
-            Some(ma) => intro.render_with_menu(&mut target, assets, ma, menu.as_ref(), &par),
-            None => intro.render(&mut target, assets, &par),
-        }
+        intro.render_with_menu(&mut target, assets, ma, menu.as_ref(), &par);
         if clock.now() - d0 > 1.0 / 30.0 && target.w == render::EFB_W {
             slow_frames += 1;
             if slow_frames > 10 {

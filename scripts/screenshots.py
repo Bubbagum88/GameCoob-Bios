@@ -2,7 +2,7 @@
 """Boot the app headless in QEMU, press keys over QMP, and save PNG screenshots.
 
 Usage: [IPL=path/to/ipl.bin] scripts/screenshots.py OUT_DIR
-With IPL set, walks the rebuilt cube menu; without, the original menu.
+Walks the rebuilt intro and cube menu; needs your dump (IPL, or local/ipl.bin).
 Needs Pillow for PNG conversion.
 """
 import json, os, socket, subprocess, sys, tempfile, time
@@ -12,6 +12,8 @@ out = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else "screenshots")
 os.makedirs(out, exist_ok=True)
 root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sock_path = os.path.join(tempfile.mkdtemp(), "qmp.sock")
+if not (os.environ.get("IPL") or os.path.exists(os.path.join(root, "local/ipl.bin"))):
+    sys.exit("needs your dump: set IPL=path/to/ipl.bin or put it at local/ipl.bin")
 
 qemu = subprocess.Popen(
     [os.path.join(root, "scripts/run-qemu.sh"), "-display", "none",
@@ -56,55 +58,29 @@ def at(sec):
 # Timings are wall-clock from QEMU start; adjust with SHOT_OFFSET if firmware boots slower.
 off = float(os.environ.get("SHOT_OFFSET", "0"))
 
-def cube_menu():
-    """With a dump (IPL=...): the rebuilt intro runs into the cube menu."""
-    for i, sec in enumerate([10, 12, 14, 16, 18]):
-        at(sec + off)
-        shot(f"intro-{i:02d}")
-    at(23 + off)
-    shot("cube-top")
-    key("up"); shot("cube-game-face")
-    key("ret", 3); shot("game-boot-list")
-    key("esc", 2.5); key("down", 2); key("down"); shot("cube-card-face")
-    key("ret", 3); shot("card-system")
-    key("ret"); shot("card-confirm")
-    key("esc"); key("esc", 2.5); key("up", 2); key("left"); shot("cube-option-face")
-    key("ret", 3); shot("options")
-    key("ret"); key("right"); key("right"); shot("options-timeout-edit")
-    key("ret"); shot("options-timeout-saved")
-    key("esc", 2.5); key("right", 2); key("right"); shot("cube-clock-face")
-    key("ret", 3); shot("clock")
-    # Boot the second entry (EFI shell in stock OVMF) through BootNext.
-    key("esc", 2.5); key("left", 2); key("up"); key("ret", 3)
-    key("down"); key("ret", 15); shot("booted-entry")
-    # Reset: BootNext is consumed, so the app comes back. Skip the intro,
-    # pick Memory Card > Firmware Setup > Yes.
-    qmp("system_reset")
-    time.sleep(10 + off); key("esc", 3)
-    key("down"); key("ret", 3); key("ret"); key("up"); shot("firmware-confirm")
-    key("ret", 15); shot("firmware-setup")
-    qemu.kill()
-    sys.exit(0)
-
-if os.environ.get("IPL"):
-    cube_menu()
-
-for i, sec in enumerate([4, 5, 6, 7, 8, 9, 10, 11, 12, 13]):
+for i, sec in enumerate([10, 12, 14, 16, 18]):
     at(sec + off)
     shot(f"intro-{i:02d}")
-at(18 + off)
-shot("menu-boot")
-key("down"); shot("menu-settings")
-key("ret"); shot("settings")
-key("right"); key("right"); shot("settings-timeout-changed")
-key("esc", 2.5); key("down"); shot("menu-firmware")
-key("ret"); shot("confirm-firmware")
-key("esc", 2.5); key("up"); key("up"); key("ret"); shot("boot-list")
+at(23 + off)
+shot("cube-top")
+key("up"); shot("cube-game-face")
+key("ret", 3); shot("game-boot-list")
+key("esc", 2.5); key("down", 2); key("down"); shot("cube-card-face")
+key("ret", 3); shot("card-system")
+key("ret"); shot("card-confirm")
+key("esc"); key("esc", 2.5); key("up", 2); key("left"); shot("cube-option-face")
+key("ret", 3); shot("options")
+key("ret"); key("right"); key("right"); shot("options-timeout-edit")
+key("ret"); shot("options-timeout-saved")
+key("esc", 2.5); key("right", 2); key("right"); shot("cube-clock-face")
+key("ret", 3); shot("clock")
 # Boot the second entry (EFI shell in stock OVMF) through BootNext.
+key("esc", 2.5); key("left", 2); key("up"); key("ret", 3)
 key("down"); key("ret", 15); shot("booted-entry")
-# Reset: BootNext is consumed, so the app comes back. Skip the intro and
-# confirm "Firmware Setup"; the firmware should open its own setup screen.
+# Reset: BootNext is consumed, so the app comes back. Skip the intro,
+# pick Memory Card > Firmware Setup > Yes.
 qmp("system_reset")
-time.sleep(10 + off); key("spc", 4)
-key("down"); key("down"); key("ret"); key("ret", 15); shot("firmware-setup")
+time.sleep(10 + off); key("esc", 3)
+key("down"); key("ret", 3); key("ret"); key("up"); shot("firmware-confirm")
+key("ret", 15); shot("firmware-setup")
 qemu.kill()

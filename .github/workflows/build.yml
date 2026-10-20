@@ -22,8 +22,8 @@ jobs:
           mkdir -p dist/EFI/BOOT dist/EFI/GameCoob
           cp target/x86_64-unknown-uefi/release/gamecoob.efi dist/EFI/BOOT/BOOTX64.EFI
           cat > dist/EFI/GameCoob/PUT-IPL-BIN-HERE.txt <<'TXT'
-          For the real GameCube intro, copy your own console's IPL dump here
-          as ipl.bin. Without it, the original GameCoob intro plays.
+          Copy your own console's IPL dump here as ipl.bin. GameCoob needs it:
+          without it, the firmware moves on to its next boot entry.
           TXT
       - uses: actions/upload-artifact@v4
         with:
