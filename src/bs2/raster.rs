@@ -113,7 +113,6 @@ pub struct Job<'a> {
     prims: &'a [Prim<'a>],
     band_h: usize,
     next: AtomicUsize,
-    done: AtomicUsize,
 }
 
 // Bands are disjoint row ranges, claimed once each through `next`.
@@ -130,7 +129,6 @@ impl<'a> Job<'a> {
             prims,
             band_h: band_h.max(1),
             next: AtomicUsize::new(0),
-            done: AtomicUsize::new(0),
         }
     }
 
@@ -154,14 +152,9 @@ impl<'a> Job<'a> {
                 // SAFETY: rows y0..y1 belong to this band only.
                 unsafe { self.tri(p, y0 as i64, y1 as i64 - 1) };
             }
-            self.done.fetch_add(1, Ordering::AcqRel);
         }
     }
 
-    /// True once every band has been rasterized.
-    pub fn finished(&self) -> bool {
-        self.done.load(Ordering::Acquire) >= self.bands()
-    }
 
     unsafe fn tri(&self, p: &Prim, band_y0: i64, band_y1: i64) {
         let st = p.st;
