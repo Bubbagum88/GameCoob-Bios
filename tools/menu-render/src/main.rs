@@ -9,6 +9,7 @@
 //! start, system (F10), eject (D), slot1, slot2. Lines starting with `#` are ignored. Without frames, every 10th
 //! frame up to the last scripted frame + 200 is written.
 //! Env: THREADS=n rasterizes on n threads; SKIP=1 skips the intro;
+//! CARDS=a,b sets each slot to saves, none or a blank card of N blocks;
 //! DUMP=layout:N, strings:N or model:N prints that resource and exits.
 
 extern crate alloc;
@@ -126,7 +127,18 @@ fn main() {
                 intro.update(bs2::Input { a: has("a"), egg: None });
                 if intro.finished() {
                     println!("frame {f}: menu starts");
-                    menu = Some(Menu::new(info(f), &ma, Box::new(FakeDrive::new()), Box::new(FakeCards::new()), intro.wobble_frame, &intro.sin));
+                    let mut cards = FakeCards::new();
+                    // CARDS=a,b sets each slot to `saves`, `none` or a blank card of N blocks.
+                    if let Ok(v) = std::env::var("CARDS") {
+                        for (i, c) in v.split(',').enumerate().take(2) {
+                            match c {
+                                "saves" => {}
+                                "none" => cards.set_blank(i, None),
+                                n => cards.set_blank(i, Some(n.parse().expect("CARDS=saves|none|blocks"))),
+                            }
+                        }
+                    }
+                    menu = Some(Menu::new(info(f), &ma, Box::new(FakeDrive::new()), Box::new(cards), intro.wobble_frame, &intro.sin));
                 }
             }
             Some(m) => {

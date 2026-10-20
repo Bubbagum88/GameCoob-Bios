@@ -16,7 +16,7 @@ use super::super::raster::Prim;
 use super::super::render::{self, DrawOpts, Prepared, View};
 use super::super::shader::FastTex;
 use super::super::ui::{self, Rgba, Ui, UiFont};
-use super::{rgb, with_a, Fade, Fader, MenuAssets, Pad, St, WHITE};
+use super::{rgb, with_a, BackdropLight, Fade, Fader, MenuAssets, Pad, St, WHITE};
 use crate::ipl::glh::{tag, Strings, Text};
 use alloc::vec;
 use alloc::vec::Vec;
@@ -1313,12 +1313,12 @@ impl Card {
             let c = self.cells[k];
             [(c[5][0] + c[6][0]) / 2.0, (c[5][1] + c[9][1]) / 2.0]
         };
-        let spots = [
-            (mid(0), self.cursor_f[0].alpha() as f32 / 255.0),
-            (mid(1), self.cursor_f[1].alpha() as f32 / 255.0),
-            ([292.0, 224.0], self.no_cursor_f.alpha() as f32 / 255.0),
+        let lights = [
+            BackdropLight::slot(mid(0), LIGHT_Z, self.cursor_f[0].alpha() as f32 / 255.0),
+            BackdropLight::slot(mid(1), LIGHT_Z, self.cursor_f[1].alpha() as f32 / 255.0),
+            BackdropLight::main(self.no_cursor_f.alpha() as f32 / 255.0),
         ];
-        super::draw_backdrop_spots(ui, ma, al[1], &spots);
+        super::draw_backdrop_lit(ui, ma, al[1], &lights);
         for f in g.frame(tag(b"mes6")) {
             ui.frame(f, &ma.bank, with_a(WHITE, al[2]));
         }
