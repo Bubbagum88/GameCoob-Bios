@@ -9,6 +9,7 @@
 //! start, system (F10), eject (D), slot1, slot2. Lines starting with `#` are ignored. Without frames, every 10th
 //! frame up to the last scripted frame + 200 is written.
 //! Env: THREADS=n rasterizes on n threads; SKIP=1 skips the intro;
+//! RES=WxH renders at that size instead of 640x448;
 //! CARDS=a,b sets each slot to saves, none or a blank card of N blocks;
 //! DUMP=layout:N, strings:N, model:N or raw:N prints that resource and exits
 //! (raw writes the decompressed bytes to stdout).
@@ -150,7 +151,12 @@ fn main() {
         }
     }
     let mut menu: Option<Menu> = None;
-    let mut target = bs2::raster::Target::new(bs2::render::EFB_W, bs2::render::EFB_H);
+    // RES=WxH renders at another size, as the app does on a bigger screen.
+    let (rw, rh) = std::env::var("RES")
+        .ok()
+        .and_then(|r| r.split_once('x').map(|(w, h)| (w.parse().unwrap(), h.parse().unwrap())))
+        .unwrap_or((bs2::render::EFB_W, bs2::render::EFB_H));
+    let mut target = bs2::raster::Target::new(rw, rh);
     for f in 1..=last {
         let keys = script.get(&f).cloned().unwrap_or_default();
         let has = |k: &str| keys.iter().any(|x| x == k);

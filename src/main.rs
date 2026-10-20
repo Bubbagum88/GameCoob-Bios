@@ -38,7 +38,6 @@ fn main() -> Status {
         }
     };
     let mut gop = boot::open_protocol_exclusive::<GraphicsOutput>(handle).unwrap();
-    gfx::pick_mode(&mut gop);
     let (w, h) = gop.current_mode_info().resolution();
     let mut canvas = gfx::Canvas::new(w, h);
     let clock = clock::Clock::calibrate();
