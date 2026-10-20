@@ -72,6 +72,10 @@ fn main() {
         match kind {
             "model" => {
                 let m = ipl::j3d::Model::parse(&r).expect("model");
+                for (i, t) in m.textures.iter().enumerate() {
+                    println!("tex {i}: {:?} fmt {} {}x{} wrap {} {}", t.name, t.format, t.width, t.height, t.wrap_s, t.wrap_t);
+                    png::write_rgba(&out.join(format!("tex{i}.png")), t.width as usize, t.height as usize, &t.rgba).unwrap();
+                }
                 for (i, d) in m.draws.iter().enumerate() {
                     let sh = &m.shapes[d.shape as usize];
                     let (mut lo, mut hi) = ([f32::MAX; 3], [f32::MIN; 3]);
@@ -84,7 +88,29 @@ fn main() {
                         }
                     }
                     let mt = &m.materials[d.material as usize];
+                    if std::env::var("VERTS").is_ok() { for v in sh.vertices.iter() { println!("  v {:?} n {:?} j {}", v.pos, v.normal, v.joint); } }
+                    if std::env::var("MATS").is_ok() { let mut c = mt.clone(); c.raw.clear(); println!("{c:#?}"); }
                     println!("draw {i}: shape {} mat {} {:?} flag {} colors {:?} tex {:?} bbox {lo:?}..{hi:?}", d.shape, d.material, mt.name, mt.flag, mt.mat_colors, mt.tex_gens.len());
+                }
+            }
+            "inf1" => {
+                let b = &r[..];
+                let be32 = |o: usize| u32::from_be_bytes([b[o], b[o + 1], b[o + 2], b[o + 3]]) as usize;
+                let mut s = 0x20;
+                while &b[s..s + 4] != b"INF1" { s += be32(s + 4); }
+                let mut p = s + be32(s + 0x14);
+                let mut n = 0;
+                let mut depth = 0;
+                loop {
+                    let ty = u16::from_be_bytes([b[p], b[p + 1]]);
+                    let i = u16::from_be_bytes([b[p + 2], b[p + 3]]);
+                    p += 4;
+                    match ty {
+                        0 => break,
+                        1 => depth += 1,
+                        2 => depth -= 1,
+                        _ => { println!("node {n:2} (+{:4}) {}{ty:#x} {i}", n * 24, "  ".repeat(depth)); n += 1; }
+                    }
                 }
             }
             "layout" => println!("{:#?}", ipl::glh::Layout::parse(&r).expect("layout")),
