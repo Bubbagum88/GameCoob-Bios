@@ -84,7 +84,13 @@ fn main() {
                         }
                     }
                     let mt = &m.materials[d.material as usize];
-                    println!("draw {i}: shape {} mat {} {:?} flag {} colors {:?} tex {:?} bbox {lo:?}..{hi:?}", d.shape, d.material, mt.name, mt.flag, mt.mat_colors, mt.tex_gens.len());
+                    if std::env::var("VERBOSE").is_ok() {
+                        let mut m2 = mt.clone();
+                        m2.raw.clear();
+                        println!("{m2:#?}");
+                        println!("verts {:?}", sh.vertices.iter().map(|v| (v.pos, v.uv, v.color, v.normal)).collect::<Vec<_>>());
+                    }
+                    println!("draw {i}: shape {} mat {} {:?} flag {} colors {:?} tev {:?} maps {:?} stages {} tex {:?} bbox {lo:?}..{hi:?}", d.shape, d.material, mt.name, mt.flag, mt.mat_colors, mt.tev_colors, mt.textures, mt.tev_stages.len(), mt.tex_gens.len());
                 }
             }
             "layout" => println!("{:#?}", ipl::glh::Layout::parse(&r).expect("layout")),
@@ -120,7 +126,7 @@ fn main() {
                 intro.update(bs2::Input { a: has("a"), egg: None });
                 if intro.finished() {
                     println!("frame {f}: menu starts");
-                    menu = Some(Menu::new(info(f), Box::new(FakeDrive::new()), Box::new(FakeCards::new()), intro.wobble_frame, &intro.sin));
+                    menu = Some(Menu::new(info(f), &ma, Box::new(FakeDrive::new()), Box::new(FakeCards::new()), intro.wobble_frame, &intro.sin));
                 }
             }
             Some(m) => {

@@ -77,6 +77,18 @@ impl Prepared {
         let texs = model.textures.iter().map(FastTex::new).collect();
         Prepared { model, shaders, texs }
     }
+
+    /// The same model with each material's TEVREG0 replaced by `c` where it
+    /// held `old` (BS2 recolours a model by writing that register).
+    pub fn with_tev0(&self, old: [i16; 4], c: [i16; 4]) -> Prepared {
+        let mut model = self.model.clone();
+        for m in model.materials.iter_mut() {
+            if m.tev_colors[0] == Some(old) {
+                m.tev_colors[0] = Some(c);
+            }
+        }
+        Prepared::new(model)
+    }
 }
 
 /// Per-draw overrides.
@@ -106,6 +118,17 @@ fn norm(v: [f32; 3]) -> [f32; 3] {
 /// Queue a model's triangles. `base` is model-to-world (world matrix times
 /// model scale).
 pub fn draw_model<'a>(list: &mut Vec<Prim<'a>>, p: &'a Prepared, base: &Mtx, v: &View, o: &DrawOpts) {
+    draw_model_impl(list, p, base, v, o, None);
+}
+
+/// [`draw_model`] with `tex` in place of the materials' TEV stages: each
+/// draw is lit vertex color times `tex` (TEX0), the way BS2 draws a memory
+/// card file's icon on its block with the icon loaded into GX_TEXMAP0.
+pub fn draw_model_tex<'a>(list: &mut Vec<Prim<'a>>, p: &'a Prepared, base: &Mtx, v: &View, o: &DrawOpts, tex: &'a FastTex) {
+    draw_model_impl(list, p, base, v, o, Some(tex));
+}
+
+fn draw_model_impl<'a>(list: &mut Vec<Prim<'a>>, p: &'a Prepared, base: &Mtx, v: &View, o: &DrawOpts, tex: Option<&'a FastTex>) {
     let m = &p.model;
     if o.alpha == 0 {
         return;
@@ -173,15 +196,23 @@ pub fn draw_model<'a>(list: &mut Vec<Prim<'a>>, p: &'a Prepared, base: &Mtx, v: 
             })
             .collect();
 
-        let sh = Sh::Mat { shader, texs: &p.texs, alpha };
+        let sh = match tex {
+            Some(tex) => Sh::Modulate { tex },
+            None => Sh::Mat { shader, texs: &p.texs, alpha },
+        };
         for tri in shape.indices.chunks_exact(3) {
-            let (Some(a), Some(b), Some(c)) = (
+            let (Some(mut a), Some(mut b), Some(mut c)) = (
                 verts.get(tri[0] as usize).copied().flatten(),
                 verts.get(tri[1] as usize).copied().flatten(),
                 verts.get(tri[2] as usize).copied().flatten(),
             ) else {
                 continue;
             };
+            if tex.is_some() {
+                for v in [&mut a, &mut b, &mut c] {
+                    v.color[3] *= alpha;
+                }
+            }
             list.push(Prim { v: [a, b, c], st, sh });
         }
     }
