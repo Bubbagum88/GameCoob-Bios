@@ -9,4 +9,4 @@ local/*
 !local/README.md
 *.mp4
 # Local copy of the BS2 decomp; kept off GitHub for now
-/decomp/
+
