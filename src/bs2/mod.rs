@@ -196,6 +196,7 @@ impl Intro {
     /// Render the current frame into `t`; `par` runs the rasterizer job on
     /// as many processors as the caller has (it must call `job.work()` on
     /// each and return once `job.finished()`).
+    #[allow(dead_code)] // used by tools/intro-render
     pub fn render(&self, t: &mut Target, a: &Assets, par: &dyn Fn(&raster::Job)) {
         let mut list = Vec::new();
         self.draw(&mut list, a, [t.w as f32, t.h as f32]);
