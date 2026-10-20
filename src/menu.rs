@@ -60,7 +60,39 @@ fn cube_target(i: usize) -> (f32, f32) {
     }
 }
 
-const MAX_TIMEOUT: u16 = 30;
+pub const MAX_TIMEOUT: u16 = 30;
+
+// Firmware actions, shared with the cube menu. The ones that reset only
+// return on failure, with a message saying why.
+
+/// Boot Boot#### next (BootNext), then restart.
+pub fn boot_entry(num: u16) -> String {
+    match vars::set_boot_next(num) {
+        Ok(()) => runtime::reset(ResetType::COLD, Status::SUCCESS, None),
+        Err(err) => format!("Could not set BootNext: {:?}", err.status()),
+    }
+}
+
+/// Restart into the firmware's own setup screen.
+pub fn firmware_setup() -> String {
+    match vars::request_firmware_ui() {
+        Ok(()) => runtime::reset(ResetType::COLD, Status::SUCCESS, None),
+        Err(err) => format!("Could not request setup: {:?}", err.status()),
+    }
+}
+
+pub fn restart() -> ! {
+    runtime::reset(ResetType::COLD, Status::SUCCESS, None)
+}
+
+pub fn power_off() -> ! {
+    runtime::reset(ResetType::SHUTDOWN, Status::SUCCESS, None)
+}
+
+/// Store the firmware boot Timeout variable.
+pub fn save_timeout(secs: u16) -> Result<(), String> {
+    vars::set_timeout(secs).map_err(|err| format!("Could not save Timeout: {:?}", err.status()))
+}
 
 struct Menu {
     screen: Screen,
@@ -185,10 +217,8 @@ impl Menu {
                     self.screen = Screen::Main;
                 } else if enter {
                     if let Some(e) = self.entries.get(self.boot_sel) {
-                        match vars::set_boot_next(e.num) {
-                            Ok(()) => runtime::reset(ResetType::COLD, Status::SUCCESS, None),
-                            Err(err) => self.say(format!("Could not set BootNext: {:?}", err.status()), t),
-                        }
+                        let err = boot_entry(e.num);
+                        self.say(err, t);
                     }
                 }
             }
@@ -202,12 +232,12 @@ impl Menu {
                         (self.timeout + 1).min(MAX_TIMEOUT)
                     };
                     if new != self.timeout {
-                        match vars::set_timeout(new) {
+                        match save_timeout(new) {
                             Ok(()) => {
                                 self.timeout = new;
                                 self.say(format!("Saved: firmware boot timeout is now {new} s"), t);
                             }
-                            Err(err) => self.say(format!("Could not save Timeout: {:?}", err.status()), t),
+                            Err(err) => self.say(err, t),
                         }
                     }
                 }
@@ -217,15 +247,13 @@ impl Menu {
                     self.screen = Screen::Main;
                 } else if enter {
                     match action {
-                        Action::FirmwareSetup => match vars::request_firmware_ui() {
-                            Ok(()) => runtime::reset(ResetType::COLD, Status::SUCCESS, None),
-                            Err(err) => {
-                                self.say(format!("Could not request setup: {:?}", err.status()), t);
-                                self.screen = Screen::Main;
-                            }
-                        },
-                        Action::Restart => runtime::reset(ResetType::COLD, Status::SUCCESS, None),
-                        Action::PowerOff => runtime::reset(ResetType::SHUTDOWN, Status::SUCCESS, None),
+                        Action::FirmwareSetup => {
+                            let err = firmware_setup();
+                            self.say(err, t);
+                            self.screen = Screen::Main;
+                        }
+                        Action::Restart => restart(),
+                        Action::PowerOff => power_off(),
                     }
                 }
             }

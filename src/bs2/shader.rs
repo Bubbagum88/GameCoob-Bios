@@ -47,6 +47,47 @@ impl FastTex {
         FastTex { w: (t.width as i32).max(1), h: (t.height as i32).max(1), wrap_s: t.wrap_s, wrap_t: t.wrap_t, texels }
     }
 
+    /// A 2D-pane texture: clamped, and intensity formats become white with
+    /// the intensity as alpha (how BS2's 2D TEV setup uses them).
+    pub fn new_ui(t: &Texture) -> FastTex {
+        let mut f = FastTex::new(t);
+        f.wrap_s = gx::CLAMP;
+        f.wrap_t = gx::CLAMP;
+        if matches!(t.format, gx::I4 | gx::I8) {
+            for p in f.texels.iter_mut() {
+                *p = [1.0, 1.0, 1.0, p[3]];
+            }
+        }
+        f
+    }
+
+    /// A clamped texture from `w * h` RGBA bytes (pictures made at run time,
+    /// such as save icons and disc banners).
+    pub fn from_rgba(w: usize, h: usize, rgba: &[u8]) -> FastTex {
+        let texels = rgba.chunks_exact(4).map(|p| [p[0], p[1], p[2], p[3]].map(|c| c as f32 * (1.0 / 255.0))).collect();
+        FastTex { w: w.max(1) as i32, h: h.max(1) as i32, wrap_s: gx::CLAMP, wrap_t: gx::CLAMP, texels }
+    }
+
+    /// A white texture with the given coverage as alpha.
+    pub fn from_alpha(w: usize, h: usize, a: &[u8]) -> FastTex {
+        let texels = a.iter().map(|&v| [1.0, 1.0, 1.0, v as f32 * (1.0 / 255.0)]).collect();
+        FastTex { w: w.max(1) as i32, h: h.max(1) as i32, wrap_s: gx::CLAMP, wrap_t: gx::CLAMP, texels }
+    }
+
+    /// The same texture as white with its intensity as alpha, keeping the
+    /// wrap modes (for tiled intensity patterns).
+    pub fn intensity_alpha(mut self) -> FastTex {
+        for p in self.texels.iter_mut() {
+            *p = [1.0, 1.0, 1.0, p[0]];
+        }
+        self
+    }
+
+    /// Texture size in texels.
+    pub fn size(&self) -> (f32, f32) {
+        (self.w as f32, self.h as f32)
+    }
+
     #[inline]
     fn at(&self, x: i32, y: i32) -> &[f32; 4] {
         let i = (wrap(y, self.h, self.wrap_t) * self.w + wrap(x, self.w, self.wrap_s)) as usize;

@@ -1,11 +1,15 @@
 //! Plays the real GameCube intro, rebuilt from BS2, when the user's own
-//! `ipl.bin` is on the boot partition. Without it, the original GameCoob
-//! intro plays instead.
+//! `ipl.bin` is on the boot partition, and runs on into the rebuilt cube
+//! menu. Without the dump, the original GameCoob intro and menu play instead.
 
+use crate::bs2::menu::backend::{FakeCards, FakeDrive};
+use crate::bs2::menu::{Action, Menu, MenuAssets, Pad, SysInfo};
+use alloc::boxed::Box;
 use crate::bs2::{Assets, Input, Intro, cube::Jingle, raster::{Job, Target}, render};
 use crate::clock::Clock;
 use crate::gfx::Canvas;
 use crate::ipl::Ipl;
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::ffi::c_void;
 use uefi::boot::{self, EventType, ScopedProtocol, Tpl};
@@ -25,8 +29,8 @@ fn read_dump() -> Option<Vec<u8>> {
     PATHS.iter().find_map(|p| fs.read(*p).ok())
 }
 
-/// Load the dump and its intro assets, if present and valid.
-pub fn load() -> Option<Assets> {
+/// Load the dump and its intro and menu assets, if present and valid.
+pub fn load() -> Option<(Assets, Option<MenuAssets>)> {
     let rom = read_dump()?;
     let ipl = match Ipl::parse(&rom) {
         Ok(i) => i,
@@ -35,11 +39,45 @@ pub fn load() -> Option<Assets> {
             return None;
         }
     };
-    let a = Assets::load(&ipl);
-    if a.is_none() {
+    let Some(a) = Assets::load(&ipl) else {
         log::warn!("ipl.bin parsed but the intro assets are missing");
+        return None;
+    };
+    let m = MenuAssets::load(&ipl);
+    if m.is_none() {
+        log::warn!("ipl.bin parsed but the menu assets are missing");
     }
-    a
+    Some((a, m))
+}
+
+/// What the menu shows about this PC.
+fn sys_info() -> SysInfo {
+    SysInfo {
+        time: now_time(),
+        entries: crate::vars::boot_entries().into_iter().map(|e| (e.num, e.desc)).collect(),
+        timeout: crate::vars::timeout().unwrap_or(5).min(crate::menu::MAX_TIMEOUT),
+        vendor: system::firmware_vendor().to_string(),
+        fw_ui: crate::vars::firmware_ui_supported(),
+    }
+}
+
+fn now_time() -> [i32; 6] {
+    match uefi::runtime::get_time() {
+        Ok(t) => [t.year() as i32, t.month() as i32, t.day() as i32, t.hour() as i32, t.minute() as i32, t.second() as i32],
+        Err(_) => [2001, 9, 14, 0, 0, 0],
+    }
+}
+
+/// Carry out a menu action; the ones that reset only come back on failure.
+fn perform(a: Action) -> Option<String> {
+    use crate::menu;
+    match a {
+        Action::Boot(n) => Some(menu::boot_entry(n)),
+        Action::SetTimeout(s) => menu::save_timeout(s).err(),
+        Action::FirmwareSetup => Some(menu::firmware_setup()),
+        Action::Restart => menu::restart(),
+        Action::PowerOff => menu::power_off(),
+    }
 }
 
 /// The other processors, used to rasterize bands of each frame in parallel.
@@ -88,11 +126,18 @@ impl Cores {
     }
 }
 
-/// Run the intro at 60 logic frames per second until it hands over to the
-/// menu. Enter, Space or A is the A button (hold to spin the cube); Z at
-/// boot picks the easter-egg jingle; Escape skips.
-pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &Assets) {
+/// Run the intro at 60 logic frames per second, then (with the menu assets)
+/// the cube menu, which never returns: its actions boot or reset.
+///
+/// Intro: Enter, Space or A is the A button (hold to spin the cube); Z at
+/// boot picks the easter-egg jingle; Escape skips to the menu.
+/// Menu: the arrows are the d-pad, Enter is A, Escape or Backspace is B and
+/// Space or S is START. F10 opens the system dialog (firmware setup,
+/// restart, power off); D opens and closes the stand-in disc drive's tray
+/// and 1 / 2 pull, format-break and re-insert the stand-in memory cards.
+pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &Assets, ma: Option<&MenuAssets>) {
     let mut intro = Intro::new(assets);
+    let mut menu: Option<Menu> = None;
     let cores = Cores::open();
     // Full GX resolution unless this machine can't keep up, then half.
     let mut target = Target::new(render::EFB_W, render::EFB_H);
@@ -102,40 +147,99 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
     let mut a_until = -1.0f32;
     let mut egg: Option<Jingle> = None;
 
+    let mut pad = Pad::default();
+    let mut clock_at = 0.0;
+
     loop {
         let now = clock.now() - t0;
         loop {
-            match system::with_stdin(|i| i.read_key()) {
-                Ok(Some(Key::Printable(c))) => match char::from(c) {
+            let key = match system::with_stdin(|i| i.read_key()) {
+                Ok(Some(k)) => k,
+                _ => break,
+            };
+            if menu.is_some() {
+                // Presses are latched until the next logic frame.
+                match key {
+                    Key::Printable(c) => match char::from(c) {
+                        '\r' => pad.a = true,
+                        '\u{8}' => pad.b = true,
+                        ' ' | 's' | 'S' => pad.start = true,
+                        'd' | 'D' => pad.eject = true,
+                        '1' => pad.slot[0] = true,
+                        '2' => pad.slot[1] = true,
+                        _ => {}
+                    },
+                    Key::Special(ScanCode::UP) => pad.up = true,
+                    Key::Special(ScanCode::DOWN) => pad.down = true,
+                    Key::Special(ScanCode::LEFT) => pad.left = true,
+                    Key::Special(ScanCode::RIGHT) => pad.right = true,
+                    Key::Special(ScanCode::ESCAPE) => pad.b = true,
+                    Key::Special(ScanCode::FUNCTION_10) => pad.system = true,
+                    _ => {}
+                }
+                continue;
+            }
+            match key {
+                Key::Printable(c) => match char::from(c) {
                     '\r' | ' ' | 'a' | 'A' => a_until = now + 0.15,
                     'z' if intro.frame < 30 => egg = Some(Jingle::Pad1Z),
                     'Z' if intro.frame < 30 => egg = Some(Jingle::AllPadsZ),
                     _ => {}
                 },
-                Ok(Some(Key::Special(ScanCode::ESCAPE))) => return,
-                Ok(Some(_)) => {}
-                _ => break,
+                Key::Special(ScanCode::ESCAPE) => {
+                    if ma.is_none() {
+                        return;
+                    }
+                    // Skip straight to the menu.
+                    while !intro.finished() {
+                        intro.update(Input { a: false, egg: None });
+                    }
+                }
+                _ => {}
             }
         }
         // Catch logic up to real time, drawing only the latest frame.
         let due = (now * 60.0) as u32;
         let mut stepped = false;
         while done_frames < due {
-            intro.update(Input { a: now < a_until, egg });
             done_frames += 1;
             stepped = true;
+            if let Some(m) = &mut menu {
+                if let Some(act) = m.update(&pad, &intro.sin) {
+                    if let Some(msg) = perform(act) {
+                        m.notify(msg);
+                    }
+                }
+                m.tick_guide();
+                pad = Pad::default();
+                continue;
+            }
+            intro.update(Input { a: now < a_until, egg });
             if intro.finished() {
-                return;
+                let Some(_) = ma else { return };
+                menu = Some(Menu::new(sys_info(), Box::new(FakeDrive::new()), Box::new(FakeCards::new()), intro.wobble_frame, &intro.sin));
+                // Keys pressed during the intro don't leak into the menu.
+                pad = Pad::default();
+            }
+        }
+        if let Some(m) = &mut menu {
+            if now - clock_at > 0.25 {
+                clock_at = now;
+                m.info.time = now_time();
             }
         }
         if !stepped {
             continue;
         }
         let d0 = clock.now();
-        intro.render(&mut target, assets, &|job| match &cores {
+        let par = |job: &Job| match &cores {
             Some(c) => c.run(job),
             None => job.work(),
-        });
+        };
+        match ma {
+            Some(ma) => intro.render_with_menu(&mut target, assets, ma, menu.as_ref(), &par),
+            None => intro.render(&mut target, assets, &par),
+        }
         if clock.now() - d0 > 1.0 / 30.0 && target.w == render::EFB_W {
             slow_frames += 1;
             if slow_frames > 10 {
