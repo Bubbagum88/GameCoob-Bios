@@ -1,6 +1,6 @@
-//! GameCoob: a UEFI boot app that plays the GameCube intro and cube menu
-//! (rebuilt from the user's own IPL dump), or an original cube intro and
-//! menu without one, for booting and changing firmware boot settings.
+//! GameCoob: a UEFI boot app that plays the GameCube intro and cube menu,
+//! rebuilt from the user's own IPL dump, for booting and changing firmware
+//! boot settings.
 
 #![no_std]
 #![no_main]
@@ -10,13 +10,12 @@ extern crate alloc;
 mod boot_intro;
 mod bs2;
 mod clock;
+mod firmware;
 mod gfx;
-mod intro;
 mod ipl;
-mod math;
-mod menu;
 mod vars;
 
+use core::time::Duration;
 use uefi::prelude::*;
 use uefi::proto::console::gop::GraphicsOutput;
 
@@ -25,6 +24,11 @@ fn main() -> Status {
     uefi::helpers::init().unwrap();
     // The firmware's 5-minute watchdog would reset us while idling in the menu.
     let _ = boot::set_watchdog_timer(0, 0x10000, None);
+
+    // Checked before taking the screen, so the text console can still say why.
+    let Some((assets, menu_assets)) = boot_intro::load() else {
+        return no_dump();
+    };
 
     let handle = match boot::get_handle_for_protocol::<GraphicsOutput>() {
         Ok(h) => h,
@@ -39,13 +43,22 @@ fn main() -> Status {
     let clock = clock::Clock::calibrate();
 
     let _ = system::with_stdin(|i| i.reset(false));
-    let palette = match boot_intro::load() {
-        Some((assets, menu_assets)) => {
-            // With the menu assets this runs the cube menu and never returns.
-            boot_intro::play(&mut gop, &mut canvas, &clock, &assets, menu_assets.as_ref());
-            intro::NORMAL
+    boot_intro::play(&mut gop, &mut canvas, &clock, &assets, &menu_assets)
+}
+
+/// Without a usable dump there is nothing to show: say where it goes, wait
+/// for a key (or a few seconds), then hand back to the firmware, which boots
+/// its next entry.
+fn no_dump() -> Status {
+    uefi::println!("GameCoob needs your own GameCube IPL dump.");
+    uefi::println!("Copy it to \\EFI\\GameCoob\\ipl.bin on this boot partition.");
+    uefi::println!("Continuing to the next boot entry...");
+    let _ = system::with_stdin(|i| i.reset(false));
+    for _ in 0..100 {
+        if matches!(system::with_stdin(|i| i.read_key()), Ok(Some(_))) {
+            break;
         }
-        None => intro::play(&mut gop, &mut canvas, &clock),
-    };
-    menu::run(&mut gop, &mut canvas, &clock, palette)
+        boot::stall(Duration::from_millis(100));
+    }
+    Status::NOT_FOUND
 }

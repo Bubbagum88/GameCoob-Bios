@@ -15,6 +15,7 @@
 //! Firmware Setup, Restart and Power Off are in a system dialog (F10).
 
 pub mod backend;
+mod card;
 mod game;
 mod system;
 
@@ -54,6 +55,8 @@ mod res {
     pub const GAME: u16 = 21;
     pub const CARD: u16 = 28;
     pub const CARD_BAR: u16 = 90;
+    pub const CARD_EMPTY: u16 = 87;
+    pub const CARD_FILE: u16 = 88;
     pub const BACKDROP: u16 = 89;
     pub const DIGITS: u16 = 91;
     pub const DIALOG: u16 = 108;
@@ -80,6 +83,7 @@ pub struct MenuAssets {
     pub dialog_str: Vec<Strings>,
     pub card: Layout,
     pub card_bar: FastTex,
+    pub card_models: card::Models,
     pub digits: Vec<FastTex>,
     pub weekday: Vec<Vec<FastTex>>,
     pub clock: Layout,
@@ -95,6 +99,7 @@ impl MenuAssets {
         let layout = |id: u16| Layout::parse(&ipl.resource(id).ok()?).ok();
         let strings = |id: u16| Strings::parse(&ipl.resource(id).ok()?).ok();
         let tex = |id: u16| Some(FastTex::new_ui(&bti::parse(&ipl.resource(id).ok()?).ok()?));
+        let model = |id: u16| Some(render::Prepared::new(crate::ipl::j3d::Model::parse(&ipl.resource(id).ok()?).ok()?));
         let per_lang = |ids: &[u16; 6]| ids.iter().map(|&i| layout(i)).collect::<Option<Vec<_>>>();
         let per_lang_s = |ids: &[u16; 6]| ids.iter().map(|&i| strings(i)).collect::<Option<Vec<_>>>();
         let bank = glh::texture_bank(&ipl.resource(res::TEX_BANK).ok()?).ok()?.iter().map(FastTex::new_ui).collect();
@@ -119,6 +124,7 @@ impl MenuAssets {
             dialog_str: per_lang_s(&res::DIALOG_STR)?,
             card: layout(res::CARD)?,
             card_bar: tex(res::CARD_BAR)?,
+            card_models: card::Models::new(model(res::CARD_FILE)?, model(res::CARD_EMPTY)?),
             digits: (0..10).map(|i| tex(res::DIGITS + i)).collect::<Option<Vec<_>>>()?,
             weekday: res::WEEKDAY.iter().map(|&b| (0..7).map(|i| tex(b + i)).collect::<Option<Vec<_>>>()).collect::<Option<Vec<_>>>()?,
             clock: layout(res::CLOCK)?,
@@ -313,8 +319,6 @@ pub enum Action {
     PowerOff,
 }
 
-const SYS_ITEMS: [&str; 3] = ["Firmware Setup", "Restart", "Power Off"];
-
 pub struct Menu {
     pub state: St,
     next: St,
@@ -333,6 +337,7 @@ pub struct Menu {
     pub drive: Box<dyn DiscDrive>,
     pub cards: Box<dyn MemCards>,
     game: game::Game,
+    card: card::Card,
     sys: system::System,
     slot_fill: [i32; 2],
     lang_guide: [Fader; LANGS],
@@ -349,8 +354,6 @@ pub struct Menu {
     opt_lang: usize,
     highlight: i16,
     highlight_up: bool,
-    sys_row: usize,
-    sys_confirm: Option<bool>,
     message: Option<(String, u32)>,
     frame: u32,
     pub info: SysInfo,
@@ -363,7 +366,8 @@ const SUB_GAME: usize = 3;
 
 impl Menu {
     /// Menu_Init, continuing the wobble clock of the spin-out.
-    pub fn new(info: SysInfo, drive: Box<dyn DiscDrive>, cards: Box<dyn MemCards>, wobble_frame: i16, s: &SinTable) -> Menu {
+    pub fn new(info: SysInfo, ma: &MenuAssets, drive: Box<dyn DiscDrive>, cards: Box<dyn MemCards>, wobble_frame: i16, s: &SinTable) -> Menu {
+        let card = card::Card::new(ma, &*cards);
         let mut m = Menu {
             state: St::Top,
             next: St::Top,
@@ -381,6 +385,7 @@ impl Menu {
             drive,
             cards,
             game: game::Game::new(),
+            card,
             sys: system::System::new(info.fw_ui),
             slot_fill: [0; 2],
             lang_guide: [Fader::default(); LANGS],
@@ -396,8 +401,6 @@ impl Menu {
             opt_lang: 0,
             highlight: 50,
             highlight_up: true,
-            sys_row: 0,
-            sys_confirm: None,
             message: None,
             frame: 0,
             info,
@@ -531,7 +534,7 @@ impl Menu {
                 [o, o, o, Some(top), Some(!top), Some(!top), Some(top), i]
             }
             St::Card => {
-                let browsing = self.card_browsing();
+                let browsing = self.card.browsing();
                 [o, o, o, i, None, Some(!browsing), Some(browsing), i]
             }
         };
@@ -553,10 +556,6 @@ impl Menu {
         for i in 0..LANGS {
             self.lang_guide[i].step_if(i == self.guide_lang);
         }
-    }
-
-    fn card_browsing(&self) -> bool {
-        self.sys_confirm.is_none()
     }
 
     /// One menu frame (Menu_Update). Returns an action for the firmware.
@@ -596,8 +595,7 @@ impl Menu {
             self.opt_edit = false;
         }
         if self.state == St::CardFace && self.next == St::Card {
-            self.sys_row = 0;
-            self.sys_confirm = None;
+            self.card.enter();
         }
         if self.state == St::Game && self.next == St::GameFace {
             self.disc_banner.reset();
@@ -674,6 +672,11 @@ impl Menu {
             let ready = self.zoom == 0x7FFF;
             return self.game.update(p, &*self.drive, &self.info, ready);
         }
+        if self.state == St::Card {
+            let fade_done = self.sub[SUB_CARD].iter().all(|f| f.alpha() > 172);
+            let next = self.card.update(p, &mut *self.cards, self.zoom == 0x7FFF, fade_done);
+            return (next, None);
+        }
         // Input waits until the zoom is complete (the IPL also waits for
         // the mosaic to assemble).
         if self.zoom != 0x7FFF {
@@ -744,46 +747,7 @@ impl Menu {
                 }
                 (St::Clock, None)
             }
-            _ => {
-                // System (Memory Card face).
-                if let Some(yes) = self.sys_confirm {
-                    if p.up || p.down {
-                        self.sys_confirm = Some(!yes);
-                    }
-                    if p.b {
-                        self.sys_confirm = None;
-                    }
-                    if p.a {
-                        self.sys_confirm = None;
-                        if yes {
-                            let act = match self.sys_row {
-                                0 => Action::FirmwareSetup,
-                                1 => Action::Restart,
-                                _ => Action::PowerOff,
-                            };
-                            return (St::Card, Some(act));
-                        }
-                    }
-                    return (St::Card, None);
-                }
-                if p.b {
-                    return (St::CardFace, None);
-                }
-                if p.up && self.sys_row > 0 {
-                    self.sys_row -= 1;
-                }
-                if p.down && self.sys_row + 1 < SYS_ITEMS.len() {
-                    self.sys_row += 1;
-                }
-                if p.a {
-                    if self.sys_row == 0 && !self.info.fw_ui {
-                        self.notify(String::from("This firmware cannot be asked to open its setup."));
-                    } else {
-                        self.sys_confirm = Some(false);
-                    }
-                }
-                (St::Card, None)
-            }
+            _ => (self.state, None),
         }
     }
 
@@ -812,7 +776,7 @@ impl Menu {
         let mut v2 = View::intro(0.0, false);
         v2.vp = view.vp;
         let mut ui = Ui { list: ui.list, view: &v2, mv: screen_2d() };
-        self.draw_submenus(&mut ui, ma);
+        self.draw_submenus(&mut ui, ma, s);
         self.draw_guide(&mut ui, ma, 255);
         let pulse = (self.highlight - 50) as f32 / 70.0;
         self.sys.draw(&mut ui, ma, self.lang, pulse);
@@ -1000,7 +964,7 @@ impl Menu {
     }
 
     /// Menu_DrawSubmenus: each is drawn while its first fader is above 0.
-    fn draw_submenus<'a>(&'a self, ui: &mut Ui<'a, '_>, ma: &'a MenuAssets) {
+    fn draw_submenus<'a>(&'a self, ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, s: &SinTable) {
         for k in [SUB_CARD, SUB_GAME, SUB_OPTION, SUB_CLOCK] {
             let f = &self.sub[k];
             let al = [f[0].alpha(), f[1].alpha(), f[2].alpha()].map(|v| v as f32 / 255.0);
@@ -1009,10 +973,7 @@ impl Menu {
             }
             match k {
                 SUB_GAME => self.draw_game(ui, ma, al),
-                SUB_CARD => {
-                    draw_backdrop(ui, ma, al[1]);
-                    self.draw_system(ui, ma, al);
-                }
+                SUB_CARD => self.card.draw(ui, ma, &*self.cards, self.lang, al, s),
                 SUB_OPTION => {
                     draw_backdrop(ui, ma, al[1]);
                     self.draw_options(ui, ma, al);
@@ -1129,43 +1090,6 @@ impl Menu {
         ui.mosaic(&ma.font, 294.0, 268.0, 6.0, &cp1252(&time), pairs[1].0, pairs[1].1, al[0]);
     }
 
-    /// Memory Card: firmware setup, restart and power off.
-    fn draw_system<'a>(&'a self, ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, al: [f32; 3]) {
-        let light = rgb(90, 110, 255);
-        let dark = rgb(20, 20, 110);
-        ui.mosaic(&ma.font, 292.0, 70.0, 6.0, b"SYSTEM", light, dark, al[0]);
-        let Some(box_) = ma.dialog.frame(tag(b"mes0")).next() else { return };
-        let (bw, bh) = (box_.inner_w, 120.0);
-        let (bx, by) = (292.0 - bw / 2.0, 170.0);
-        ui.frame_rect(box_, &ma.bank, with_a(WHITE, al[1]), bx, by, bw, bh);
-        if let Some(yes) = self.sys_confirm {
-            let q = match self.sys_row {
-                0 => "Restart into firmware setup?",
-                1 => "Restart this PC now?",
-                _ => "Power this PC off now?",
-            };
-            ui.label(&ma.font, 292.0, by + 8.0, 24.0, &cp1252(q), with_a(WHITE, al[2]), 0);
-            for (i, (lbl, on)) in [("Yes", yes), ("No", !yes)].iter().enumerate() {
-                let y = by + 50.0 + i as f32 * 32.0;
-                if *on {
-                    ui.fill(232.0, y - 2.0, 120.0, 28.0, [1.0, 1.0, 1.0, self.highlight as f32 / 255.0 * al[2]]);
-                }
-                ui.label(&ma.font, 292.0, y, 24.0, &cp1252(lbl), with_a(WHITE, al[2]), 0);
-            }
-            return;
-        }
-        for (i, item) in SYS_ITEMS.iter().enumerate() {
-            let y = by + 10.0 + i as f32 * 36.0;
-            let sel = i == self.sys_row;
-            if sel {
-                ui.fill(bx + 10.0, y - 3.0, bw - 20.0, 32.0, [1.0, 1.0, 1.0, self.highlight as f32 / 255.0 * al[2]]);
-            }
-            let dim = i == 0 && !self.info.fw_ui;
-            let c = if dim { [0.6, 0.6, 0.7, 0.7] } else { WHITE };
-            ui.label(&ma.font, 292.0, y, 26.0, &cp1252(item), with_a(c, al[2]), 0);
-        }
-    }
-
     /// Menu_DrawGuide: the button guide along the bottom.
     fn draw_guide<'a>(&'a self, ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, alpha: u8) {
         let gl = &ma.guide;
@@ -1262,6 +1186,12 @@ fn draw_front<'a>(ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, lang: usize, view: &V
 /// Backdrop_Draw, simplified: the 8x8 grid tile repeated over the screen,
 /// lit by a soft spot from the centre instead of the GX spot light.
 fn draw_backdrop<'a>(ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, a: f32) {
+    draw_backdrop_spots(ui, ma, a, &[([296.0, 224.0], 1.0)]);
+}
+
+/// Backdrop_DrawSpots, simplified the same way: one soft spot per
+/// (centre, weight 0..1); each cell takes the brightest.
+fn draw_backdrop_spots<'a>(ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, a: f32, spots: &[([f32; 2], f32)]) {
     if a <= 0.0 {
         return;
     }
@@ -1272,8 +1202,13 @@ fn draw_backdrop<'a>(ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, a: f32) {
         for i in 0..N {
             let p = |ii: usize, jj: usize| [x0 + w * ii as f32 / N as f32, y0 + h * jj as f32 / N as f32];
             let lit = |q: [f32; 2]| {
-                let (dx, dy) = ((q[0] - 296.0) / 420.0, (q[1] - 224.0) / 420.0);
-                let k = (1.0 - (dx * dx + dy * dy) * 1.6).max(0.0);
+                let k = spots
+                    .iter()
+                    .map(|&(c, w)| {
+                        let (dx, dy) = ((q[0] - c[0]) / 420.0, (q[1] - c[1]) / 420.0);
+                        w * (1.0 - (dx * dx + dy * dy) * 1.6).max(0.0)
+                    })
+                    .fold(0.0f32, f32::max);
                 let v = 0.12 + 0.36 * k;
                 [v, v, v, a]
             };

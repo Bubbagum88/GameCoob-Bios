@@ -74,7 +74,7 @@ try {
         Copy-Item -Force "local\ipl.bin" "${dest}EFI\GameCoob\ipl.bin"
         Write-Host "Copied your dump from local\ipl.bin"
     } else {
-        Write-Host "No local\ipl.bin, so the original GameCoob intro will play"
+        Write-Host "No local\ipl.bin; GameCoob needs your dump and will skip to the next boot entry without it"
     }
 } finally {
     Invoke-DiskPart @("select vdisk file=`"$vhd`"", "detach vdisk")
