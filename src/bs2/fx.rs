@@ -24,7 +24,8 @@
 //! |-----------|--------|---------------------------------------------------|
 //! | `vis`     | 10     | shown (alpha = 255 * progress * vis)              |
 //! | `bright`  | 10     | weight of colour pair 0 (target clears each frame)|
-//! | `sel`     | flag   | pair 1 instead of pair 2 under `bright`           |
+//! | `sel`     | 10     | pair 1 instead of pair 2 under `bright`; also how |
+//! |           |        | much a calendar field being edited is enlarged    |
 //! | `sway`    | 10     | how much of its group's sway the cube follows     |
 
 use super::mtx::{self, SinTable};
@@ -115,13 +116,25 @@ impl Ramp {
 struct Cell {
     vis: Ramp,
     bright: Ramp,
-    sel: bool,
+    sel: Ramp,
     sway: Ramp,
     pos: [f32; 3],
+    /// Cube size (1 unless a layout step scaled its group).
+    scale: f32,
     rot: [i32; 3],
     light: [f32; 4],
     dark: [f32; 4],
     alpha: u8,
+}
+
+/// A layout step applied to a glyph entry once the cubes are on their
+/// paths (fn_8132DEFC).
+#[derive(Clone, Copy)]
+enum Place {
+    /// Move by (x, y) and scale by `k` about the entry's centre.
+    Move(f32, f32, f32),
+    /// Enlarge each cube by `1 + k * sel` about the entry's centre.
+    Pulse(f32),
 }
 
 /// The builder's view of one frame: which cells are shown and how.
@@ -129,6 +142,7 @@ pub struct Build<'a> {
     glyphs: &'a Glyphs,
     cells: &'a mut [Cell],
     groups: Vec<&'a [u16]>,
+    places: Vec<(&'a [u16], Place)>,
     all: &'a [u16],
 }
 
@@ -182,7 +196,19 @@ impl<'a> Build<'a> {
 
     /// fn_8132CDD4: pair 1 (on) or pair 2 (off) where not bright.
     pub fn select(&mut self, entry: usize, on: bool) {
-        self.each(entry, |c| c.sel = on);
+        self.each(entry, |c| c.sel.set(on));
+    }
+
+    /// Lay a whole line out: move it by (`x`, `y`) and scale it by `k`
+    /// about its centre (the calendar rows, fxItem in MenuWork).
+    pub fn place(&mut self, entry: usize, x: f32, y: f32, k: f32) {
+        self.places.push((self.glyphs.get(entry), Place::Move(x, y, k)));
+    }
+
+    /// Enlarge the entry's selected cubes by up to `k` about its centre
+    /// (the calendar field being edited).
+    pub fn pulse(&mut self, entry: usize, k: f32) {
+        self.places.push((self.glyphs.get(entry), Place::Pulse(k)));
     }
 
     /// fn_8132CEA4: follow (on) or leave (off) the group sway.
@@ -282,21 +308,24 @@ impl Mosaic {
         for c in &mut self.cells[..n] {
             c.bright.target = 0;
         }
-        let mut b = Build { glyphs: data.glyphs(lang), cells: &mut self.cells[..n], groups: Vec::new(), all: &data.all[..n] };
+        let mut b = Build { glyphs: data.glyphs(lang), cells: &mut self.cells[..n], groups: Vec::new(), places: Vec::new(), all: &data.all[..n] };
         build(&mut b);
         let groups: Vec<Vec<u16>> = b.groups.iter().map(|g| g.to_vec()).collect();
+        let places: Vec<(Vec<u16>, Place)> = b.places.iter().map(|(g, p)| (g.to_vec(), *p)).collect();
 
         let t = self.progress as f32 / READY as f32;
         for (i, c) in self.cells[..n].iter_mut().enumerate() {
             c.pos = data.paths.eval(set, i, t);
             c.rot = [0; 3];
+            c.scale = 1.0;
         }
+        self.place(&places, n);
         if t > SWAY_FROM {
             self.sway(&groups, n, s);
         }
         for c in &mut self.cells[..n] {
             c.alpha = (255.0 * t * c.vis.k()) as u8;
-            let (f, g) = (if c.sel { 1.0 } else { 0.0 }, c.bright.k());
+            let (f, g) = (c.sel.k(), c.bright.k());
             let mix = |p: fn(&Pair) -> Rgb| -> [f32; 4] {
                 let (a, b0, b1) = (p(&colors[0]), p(&colors[1]), p(&colors[2]));
                 let ch = |k: usize| g * a[k] as f32 + (1.0 - g) * (f * b0[k] as f32 + (1.0 - f) * b1[k] as f32);
@@ -313,12 +342,41 @@ impl Mosaic {
         for c in &mut self.cells[..n] {
             c.vis.step();
             c.bright.step();
+            c.sel.step();
             c.sway.step();
         }
         if self.progress < READY {
             self.progress += 1;
         }
         self.wave = (self.wave + 1) % SWAY_PERIOD;
+    }
+
+    /// fn_8132DEFC: the layout steps, each about the centre of its entry
+    /// (fn_8132C830) taken before the step.
+    fn place(&mut self, places: &[(Vec<u16>, Place)], n: usize) {
+        for (g, p) in places {
+            let ids = || g.iter().map(|&i| i as usize).filter(|&i| i < n);
+            let k = ids().count();
+            if k == 0 {
+                continue;
+            }
+            let mut ctr = [0.0f32; 3];
+            for i in ids() {
+                (0..3).for_each(|a| ctr[a] += self.cells[i].pos[a]);
+            }
+            ctr = ctr.map(|v| v / k as f32);
+            for i in ids() {
+                let c = &mut self.cells[i];
+                let (d, s) = match *p {
+                    Place::Move(x, y, s) => ([x, y], s),
+                    Place::Pulse(s) => ([0.0; 2], 1.0 + s * c.sel.k()),
+                };
+                c.pos[0] = ctr[0] + s * (c.pos[0] + d[0] - ctr[0]);
+                c.pos[1] = ctr[1] + s * (c.pos[1] + d[1] - ctr[1]);
+                c.pos[2] = ctr[2] + s * (c.pos[2] - ctr[2]);
+                c.scale *= s;
+            }
+        }
     }
 
     /// fn_8133498C + fn_8132C750: each group turns about its centre and
@@ -369,7 +427,8 @@ impl Mosaic {
             if a <= 10 {
                 continue;
             }
-            let m = mtx::concat(&mtx::rot_trans(s, c.rot[0], c.rot[1], c.rot[2], c.pos), &mtx::scale(CUBE_SCALE, CUBE_SCALE, CUBE_SCALE));
+            let k = CUBE_SCALE * c.scale;
+            let m = mtx::concat(&mtx::rot_trans(s, c.rot[0], c.rot[1], c.rot[2], c.pos), &mtx::scale(k, k, k));
             let o = DrawOpts { alpha: a, ..Default::default() };
             render::draw_model_with(list, &data.model, Some(sh), &m, view, &o);
         }
@@ -456,7 +515,20 @@ pub mod screen {
         }
         b.group(g::DATE_ROW);
         b.group(g::TIME_ROW);
+        // fn_8132DEFC: the rows move down under their labels at 0.74 size
+        // (MenuWork fxItem, PAL), and the field being edited grows by up to
+        // a fifth as it is selected.
+        b.place(g::DATE_ROW, ITEM[0].0, ITEM[0].1, ITEM[0].2);
+        b.place(g::TIME_ROW, ITEM[1].0, ITEM[1].1, ITEM[1].2);
+        match c.sub {
+            1 => b.pulse([g::YEAR, g::MONTH, g::DAY][c.date_field.min(2) as usize], ITEM[0].3),
+            2 => b.pulse([g::HOUR, g::MINUTE, g::SECOND][c.time_field.min(2) as usize], ITEM[1].3),
+            _ => {}
+        }
     }
+
+    /// MenuWork fxItem[0..2] after the PAL overrides: x, y, scale, spacing.
+    const ITEM: [(f32, f32, f32, f32); 2] = [(0.0, -46.0, 0.74, 0.2), (0.0, -20.0, 0.74, 0.2)];
 
     /// Game Play's message: 0 "PRESS START", 1 "NO DISC", 2 unknown disc.
     pub fn game(b: &mut Build, msg: u8) {

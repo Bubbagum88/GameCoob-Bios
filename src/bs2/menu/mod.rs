@@ -10,7 +10,7 @@
 //! | Game Play   | disc status, START boots | the same over a [`DiscDrive`]; START on a ready disc opens the firmware boot list (BootNext) |
 //! | Memory Card | browse, copy, move, erase, format | the same over [`MemCards`] (fake cards in RAM for now) |
 //! | Options     | sound, screen, language | boot timeout, menu language            |
-//! | Calendar    | set the clock           | show the firmware clock                |
+//! | Calendar    | set the clock           | set the firmware clock (SetTime)       |
 //!
 //! Firmware Setup, Restart and Power Off are in a system dialog (F10).
 
@@ -320,6 +320,8 @@ pub struct SysInfo {
 pub enum Action {
     Boot(u16),
     SetTimeout(u16),
+    /// Set the firmware clock: year, month 1..12, day, hour, minute, second.
+    SetTime([i32; 6]),
     FirmwareSetup,
     Restart,
     PowerOff,
@@ -358,6 +360,7 @@ pub struct Menu {
     opt_edit: bool,
     opt_timeout: u16,
     opt_lang: usize,
+    clock: ClockEdit,
     highlight: i16,
     highlight_up: bool,
     message: Option<(String, u32)>,
@@ -368,6 +371,90 @@ pub struct Menu {
     card_icon: icons::CardIcon,
     clock_icon: icons::ClockIcon,
     option_icon: icons::OptionIcon,
+}
+
+/// Calendar state (`sClockSub`, `sClockRow`, `sDateField`, `sTimeField`,
+/// `gClockEdit`).
+#[derive(Clone, Copy, Default)]
+struct ClockEdit {
+    /// 0 menu, 1 editing the date, 2 editing the time.
+    sub: u8,
+    /// The sub-state the mosaic showed last frame (it flashes on a change).
+    shown_sub: u8,
+    /// 0 date, 1 time.
+    row: u8,
+    /// 0 year, 1 month, 2 day.
+    date_field: u8,
+    /// 0 hour, 1 minute, 2 second.
+    time_field: u8,
+    /// Year, month 1..12, day; or hour, minute, second.
+    value: [i32; 3],
+}
+
+impl ClockEdit {
+    /// Clock_FixDate: the year wraps in 2000..2099 and the month in 1..12;
+    /// the day wraps only while it is the field being edited, else it is
+    /// clamped to the month.
+    fn fix_date(&mut self) {
+        let v = &mut self.value;
+        if v[0] < 2000 {
+            v[0] = 2099;
+        }
+        if v[0] > 2099 {
+            v[0] = 2000;
+        }
+        if v[1] < 1 {
+            v[1] = 12;
+        }
+        if v[1] > 12 {
+            v[1] = 1;
+        }
+        let days = days_in_month(v[0], v[1]);
+        if v[2] > days {
+            v[2] = if self.date_field == 2 { 1 } else { days };
+        }
+        if v[2] < 1 {
+            v[2] = days;
+        }
+    }
+
+    /// Clock_FixTime: hours wrap 0..23, minutes and seconds 0..59.
+    fn fix_time(&mut self) {
+        let f = self.time_field as usize;
+        let max = if f == 0 { 23 } else { 59 };
+        if self.value[f] < 0 {
+            self.value[f] = max;
+        }
+        if self.value[f] > max {
+            self.value[f] = 0;
+        }
+    }
+
+    /// The time the mosaic shows: `now`, with the field group being edited
+    /// taken from the edit buffer.
+    fn shown(&self, now: [i32; 6]) -> [i32; 6] {
+        self.shown_with(self.sub, now)
+    }
+
+    fn shown_with(&self, sub: u8, now: [i32; 6]) -> [i32; 6] {
+        let mut t = now;
+        match sub {
+            1 => t[..3].copy_from_slice(&self.value),
+            2 => t[3..].copy_from_slice(&self.value),
+            _ => {}
+        }
+        t
+    }
+}
+
+fn days_in_month(y: i32, m: i32) -> i32 {
+    let leap = (y % 4 == 0 && y % 100 != 0) || y % 400 == 0;
+    match m {
+        2 if leap => 29,
+        2 => 28,
+        4 | 6 | 9 | 11 => 30,
+        _ => 31,
+    }
 }
 
 const SUB_OPTION: usize = 0;
@@ -410,6 +497,7 @@ impl Menu {
             opt_edit: false,
             opt_timeout: 0,
             opt_lang: 0,
+            clock: ClockEdit::default(),
             highlight: 50,
             highlight_up: true,
             message: None,
@@ -546,7 +634,7 @@ impl Menu {
             St::Game if self.game.starting() => [o, o, o, i, o, i, o, i],
             St::Game => [o, o, o, o, o, Some(!self.game.fatal()), o, o],
             St::Option | St::Clock => {
-                let top = if self.state == St::Option { !self.opt_edit } else { true };
+                let top = if self.state == St::Option { !self.opt_edit } else { self.clock.sub == 0 };
                 [o, o, o, Some(top), Some(!top), Some(!top), Some(top), i]
             }
             St::Card => {
@@ -710,9 +798,9 @@ impl Menu {
             let next = self.card.update(p, &mut *self.cards, self.zoom == 0x7FFF, fade_done);
             return (next, None);
         }
-        // Input waits until the zoom is complete, and in Options until the
-        // mosaic has assembled (Fx_IsReady(0)).
-        if self.zoom != 0x7FFF || (self.state == St::Option && !self.fx.ready(0)) {
+        // Input waits until the zoom is complete, and in Options and
+        // Calendar until the mosaic has assembled (Fx_IsReady(0)).
+        if self.zoom != 0x7FFF || (matches!(self.state, St::Option | St::Clock) && !self.fx.ready(0)) {
             return (self.state, None);
         }
         match self.state {
@@ -774,14 +862,77 @@ impl Menu {
                 }
                 (St::Option, None)
             }
-            St::Clock => {
+            St::Clock => self.update_clock(p),
+            _ => (self.state, None),
+        }
+    }
+
+    /// Clock_Update: Up/Down pick the date or the time row, A edits it.
+    /// While editing, Left/Right move between the fields, Up/Down change
+    /// the value, A writes the firmware clock and B cancels.
+    fn update_clock(&mut self, p: &Pad) -> (St, core::option::Option<Action>) {
+        let c = &mut self.clock;
+        // Left/Right only count without Up/Down in the same frame.
+        let side = !(p.up || p.down);
+        match c.sub {
+            0 => {
+                if p.up {
+                    c.row = 0;
+                }
+                if p.down {
+                    c.row = 1;
+                }
+                if p.a {
+                    let t = self.info.time;
+                    if c.row == 0 {
+                        c.value = [t[0], t[1], t[2]];
+                        c.sub = 1;
+                    } else {
+                        c.value = [t[3], t[4], 0];
+                        c.sub = 2;
+                    }
+                    return (St::Clock, None);
+                }
                 if p.b {
                     return (St::ClockFace, None);
                 }
-                (St::Clock, None)
             }
-            _ => (self.state, None),
+            sub => {
+                let date = sub == 1;
+                let field = if date { &mut c.date_field } else { &mut c.time_field };
+                // On PAL the date reads day / month / year, so Left moves
+                // toward the year (Clock_FieldStep); the time always reads
+                // hour, minute, second.
+                let step: i8 = if date { 1 } else { -1 };
+                if p.left && side {
+                    *field = (*field as i8 + step).rem_euclid(3) as u8;
+                }
+                if p.right && side {
+                    *field = (*field as i8 - step).rem_euclid(3) as u8;
+                }
+                let f = *field as usize;
+                let d = p.up as i32 - p.down as i32;
+                if d != 0 {
+                    c.value[f] += d;
+                    if date {
+                        c.fix_date();
+                    } else {
+                        c.fix_time();
+                    }
+                }
+                if p.b {
+                    c.sub = 0;
+                }
+                if p.a {
+                    c.sub = 0;
+                    let t = c.shown_with(sub, self.info.time);
+                    self.info.time = t;
+                    self.notify(format!("Firmware clock set: {:02}/{:02}/{} {:02}:{:02}:{:02}", t[2], t[1], t[0], t[3], t[4], t[5]));
+                    return (St::Clock, Some(Action::SetTime(t)));
+                }
+            }
         }
+        (St::Clock, None)
     }
 
     // -----------------------------------------------------------------
@@ -1097,7 +1248,7 @@ impl Menu {
         ui.fill(432.0, y - 2.0, 6.0, 6.0, with_a(green, hl * al[2]));
     }
 
-    /// Calendar: the firmware clock, read-only.
+    /// Calendar: the firmware clock.
     fn draw_clock<'a>(&'a self, ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, al: [f32; 3]) {
         let g = &ma.clock;
         let s = &ma.clock_str[self.lang];
@@ -1191,8 +1342,17 @@ impl Menu {
                 self.fx.frame(d, fx::set::OPTION, self.lang, &fx::OPTION_COLORS, s, |b| screen::options(b, &o));
             }
             St::Clock if self.clock_icon.settled() => {
-                let [y, mo, dd, h, mi, sec] = self.info.time;
-                let c = screen::Clock { time: [y, mo, dd, h, mi, sec], keep_sway: true, ..Default::default() };
+                let k = &mut self.clock;
+                let c = screen::Clock {
+                    sub: k.sub,
+                    prev_sub: k.shown_sub,
+                    row: k.row,
+                    date_field: k.date_field,
+                    time_field: k.time_field,
+                    time: k.shown(self.info.time),
+                    keep_sway: true,
+                };
+                k.shown_sub = k.sub;
                 self.fx.frame(d, fx::set::CLOCK, self.lang, &fx::CLOCK_COLORS, s, |b| screen::clock(b, &c));
             }
             st if st.on_cube() => self.fx.clear(),
