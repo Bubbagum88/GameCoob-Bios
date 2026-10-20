@@ -1250,30 +1250,64 @@ fn draw_front<'a>(ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, lang: usize, view: &V
 /// Backdrop_Draw, simplified: the 8x8 grid tile repeated over the screen,
 /// lit by a soft spot from the centre instead of the GX spot light.
 fn draw_backdrop<'a>(ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, a: f32) {
-    draw_backdrop_spots(ui, ma, a, &[([296.0, 224.0], 1.0)]);
+    draw_backdrop_lit(ui, ma, a, &[BackdropLight::main(1.0)]);
 }
 
-/// Backdrop_DrawSpots, simplified the same way: one soft spot per
-/// (centre, weight 0..1); each cell takes the brightest.
-fn draw_backdrop_spots<'a>(ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, a: f32, spots: &[([f32; 2], f32)]) {
+/// One GX spot light over the backdrop (Backdrop_DrawLit): the plane only
+/// shows where the lights reach, through its lit alpha channel.
+#[derive(Clone, Copy)]
+pub(crate) struct BackdropLight {
+    pub pos: [f32; 3],
+    /// Light colour alpha, 0..1 (a fader).
+    pub alpha: f32,
+    /// Spot cutoff in degrees (GX_SP_COS2).
+    pub cutoff: f32,
+    /// Brightness at 500 units (GX_DA_GENTLE).
+    pub ref_br: f32,
+}
+
+impl BackdropLight {
+    /// The MenuWork light every submenu backdrop uses.
+    pub fn main(alpha: f32) -> Self {
+        BackdropLight { pos: [296.0, 224.0, 474.0], alpha, cutoff: 36.0, ref_br: 0.375 }
+    }
+
+    /// One of the Memory Card screen's slot spots (Backdrop_DrawSpots).
+    pub fn slot(xy: [f32; 2], z: f32, alpha: f32) -> Self {
+        BackdropLight { pos: [xy[0], xy[1], z], alpha, cutoff: 28.0, ref_br: 0.525 }
+    }
+
+    /// GX per-vertex light on the z = 0 plane with normal +z, the spot
+    /// pointing down -z: clamped N.L x spot x distance attenuation.
+    fn at(&self, q: [f32; 2]) -> f32 {
+        if self.alpha <= 0.0 {
+            return 0.0;
+        }
+        let (dx, dy, h) = (q[0] - self.pos[0], q[1] - self.pos[1], self.pos[2]);
+        let d = libm::sqrtf(dx * dx + dy * dy + h * h);
+        let cos = h / d;
+        let cr = libm::cosf(self.cutoff * core::f32::consts::PI / 180.0);
+        let spot = ((cos * cos - cr * cos) / (1.0 - cr)).max(0.0);
+        let k1 = (1.0 - self.ref_br) / (self.ref_br * 500.0);
+        self.alpha * cos * spot / (1.0 + k1 * d)
+    }
+}
+
+/// Backdrop_DrawLit: the I4 grid tile across the 576 x 448 plane, its
+/// vertices lit by `lights` (summed, clamped), times the screen alpha `a`.
+fn draw_backdrop_lit<'a>(ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, a: f32, lights: &[BackdropLight]) {
     if a <= 0.0 {
         return;
     }
-    const N: usize = 12;
+    const NX: usize = 20;
+    const NY: usize = 16;
     let (x0, y0, w, h) = (-30.0f32, -20.0f32, 644.0f32, 488.0f32);
     let cell = 20.0;
-    for j in 0..N {
-        for i in 0..N {
-            let p = |ii: usize, jj: usize| [x0 + w * ii as f32 / N as f32, y0 + h * jj as f32 / N as f32];
+    for j in 0..NY {
+        for i in 0..NX {
+            let p = |ii: usize, jj: usize| [x0 + w * ii as f32 / NX as f32, y0 + h * jj as f32 / NY as f32];
             let lit = |q: [f32; 2]| {
-                let k = spots
-                    .iter()
-                    .map(|&(c, w)| {
-                        let (dx, dy) = ((q[0] - c[0]) / 420.0, (q[1] - c[1]) / 420.0);
-                        w * (1.0 - (dx * dx + dy * dy) * 1.6).max(0.0)
-                    })
-                    .fold(0.0f32, f32::max);
-                let v = 0.12 + 0.36 * k;
+                let v = lights.iter().map(|l| l.at(q)).sum::<f32>().min(1.0);
                 [v, v, v, a]
             };
             let q = [p(i, j), p(i + 1, j), p(i + 1, j + 1), p(i, j + 1)];

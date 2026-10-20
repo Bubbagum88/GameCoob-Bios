@@ -273,6 +273,19 @@ impl FakeCards {
         c
     }
 
+    /// Set `slot` up for a capture check (menu-render): a formatted card of `blocks`
+    /// blocks with no saves, or no card at all.
+    #[allow(dead_code)]
+    pub fn set_blank(&mut self, slot: usize, blocks: Option<u16>) {
+        let c = &mut self.cards[slot & 1];
+        c.files = vec![None; DIR_ENTRIES];
+        c.version += 1;
+        match blocks {
+            Some(b) => (c.state, c.total) = (SlotState::Ready, b),
+            None => c.state = SlotState::Empty,
+        }
+    }
+
     fn fill(&mut self, slot: usize) {
         let mut files = vec![None; DIR_ENTRIES];
         for (i, s) in fake_saves(slot).into_iter().enumerate() {
