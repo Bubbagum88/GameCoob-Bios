@@ -80,9 +80,10 @@ pub struct Input {
     pub egg: Option<Jingle>,
 }
 
-/// Frames to hold the finished logo before the IPL spins to the menu on its
-/// own when no disc is present (measured from a capture of the real IPL).
-pub const HOLD_FRAMES: i32 = 0;
+/// Frames to hold the finished logo before it spins to the menu on its own
+/// when no disc is present. The real IPL holds none; GameCoob lingers one
+/// second (60 frames) on the logo.
+pub const HOLD_FRAMES: i32 = 60;
 /// Spin-out timing (Scene defaults): keep spinning, decelerate with three
 /// extra turns, settle, and how long the logo scene keeps fading.
 pub const SPINOUT_KEEP: i32 = 15;
