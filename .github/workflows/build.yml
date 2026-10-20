@@ -1,0 +1,31 @@
+# Builds the UEFI app and publishes ready-to-copy boot files as a download.
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-uefi
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release
+      - name: Lay out the boot partition
+        run: |
+          mkdir -p dist/EFI/BOOT dist/EFI/GameCoob
+          cp target/x86_64-unknown-uefi/release/gamecoob.efi dist/EFI/BOOT/BOOTX64.EFI
+          cat > dist/EFI/GameCoob/PUT-IPL-BIN-HERE.txt <<'TXT'
+          For the real GameCube intro, copy your own console's IPL dump here
+          as ipl.bin. Without it, the original GameCoob intro plays.
+          TXT
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GameCoob-boot-files
+          path: dist/
