@@ -44,6 +44,14 @@ models, textures, fonts and sounds are **never** committed here. GameCoob
 reads them at boot from an `ipl.bin` dump of your own console, if you
 provide one; see [docs/ROADMAP.md](docs/ROADMAP.md).
 
+## Download
+
+Every push to `main` is built by GitHub Actions. Open the latest run under
+[Actions → Build](https://github.com/Bubbagum88/GameCoob-Bios/actions/workflows/build.yml)
+and download **GameCoob-boot-files**. It holds `EFI\BOOT\BOOTX64.EFI`; copy
+the `EFI` folder to a FAT32 USB stick and add your dump as
+`EFI\GameCoob\ipl.bin` for the real intro.
+
 ## Build and run
 
 You need Rust (stable) with the UEFI target, plus QEMU and OVMF to test.
