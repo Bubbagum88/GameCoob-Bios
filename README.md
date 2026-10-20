@@ -27,10 +27,40 @@ normal boot menu is still there.
 - **No dump, no show.** Without `ipl.bin`, GameCoob says where to put it and
   hands back to the firmware, which boots its next entry.
 
+## Screenshots
+
+Rendered by `tools/intro-render` and `tools/menu-render` from a PAL 1.0 dump.
+The NINTENDO GAMECUBE wordmark is blanked out of these images.
+
+**Intro**: the cube drop, the rolling "G", the logo, and the spin into the glass cube.
+
+![Intro frames](docs/images/intro.jpg)
+
+**Cube menu**
+
+![Cube menu](docs/images/cube-menu.jpg)
+
+**Game Play**: real IPL in Dolphin (left) and GameCoob (right) at the same frame.
+
+![Game Play, real IPL vs GameCoob](docs/images/game-play-vs-real.jpg)
+
+**Memory Card**: the save browser, here with fake test cards in both slots.
+
+![Memory Card](docs/images/memory-card.jpg)
+
+**Options**: the firmware boot menu timeout.
+
+![Options](docs/images/options.jpg)
+
+**Calendar**: the firmware clock.
+
+![Calendar](docs/images/calendar.jpg)
+
 ## Assets and Nintendo content
 
 This repository contains only original code and art. Nintendo's code,
-models, textures, fonts and sounds are **never** committed here. GameCoob
+models, textures, fonts and sounds are **never** committed here (the
+screenshots above are renders, with the wordmark removed). GameCoob
 reads them at boot from an `ipl.bin` dump of your own console, if you
 provide one; see [docs/ROADMAP.md](docs/ROADMAP.md).
 
