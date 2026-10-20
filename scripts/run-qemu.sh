@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Build the app and boot it in QEMU with OVMF firmware.
 # Usage: [IPL=path/to/ipl.bin] scripts/run-qemu.sh [extra qemu args...]
-# With IPL set, your own dump is copied to the virtual ESP so the real intro plays.
+# Your own dump (IPL, or local/ipl.bin by default) is copied to the virtual ESP
+# so the real intro plays.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -12,6 +13,7 @@ cargo build --release
 mkdir -p target/esp/EFI/BOOT target/qemu
 cp target/x86_64-unknown-uefi/release/gamecoob.efi target/esp/EFI/BOOT/BOOTX64.EFI
 rm -f target/esp/EFI/GameCoob/ipl.bin
+if [ -z "${IPL:-}" ] && [ -f local/ipl.bin ]; then IPL=local/ipl.bin; fi
 if [ -n "${IPL:-}" ]; then
   mkdir -p target/esp/EFI/GameCoob
   cp "$IPL" target/esp/EFI/GameCoob/ipl.bin
