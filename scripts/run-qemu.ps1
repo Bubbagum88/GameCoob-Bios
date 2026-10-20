@@ -7,7 +7,8 @@
 #   plain emulation, which is many times slower: GameCoob draws every frame
 #   with floating-point math, which emulation does in software.
 #   -Fast insists on Windows Hypervisor Platform; -Slow skips it.
-# Your dump at local\ipl.bin is added so the real intro plays.
+# Your dump at local\ipl.bin is added so the real intro plays. Frame timings
+# (fps, render/scale/present ms) are written to local\qemu\serial.log.
 param([string]$Boot, [switch]$Fast, [switch]$Slow)
 $ErrorActionPreference = "Stop"
 $root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
@@ -75,4 +76,5 @@ Write-Host "CPUs: $cpus; accelerator: $(($accel | Where-Object { $_ -ne '-accel'
     -drive "if=pflash,format=raw,readonly=on,file=$code" `
     -drive "if=pflash,format=raw,file=$vars" `
     -drive "format=raw,file=fat:rw:$esp" `
-    -net none
+    -net none `
+    -serial "file:local\qemu\serial.log"

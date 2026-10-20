@@ -7,7 +7,7 @@ use crate::bs2::menu::{Action, Menu, MenuAssets, Pad, SysInfo};
 use alloc::boxed::Box;
 use crate::bs2::{Assets, Input, Intro, cube::Jingle, raster::{Job, Target}, render};
 use crate::clock::Clock;
-use crate::gfx::Canvas;
+use crate::gfx::{Canvas, ResScale};
 use crate::ipl::Ipl;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -139,8 +139,13 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
     let mut intro = Intro::new(assets);
     let mut menu: Option<Menu> = None;
     let cores = Cores::open();
-    // Always full GX resolution: a smaller target only looks blurry once
-    // it is scaled up to the screen.
+    // Rendered at the screen's resolution, adjusted to keep 60 fps.
+    let mut res = ResScale::new(cv);
+    let mut stats = Stats::default();
+    // Frame timings go to the first serial port: always under OVMF (QEMU),
+    // after F3 elsewhere.
+    let log_stats = system::firmware_vendor().to_string().contains("EDK II");
+    let mut show_stats = false;
     let mut target = Target::new(render::EFB_W, render::EFB_H);
     let t0 = clock.now();
     let mut done_frames = 0u32;
@@ -175,6 +180,7 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
                     Key::Special(ScanCode::RIGHT) => pad.right = true,
                     Key::Special(ScanCode::ESCAPE) => pad.b = true,
                     Key::Special(ScanCode::FUNCTION_10) => pad.system = true,
+                    Key::Special(ScanCode::FUNCTION_3) => show_stats = !show_stats,
                     _ => {}
                 }
                 continue;
@@ -232,9 +238,72 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
             Some(c) => c.run(job),
             None => job.work(),
         };
+        let (w, h) = res.size(cv);
+        if (w, h) != (target.w, target.h) {
+            target = Target::new(w, h);
+        }
+        let d0 = clock.now();
         intro.render_with_menu(&mut target, assets, ma, menu.as_ref(), &par);
+        let d1 = clock.now();
         cv.blit_frame(&target.color, target.w, target.h);
+        let d2 = clock.now();
         cv.present(gop);
+        let d3 = clock.now();
+        res.frame(d3 - d0);
+        if stats.add(d3, [d1 - d0, d2 - d1, d3 - d2]) && (log_stats || show_stats) {
+            stats.report(&target, cv);
+        }
     }
 }
 
+
+/// Average frame timings, reported every couple of seconds.
+#[derive(Default)]
+struct Stats {
+    since: f32,
+    now: f32,
+    frames: u32,
+    sum: [f32; 3],
+}
+
+impl Stats {
+    /// Add one frame's (render, scale, present) seconds; true when a
+    /// report is due.
+    fn add(&mut self, now: f32, t: [f32; 3]) -> bool {
+        for (s, t) in self.sum.iter_mut().zip(t) {
+            *s += t;
+        }
+        self.frames += 1;
+        self.now = now;
+        now - self.since >= 2.0
+    }
+
+    fn report(&mut self, t: &Target, cv: &Canvas) {
+        let n = self.frames.max(1) as f32;
+        let ms = |s: f32| s / n * 1000.0;
+        let line = alloc::format!(
+            "GameCoob: {:.1} fps, render {}x{} {:.1} ms, scale to {}x{} {:.1} ms, present {:.1} ms (screen {}x{})\r\n",
+            n / (self.now - self.since),
+            t.w,
+            t.h,
+            ms(self.sum[0]),
+            cv.pw,
+            cv.ph,
+            ms(self.sum[1]),
+            ms(self.sum[2]),
+            cv.w,
+            cv.h,
+        );
+        serial_write(&line);
+        *self = Stats { since: self.now, ..Stats::default() };
+    }
+}
+
+/// Write to COM1 directly: the firmware's console would draw over the
+/// picture. Harmless on a PC without the port.
+fn serial_write(s: &str) {
+    for b in s.bytes() {
+        // SAFETY: a byte to the standard COM1 data port.
+        unsafe { core::arch::asm!("out dx, al", in("dx") 0x3f8u16, in("al") b, options(nomem, nostack)) };
+    }
+}

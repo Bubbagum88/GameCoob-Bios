@@ -5,37 +5,32 @@ use alloc::vec;
 use alloc::vec::Vec;
 use uefi::proto::console::gop::{BltOp, BltPixel, BltRegion, GraphicsOutput};
 
-/// The GameCube's 640x480 picture, of which 448 lines are active.
-const PIC_W: usize = 640;
+/// The GameCube's 480-line picture has 448 active lines.
 const PIC_H: usize = 480;
 const ACT_H: usize = 448;
 
 pub struct Canvas {
     pub w: usize,
     pub h: usize,
-    /// Where the active picture sits on screen, and its size.
+    /// Where the active picture sits on screen, and its size in screen
+    /// pixels: the resolution worth rendering at.
     x0: usize,
     y0: usize,
-    pw: usize,
-    ph: usize,
+    pub pw: usize,
+    pub ph: usize,
     px: Vec<BltPixel>,
-    row: Vec<BltPixel>,
+    acc: Vec<[f32; 3]>,
     cleared: bool,
 }
 
 impl Canvas {
-    /// A centered 4:3 picture, the way a TV shows the GameCube's 448 active
-    /// lines. Whole-number scales keep every texel the same size, so one is
-    /// used when it fills most of the screen; otherwise the picture fills
-    /// the height.
+    /// A centered 4:3 picture filling the screen's height (or width, on a
+    /// screen narrower than 4:3), the way a TV shows the GameCube's 448
+    /// active lines. The screen mode is left as the firmware set it, which
+    /// is the panel's native one on real hardware and the window's in a VM.
     pub fn new(w: usize, h: usize) -> Self {
-        let k = (w / PIC_W).min(h / PIC_H);
-        let (pic_w, pic_h) = if k >= 1 && k * PIC_H * 5 >= h * 4 {
-            (k * PIC_W, k * PIC_H)
-        } else {
-            let pic_h = h.min(w * 3 / 4);
-            (pic_h * 4 / 3, pic_h)
-        };
+        let pic_h = h.min(w * 3 / 4);
+        let pic_w = pic_h * 4 / 3;
         let ph = pic_h * ACT_H / PIC_H;
         Self {
             w,
@@ -45,17 +40,19 @@ impl Canvas {
             pw: pic_w,
             ph,
             px: vec![BltPixel::new(0, 0, 0); pic_w * ph],
-            row: Vec::new(),
+            acc: Vec::new(),
             cleared: false,
         }
     }
 
-    /// Scale a GX-style frame (`sw` x `sh`, linear 0..1 RGB) into the
-    /// picture. Each source pixel is converted once and repeated rows are
-    /// copied, so the cost barely grows with the screen size.
+    /// Scale a frame (`sw` x `sh`, linear 0..1 RGB) into the picture. A
+    /// smaller frame is enlarged with nearest-neighbour; a larger one is
+    /// box-filtered down, which smooths its edges (supersampling).
     pub fn blit_frame(&mut self, src: &[[f32; 3]], sw: usize, sh: usize) {
         let (pw, ph) = (self.pw, self.ph);
-        self.row.resize(sw, BltPixel::new(0, 0, 0));
+        if sw >= pw && sh >= ph {
+            return self.downsample(src, sw, sh);
+        }
         let cols: Vec<usize> = (0..pw).map(|x| x * sw / pw).collect();
         let mut last = usize::MAX;
         for y in 0..ph {
@@ -65,16 +62,35 @@ impl Canvas {
                 continue;
             }
             last = sy;
-            for (d, p) in self.row.iter_mut().zip(&src[sy * sw..][..sw]) {
-                *d = BltPixel::new(
-                    (p[0].clamp(0.0, 1.0) * 255.0) as u8,
-                    (p[1].clamp(0.0, 1.0) * 255.0) as u8,
-                    (p[2].clamp(0.0, 1.0) * 255.0) as u8,
-                );
+            let row = &src[sy * sw..][..sw];
+            for (d, &c) in self.px[y * pw..][..pw].iter_mut().zip(cols.iter()) {
+                *d = to_px(row[c]);
             }
-            let dst = &mut self.px[y * pw..][..pw];
-            for (d, &c) in dst.iter_mut().zip(cols.iter()) {
-                *d = self.row[c];
+        }
+    }
+
+    fn downsample(&mut self, src: &[[f32; 3]], sw: usize, sh: usize) {
+        let (pw, ph) = (self.pw, self.ph);
+        // Source column span of each picture column.
+        let span: Vec<(usize, usize)> = (0..pw).map(|x| (x * sw / pw, ((x + 1) * sw / pw).max(x * sw / pw + 1))).collect();
+        self.acc.resize(pw, [0.0; 3]);
+        for y in 0..ph {
+            let (y0, y1) = (y * sh / ph, ((y + 1) * sh / ph).max(y * sh / ph + 1));
+            self.acc.fill([0.0; 3]);
+            for sy in y0..y1 {
+                let row = &src[sy * sw..][..sw];
+                for (a, &(x0, x1)) in self.acc.iter_mut().zip(span.iter()) {
+                    for p in &row[x0..x1] {
+                        a[0] += p[0];
+                        a[1] += p[1];
+                        a[2] += p[2];
+                    }
+                }
+            }
+            let rows = (y1 - y0) as f32;
+            for ((d, a), &(x0, x1)) in self.px[y * pw..][..pw].iter_mut().zip(self.acc.iter()).zip(span.iter()) {
+                let k = 1.0 / (rows * (x1 - x0) as f32);
+                *d = to_px([a[0] * k, a[1] * k, a[2] * k]);
             }
         }
     }
@@ -94,28 +110,66 @@ impl Canvas {
     }
 }
 
-/// Switch to the screen mode that shows the 640x480 picture sharpest. The
-/// current mode is usually the panel's native one, so it stays whenever it
-/// already fits a whole-number scale of 2 or more; otherwise the mode with
-/// the largest such scale (smallest of those, for a cheaper blit) wins,
-/// never larger than the current mode on either axis.
-pub fn pick_mode(gop: &mut GraphicsOutput) {
-    let scale = |(w, h): (usize, usize)| (w / PIC_W).min(h / PIC_H);
-    let (cw, ch) = gop.current_mode_info().resolution();
-    if scale((cw, ch)) >= 2 {
-        return;
+#[inline]
+fn to_px(p: [f32; 3]) -> BltPixel {
+    BltPixel::new(
+        (p[0].clamp(0.0, 1.0) * 255.0) as u8,
+        (p[1].clamp(0.0, 1.0) * 255.0) as u8,
+        (p[2].clamp(0.0, 1.0) * 255.0) as u8,
+    )
+}
+
+/// Picks the render resolution each frame from how long frames take: the
+/// screen's own resolution by default, more (supersampled, for smooth
+/// edges) when there is time to spare, less when frames run late, never
+/// below the GameCube's own 640x448.
+pub struct ResScale {
+    scale: f32,
+    min: f32,
+    max: f32,
+    spent: f32,
+    frames: u32,
+}
+
+/// Frame time to stay under (60 fps with some headroom), and the time
+/// below which there is room for more pixels.
+const SLOW: f32 = 1.0 / 55.0;
+const FAST: f32 = 1.0 / 90.0;
+/// Most pixels ever rendered per frame (2x2 supersampling at 1080p).
+const MAX_PIXELS: f32 = 4.0 * 1440.0 * 1008.0;
+
+impl ResScale {
+    pub fn new(cv: &Canvas) -> ResScale {
+        let native = (cv.pw * cv.ph) as f32;
+        let min = (640.0 / cv.pw as f32).max(448.0 / cv.ph as f32).min(1.0);
+        let max = libm::sqrtf(MAX_PIXELS / native).clamp(1.0, 2.0);
+        ResScale { scale: 1.0, min, max, spent: 0.0, frames: 0 }
     }
-    let best = gop
-        .modes()
-        .filter(|m| {
-            let (w, h) = m.info().resolution();
-            w <= cw.max(2 * PIC_W) && h <= ch.max(2 * PIC_H) && scale((w, h)) >= 2
-        })
-        .min_by_key(|m| {
-            let (w, h) = m.info().resolution();
-            (usize::MAX - scale((w, h)), w * h)
-        });
-    if let Some(m) = best {
-        let _ = gop.set_mode(&m);
+
+    /// The render size for the next frame.
+    pub fn size(&self, cv: &Canvas) -> (usize, usize) {
+        let w = (libm::roundf(cv.pw as f32 * self.scale) as usize).max(1);
+        let h = (libm::roundf(cv.ph as f32 * self.scale) as usize).max(1);
+        (w, h)
+    }
+
+    /// Record how long a frame took (render to present, in seconds).
+    pub fn frame(&mut self, secs: f32) {
+        self.spent += secs;
+        self.frames += 1;
+        // A quarter second or 15 frames, whichever comes first.
+        if self.frames < 15 && self.spent < 0.25 {
+            return;
+        }
+        let avg = self.spent / self.frames as f32;
+        self.spent = 0.0;
+        self.frames = 0;
+        if avg > SLOW {
+            // Pixels scale with scale^2; aim just under the budget.
+            let k = libm::sqrtf(SLOW * 0.9 / avg).clamp(0.5, 0.95);
+            self.scale = (self.scale * k).max(self.min);
+        } else if avg < FAST {
+            self.scale = (self.scale * 1.1).min(self.max);
+        }
     }
 }
