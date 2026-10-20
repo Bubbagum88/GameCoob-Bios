@@ -8,7 +8,8 @@
 #   with floating-point math, which emulation does in software.
 #   -Fast insists on Windows Hypervisor Platform; -Slow skips it.
 # Your dump at local\ipl.bin is added so the real intro plays. Frame timings
-# (fps, render/scale/present ms) are written to local\qemu\serial.log.
+# (fps, render/scale/present ms) are written to local\qemu\serial.log,
+# which starts over on each restart.
 param([string]$Boot, [switch]$Fast, [switch]$Slow)
 $ErrorActionPreference = "Stop"
 $root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
@@ -71,10 +72,20 @@ $display = @()
 $displays = try { & $qemu -display help 2>$null } catch { @() }
 if ($displays -match "^gtk") { $display = @("-display", "gtk,zoom-to-fit=off") }
 Write-Host "CPUs: $cpus; accelerator: $(($accel | Where-Object { $_ -ne '-accel' }) -join ', then ')"
-# qemu64 asks for AMD-V (svm), which Intel hosts lack under WHPX; it is unused.
-& $qemu -machine q35 -m 1024 -smp $cpus -cpu qemu64,-svm @accel @display `
-    -drive "if=pflash,format=raw,readonly=on,file=$code" `
-    -drive "if=pflash,format=raw,file=$vars" `
-    -drive "format=raw,file=fat:rw:$esp" `
-    -net none `
-    -serial "file:local\qemu\serial.log"
+# WHPX can't reset a running VM ("Failed to set virtual processor context"),
+# so QEMU exits on reset (-no-reboot) and is started again whenever
+# GameCoob logged that it asked for the restart (Restart, booting an entry,
+# firmware setup). BootNext and other variables carry over in vars.fd.
+$log = "local\qemu\serial.log"
+do {
+    if (Test-Path $log) { Remove-Item -Force $log }
+    # qemu64 asks for AMD-V (svm), which Intel hosts lack under WHPX; it is unused.
+    & $qemu -machine q35 -m 1024 -smp $cpus -cpu qemu64,-svm @accel @display -no-reboot `
+        -drive "if=pflash,format=raw,readonly=on,file=$code" `
+        -drive "if=pflash,format=raw,file=$vars" `
+        -drive "format=raw,file=fat:rw:$esp" `
+        -net none `
+        -serial "file:$log"
+    $again = (Test-Path $log) -and (Select-String -Quiet -SimpleMatch "GameCoob: reset" -Path $log)
+    if ($again) { Write-Host "Restarting" }
+} while ($again)
