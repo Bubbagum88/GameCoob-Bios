@@ -70,7 +70,8 @@ $display = @()
 $displays = try { & $qemu -display help 2>$null } catch { @() }
 if ($displays -match "^gtk") { $display = @("-display", "gtk,zoom-to-fit=off") }
 Write-Host "CPUs: $cpus; accelerator: $(($accel | Where-Object { $_ -ne '-accel' }) -join ', then ')"
-& $qemu -machine q35 -m 1024 -smp $cpus @accel @display `
+# qemu64 asks for AMD-V (svm), which Intel hosts lack under WHPX; it is unused.
+& $qemu -machine q35 -m 1024 -smp $cpus -cpu qemu64,-svm @accel @display `
     -drive "if=pflash,format=raw,readonly=on,file=$code" `
     -drive "if=pflash,format=raw,file=$vars" `
     -drive "format=raw,file=fat:rw:$esp" `
