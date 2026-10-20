@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Build the app and boot it in QEMU with OVMF firmware.
-# Usage: scripts/run-qemu.sh [extra qemu args...]
+# Usage: [IPL=path/to/ipl.bin] scripts/run-qemu.sh [extra qemu args...]
+# With IPL set, your own dump is copied to the virtual ESP so the real intro plays.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -10,11 +11,16 @@ OVMF_VARS_TEMPLATE=${OVMF_VARS:-/usr/share/OVMF/OVMF_VARS_4M.fd}
 cargo build --release
 mkdir -p target/esp/EFI/BOOT target/qemu
 cp target/x86_64-unknown-uefi/release/gamecoob.efi target/esp/EFI/BOOT/BOOTX64.EFI
+rm -f target/esp/EFI/GameCoob/ipl.bin
+if [ -n "${IPL:-}" ]; then
+  mkdir -p target/esp/EFI/GameCoob
+  cp "$IPL" target/esp/EFI/GameCoob/ipl.bin
+fi
 # Writable copy so the app's variable changes (Timeout, BootNext...) persist between runs.
 [ -f target/qemu/OVMF_VARS.fd ] || cp "$OVMF_VARS_TEMPLATE" target/qemu/OVMF_VARS.fd
 
 exec qemu-system-x86_64 \
-  -machine q35 -m 512M \
+  -machine q35 -m 512M -smp 4 \
   -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
   -drive if=pflash,format=raw,file=target/qemu/OVMF_VARS.fd \
   -drive format=raw,file=fat:rw:target/esp \

@@ -1,14 +1,18 @@
-//! GameCoob: a UEFI boot app that plays a cube intro and then shows a
-//! console-style menu for booting and changing firmware boot settings.
+//! GameCoob: a UEFI boot app that plays the GameCube intro (rebuilt from the
+//! user's own IPL dump, or an original cube intro without one) and then shows
+//! a console-style menu for booting and changing firmware boot settings.
 
 #![no_std]
 #![no_main]
 
 extern crate alloc;
 
+mod boot_intro;
+mod bs2;
 mod clock;
 mod gfx;
 mod intro;
+mod ipl;
 mod math;
 mod menu;
 mod vars;
@@ -35,6 +39,12 @@ fn main() -> Status {
     let clock = clock::Clock::calibrate();
 
     let _ = system::with_stdin(|i| i.reset(false));
-    let palette = intro::play(&mut gop, &mut canvas, &clock);
+    let palette = match boot_intro::load() {
+        Some(assets) => {
+            boot_intro::play(&mut gop, &mut canvas, &clock, &assets);
+            intro::NORMAL
+        }
+        None => intro::play(&mut gop, &mut canvas, &clock),
+    };
     menu::run(&mut gop, &mut canvas, &clock, palette)
 }

@@ -15,7 +15,16 @@ normal boot menu is still there.
 
 ## What works today
 
-- **Intro.** A small cube tumbles around a grid, leaving tiles that trace a
+- **The real GameCube intro, from your own console.** Put the `ipl.bin` you
+  dumped from your GameCube at `\EFI\GameCoob\ipl.bin` on the boot
+  partition and GameCoob plays the console's own boot animation: the cube
+  drop, the rolling "G" with its fading trail, the flip and slam, the shake,
+  the logo and the animated NINTENDO GAMECUBE wordmark, then the spin into
+  the glass cube. The choreography was reimplemented from a decompilation of
+  the IPL's BS2 program; the models and textures are read from your dump at
+  boot. Hold **Enter** (the A button) while the cube rolls to spin it, as on
+  the console. Esc skips.
+- **Original intro** (no dump). A small cube tumbles around a grid, leaving tiles that trace a
   "C", hops into the middle, and the tiles rise into the logo. Drawn by our
   own software rasterizer, since there is no GPU driver before the OS loads.
   Press any key to skip. Press **Z** for the hidden alternate palette.
@@ -30,10 +39,10 @@ The menu shows a big cube that turns to a new colored face for each option.
 
 ## Assets and Nintendo content
 
-This repository contains only original code and art. Nintendo's intro,
-textures, fonts and sounds are **never** committed here. The plan is for the
-app to load them, optionally, from an `ipl.bin` dump of your own console; see
-[docs/ROADMAP.md](docs/ROADMAP.md).
+This repository contains only original code and art. Nintendo's code,
+models, textures, fonts and sounds are **never** committed here. GameCoob
+reads them at boot from an `ipl.bin` dump of your own console, if you
+provide one; see [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Build and run
 
@@ -45,6 +54,7 @@ sudo apt install qemu-system-x86 ovmf     # Debian/Ubuntu
 
 cargo build --release                     # -> target/x86_64-unknown-uefi/release/gamecoob.efi
 scripts/run-qemu.sh                       # boots it in a QEMU window
+IPL=~/ipl.bin scripts/run-qemu.sh         # same, with your dump for the real intro
 scripts/screenshots.py out/               # headless run that saves PNGs (needs Pillow)
 ```
 
@@ -62,13 +72,18 @@ In QEMU: arrow keys move, Enter selects, Esc goes back.
 ```
 src/
   main.rs    entry point: graphics setup, intro, menu
-  intro.rs   the cube intro choreography and palettes
+  boot_intro.rs  loads ipl.bin from the ESP and runs the real intro on all CPU cores
+  bs2/       the intro rebuilt from BS2: cube and scene state machines, GX-style
+             TEV renderer and banded rasterizer, J3D animations
+  ipl/       ipl.bin parsing: descrambling, resource archive, Yay0, J3D, textures
+  intro.rs   the original cube intro choreography and palettes
   menu.rs    main menu, boot list, settings, confirm dialogs
   gfx.rs     software renderer: canvas, triangle rasterizer, camera, font
   math.rs    vectors, rotation matrices, easing
   vars.rs    UEFI variables: Boot####, BootOrder, BootNext, Timeout, OsIndications
   clock.rs   TSC-based timer for frame-rate-independent animation
 scripts/     QEMU runner and screenshot automation
+tools/       host-side checks: ipl-preview (models to PNG), intro-render (intro frames to PNG)
 docs/        roadmap and screenshots
 ```
 

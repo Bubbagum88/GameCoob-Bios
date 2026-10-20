@@ -1,0 +1,14 @@
+[package]
+name = "intro-render"
+version = "0.1.0"
+edition = "2024"
+description = "Host-side check of src/bs2: renders frames of the rebuilt intro to PNG"
+
+# Standalone: not part of the UEFI crate. Build with --target x86_64-unknown-linux-gnu.
+[workspace]
+
+[dependencies]
+libm = "0.2.16"
+
+[profile.release]
+opt-level = 3
