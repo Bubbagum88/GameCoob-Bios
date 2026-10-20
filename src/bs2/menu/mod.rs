@@ -18,6 +18,7 @@ pub mod backend;
 mod game;
 mod system;
 
+use super::fx::{self, screen, Mosaic, MosaicData};
 use super::mtx::{self, Mtx, SinTable};
 use super::raster::Prim;
 use super::render::{self, DrawOpts, View};
@@ -88,6 +89,7 @@ pub struct MenuAssets {
     pub dialog: Layout,
     pub backdrop: FastTex,
     pub font: UiFont,
+    pub fx: MosaicData,
 }
 
 impl MenuAssets {
@@ -127,6 +129,7 @@ impl MenuAssets {
             dialog: layout(res::DIALOG)?,
             backdrop,
             font: UiFont::new(glh::Font::parse_rom(ipl.rom()).ok()?),
+            fx: MosaicData::load(ipl)?,
         })
     }
 }
@@ -354,6 +357,7 @@ pub struct Menu {
     message: Option<(String, u32)>,
     frame: u32,
     pub info: SysInfo,
+    fx: Mosaic,
 }
 
 const SUB_OPTION: usize = 0;
@@ -401,6 +405,7 @@ impl Menu {
             message: None,
             frame: 0,
             info,
+            fx: Mosaic::new(),
         };
         m.calc_cube(s);
         m
@@ -674,9 +679,9 @@ impl Menu {
             let ready = self.zoom == 0x7FFF;
             return self.game.update(p, &*self.drive, &self.info, ready);
         }
-        // Input waits until the zoom is complete (the IPL also waits for
-        // the mosaic to assemble).
-        if self.zoom != 0x7FFF {
+        // Input waits until the zoom is complete, and in Options until the
+        // mosaic has assembled (Fx_IsReady(0)).
+        if self.zoom != 0x7FFF || (self.state == St::Option && !self.fx.ready(0)) {
             return (self.state, None);
         }
         match self.state {
@@ -812,7 +817,7 @@ impl Menu {
         let mut v2 = View::intro(0.0, false);
         v2.vp = view.vp;
         let mut ui = Ui { list: ui.list, view: &v2, mv: screen_2d() };
-        self.draw_submenus(&mut ui, ma);
+        self.draw_submenus(&mut ui, ma, s);
         self.draw_guide(&mut ui, ma, 255);
         let pulse = (self.highlight - 50) as f32 / 70.0;
         self.sys.draw(&mut ui, ma, self.lang, pulse);
@@ -999,13 +1004,14 @@ impl Menu {
     }
 
     /// Menu_DrawSubmenus: each is drawn while its first fader is above 0.
-    fn draw_submenus<'a>(&'a self, ui: &mut Ui<'a, '_>, ma: &'a MenuAssets) {
+    fn draw_submenus<'a>(&'a self, ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, s: &SinTable) {
         for k in [SUB_CARD, SUB_GAME, SUB_OPTION, SUB_CLOCK] {
             let f = &self.sub[k];
             let al = [f[0].alpha(), f[1].alpha(), f[2].alpha()].map(|v| v as f32 / 255.0);
             if al[0] <= 0.0 {
                 continue;
             }
+            let fx_alpha = f[0].alpha() as u8;
             match k {
                 SUB_GAME => self.draw_game(ui, ma, al),
                 SUB_CARD => {
@@ -1020,6 +1026,15 @@ impl Menu {
                     draw_backdrop(ui, ma, al[1]);
                     self.draw_clock(ui, ma, al);
                 }
+            }
+            let set = match k {
+                SUB_GAME => Some(fx::set::GAME),
+                SUB_OPTION => Some(fx::set::OPTION),
+                SUB_CLOCK => Some(fx::set::CLOCK),
+                _ => None,
+            };
+            if set.is_some() && set == self.fx.screen() {
+                self.fx.draw(ui.list, &ma.fx, ui.view, fx_alpha, s);
             }
             self.draw_message(ui, ma, al[2]);
         }
@@ -1037,16 +1052,6 @@ impl Menu {
     /// the status lines.
     fn draw_game<'a>(&'a self, ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, al: [f32; 3]) {
         self.game.draw(ui, ma, &*self.drive, &self.info, self.lang, al);
-        let light = rgb(130, 50, 160);
-        let dark = rgb(50, 20, 70);
-        let title: &[u8] = match game::Game::fx_message(&*self.drive) {
-            0 => b"",
-            1 => b"NO DISC",
-            _ => b"",
-        };
-        if !self.game.starting() {
-            ui.mosaic(&ma.font, 420.0, 150.0, 6.0, title, light, dark, al[0]);
-        }
     }
 
     /// Options: the firmware boot timeout and the menu language.
@@ -1063,10 +1068,6 @@ impl Menu {
             let k = if self.opt_row == 0 { 1.0 } else { 0.55 };
             ui.text(&ma.font, p, &cp1252("Boot Timeout"), with_a(scale(green, k), al[2]), 0.0, 0.0);
         }
-        let t = if self.opt_edit && self.opt_row == 0 { self.opt_timeout } else { self.info.timeout };
-        let (l, d) = pairs[0];
-        let blink = if self.opt_edit && self.opt_row == 0 { 0.6 + 0.4 * hl } else { 1.0 };
-        ui.mosaic(&ma.font, 294.0, 128.0, 5.0, &cp1252(&format!("{t:02} SEC")), scale(l, blink), d, al[0]);
         // Row 1: language.
         let lang = if self.opt_edit && self.opt_row == 1 { self.opt_lang } else { self.lang };
         if let Some(p) = g.text(tag(b"txt3")) {
@@ -1118,12 +1119,6 @@ impl Menu {
                 ui.frame(f, &ma.bank, [1.0, 1.0, 0.0, al[1]]);
             }
         }
-        let [y, mo, d, h, mi, sec] = self.info.time;
-        let pairs = [(rgb(240, 255, 0), rgb(100, 50, 20)), (rgb(235, 185, 0), rgb(70, 40, 0))];
-        let date = format!("{d:02}/{mo:02}/{y:04}");
-        let time = format!("{h:02}:{mi:02}:{sec:02}");
-        ui.mosaic(&ma.font, 294.0, 138.0, 6.0, &cp1252(&date), pairs[0].0, pairs[0].1, al[0]);
-        ui.mosaic(&ma.font, 294.0, 268.0, 6.0, &cp1252(&time), pairs[1].0, pairs[1].1, al[0]);
     }
 
     /// Memory Card: firmware setup, restart and power off.
@@ -1213,6 +1208,33 @@ impl Menu {
                     ui.text(&ma.font, p, &st.text, with_a(WHITE, a), 0.0, 0.0);
                 }
             }
+        }
+    }
+
+    /// The mosaic's frame (the submenus' Fx*_Update + Fx_Update). Call once
+    /// per frame after [`Menu::update`].
+    pub fn update_fx(&mut self, ma: &MenuAssets, s: &SinTable) {
+        let d = &ma.fx;
+        match self.state {
+            St::Game if !self.game.starting() => {
+                let msg = game::Game::fx_message(&*self.drive);
+                self.fx.frame(d, fx::set::GAME, self.lang, &fx::GAME_COLORS, s, |b| screen::game(b, msg));
+            }
+            St::Option => {
+                // Ours has two rows: the boot timeout sits in the IPL's
+                // screen-position row, the language in its language row.
+                let row = self.opt_row as u8 + 1;
+                let t = if self.opt_edit && self.opt_row == 0 { self.opt_timeout } else { self.info.timeout };
+                let o = screen::Options { sub: if self.opt_edit { row + 1 } else { 0 }, row, stereo: None, offset: Some(t as i32), lang: true };
+                self.fx.frame(d, fx::set::OPTION, self.lang, &fx::OPTION_COLORS, s, |b| screen::options(b, &o));
+            }
+            St::Clock => {
+                let [y, mo, dd, h, mi, sec] = self.info.time;
+                let c = screen::Clock { time: [y, mo, dd, h, mi, sec], keep_sway: true, ..Default::default() };
+                self.fx.frame(d, fx::set::CLOCK, self.lang, &fx::CLOCK_COLORS, s, |b| screen::clock(b, &c));
+            }
+            st if st.on_cube() => self.fx.clear(),
+            _ => {}
         }
     }
 

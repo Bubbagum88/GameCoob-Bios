@@ -10,11 +10,13 @@
 //!   `J3D2bmd2/3` also accepted) into joints, triangle lists, materials and
 //!   RGBA8 textures.
 //! * [`bti::parse`] decodes a standalone BTI texture resource.
+//! * [`fx::Paths`] and [`fx::Glyphs`] read the menu mosaic (res 37, 179..184).
 //!
 //! All parsers are panic-free on malformed input and report an [`Error`].
 #![allow(dead_code)]
 
 pub mod bti;
+pub mod fx;
 pub mod glh;
 pub mod gx;
 pub mod j3d;

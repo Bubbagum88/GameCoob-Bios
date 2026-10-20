@@ -72,6 +72,11 @@ pub struct Prepared {
 }
 
 impl Prepared {
+    /// The compiled TEV program of material `i`.
+    pub fn shader(&self, i: usize) -> Option<&Shader> {
+        self.shaders.get(i)
+    }
+
     pub fn new(model: Model) -> Prepared {
         let shaders = model.materials.iter().map(Shader::new).collect();
         let texs = model.textures.iter().map(FastTex::new).collect();
@@ -106,6 +111,12 @@ fn norm(v: [f32; 3]) -> [f32; 3] {
 /// Queue a model's triangles. `base` is model-to-world (world matrix times
 /// model scale).
 pub fn draw_model<'a>(list: &mut Vec<Prim<'a>>, p: &'a Prepared, base: &Mtx, v: &View, o: &DrawOpts) {
+    draw_model_with(list, p, None, base, v, o)
+}
+
+/// [`draw_model`] with every material's TEV program replaced by `shader`
+/// (a copy with its own colour registers, see [`Shader::set_reg`]).
+pub fn draw_model_with<'a>(list: &mut Vec<Prim<'a>>, p: &'a Prepared, shader: Option<&'a Shader>, base: &Mtx, v: &View, o: &DrawOpts) {
     let m = &p.model;
     if o.alpha == 0 {
         return;
@@ -115,7 +126,7 @@ pub fn draw_model<'a>(list: &mut Vec<Prim<'a>>, p: &'a Prepared, base: &Mtx, v: 
     for d in m.draws.get(range).unwrap_or(&[]) {
         let Some(shape) = m.shapes.get(d.shape as usize) else { continue };
         let Some(mat0) = m.materials.get(d.material as usize) else { continue };
-        let Some(shader) = p.shaders.get(d.material as usize) else { continue };
+        let Some(shader) = shader.or(p.shaders.get(d.material as usize)) else { continue };
         let over = o.mat_colors.iter().find(|(i, _)| *i == d.material);
         let mut mat_over;
         let mat = match over {

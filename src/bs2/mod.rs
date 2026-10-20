@@ -7,6 +7,7 @@
 
 pub mod anim;
 pub mod cube;
+pub mod fx;
 pub mod menu;
 pub mod mtx;
 pub mod raster;
