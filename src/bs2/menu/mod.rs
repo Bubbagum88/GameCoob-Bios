@@ -16,6 +16,7 @@
 
 pub mod backend;
 mod game;
+pub mod icons;
 mod system;
 
 use super::fx::{self, screen, Mosaic, MosaicData};
@@ -90,6 +91,7 @@ pub struct MenuAssets {
     pub backdrop: FastTex,
     pub font: UiFont,
     pub fx: MosaicData,
+    pub icons: icons::IconData,
 }
 
 impl MenuAssets {
@@ -130,6 +132,7 @@ impl MenuAssets {
             backdrop,
             font: UiFont::new(glh::Font::parse_rom(ipl.rom()).ok()?),
             fx: MosaicData::load(ipl)?,
+            icons: icons::IconData::load(ipl)?,
         })
     }
 }
@@ -358,6 +361,10 @@ pub struct Menu {
     frame: u32,
     pub info: SysInfo,
     fx: Mosaic,
+    game_icon: icons::GameIcon,
+    card_icon: icons::CardIcon,
+    clock_icon: icons::ClockIcon,
+    option_icon: icons::OptionIcon,
 }
 
 const SUB_OPTION: usize = 0;
@@ -406,6 +413,10 @@ impl Menu {
             frame: 0,
             info,
             fx: Mosaic::new(),
+            game_icon: icons::GameIcon::new(),
+            card_icon: icons::CardIcon::new(),
+            clock_icon: icons::ClockIcon::new(),
+            option_icon: icons::OptionIcon::new(),
         };
         m.calc_cube(s);
         m
@@ -649,6 +660,23 @@ impl Menu {
         sys_action.or(action)
     }
 
+    /// Menu_UpdateIcons: face, enter or hide for each submenu's icon.
+    fn update_icons(&mut self, d: &icons::IconData, s: &SinTable) {
+        let phase = |face: St, sub: St| match self.state {
+            st if st == face => icons::Phase::Face,
+            st if st == sub => icons::Phase::Enter,
+            _ => icons::Phase::Hide,
+        };
+        let p = phase(St::GameFace, St::Game);
+        self.game_icon.update(p, s);
+        let p = phase(St::CardFace, St::Card);
+        self.card_icon.update(p);
+        let p = phase(St::ClockFace, St::Clock);
+        self.clock_icon.update(p, s, &self.info.time);
+        let p = phase(St::OptionFace, St::Option);
+        self.option_icon.update(p, d);
+    }
+
     /// Menu_UpdateSlotGlow: a slot's picture glows while a card is ready.
     fn update_slot_glow(&mut self) {
         for k in 0..2 {
@@ -808,6 +836,11 @@ impl Menu {
         // The glass cube, translucent as it zooms away.
         let mut v = View { ambient: [40.0 / 255.0, 40.0 / 255.0, 40.0 / 255.0, 1.0], ..clone_view(view) };
         v.vp = view.vp;
+        // The icon cubes sit inside the glass cube.
+        self.game_icon.draw(list, &ma.icons, view, &self.cube, s);
+        self.card_icon.draw(list, &ma.icons, view, &self.cube, s);
+        self.clock_icon.draw(list, &ma.icons, view, &self.cube, s);
+        self.option_icon.draw(list, &ma.icons, view, &self.cube, s);
         if bg > 0 {
             let m = mtx::concat(&self.cube, &mtx::scale(1.1, 1.1, 1.1));
             render::draw_model(list, &a.big_cube, &m, &v, &DrawOpts { alpha: bg, ..Default::default() });
@@ -1211,16 +1244,18 @@ impl Menu {
         }
     }
 
-    /// The mosaic's frame (the submenus' Fx*_Update + Fx_Update). Call once
-    /// per frame after [`Menu::update`].
+    /// The icon cubes' and the mosaic's frame (Menu_UpdateIcons, the
+    /// submenus' Fx*_Update + Fx_Update). Call once per frame after
+    /// [`Menu::update`].
     pub fn update_fx(&mut self, ma: &MenuAssets, s: &SinTable) {
+        self.update_icons(&ma.icons, s);
         let d = &ma.fx;
         match self.state {
-            St::Game if !self.game.starting() => {
+            St::Game if !self.game.starting() && self.game_icon.settled() => {
                 let msg = game::Game::fx_message(&*self.drive);
                 self.fx.frame(d, fx::set::GAME, self.lang, &fx::GAME_COLORS, s, |b| screen::game(b, msg));
             }
-            St::Option => {
+            St::Option if self.option_icon.settled() => {
                 // Ours has two rows: the boot timeout sits in the IPL's
                 // screen-position row, the language in its language row.
                 let row = self.opt_row as u8 + 1;
@@ -1228,7 +1263,7 @@ impl Menu {
                 let o = screen::Options { sub: if self.opt_edit { row + 1 } else { 0 }, row, stereo: None, offset: Some(t as i32), lang: true };
                 self.fx.frame(d, fx::set::OPTION, self.lang, &fx::OPTION_COLORS, s, |b| screen::options(b, &o));
             }
-            St::Clock => {
+            St::Clock if self.clock_icon.settled() => {
                 let [y, mo, dd, h, mi, sec] = self.info.time;
                 let c = screen::Clock { time: [y, mo, dd, h, mi, sec], keep_sway: true, ..Default::default() };
                 self.fx.frame(d, fx::set::CLOCK, self.lang, &fx::CLOCK_COLORS, s, |b| screen::clock(b, &c));
@@ -1236,6 +1271,13 @@ impl Menu {
             st if st.on_cube() => self.fx.clear(),
             _ => {}
         }
+    }
+
+    /// CardIcon_IsSettled: the card browser waits for this before it
+    /// animates the save tiles in.
+    #[allow(dead_code)]
+    pub fn card_icon_settled(&self) -> bool {
+        self.card_icon.settled()
     }
 
     /// Per-frame bookkeeping of Menu_DrawGuide (it advances its own clocks).
