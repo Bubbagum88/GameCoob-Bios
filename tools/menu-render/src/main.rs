@@ -8,7 +8,8 @@
 //! like a Dolphin frame dump): button is one of up, down, left, right, a, b,
 //! start, system (F10), eject (D), slot1, slot2. Lines starting with `#` are ignored. Without frames, every 10th
 //! frame up to the last scripted frame + 200 is written.
-//! Env: THREADS=n rasterizes on n threads; SKIP=1 skips the intro.
+//! Env: THREADS=n rasterizes on n threads; SKIP=1 skips the intro;
+//! DUMP=layout:N, strings:N or model:N prints that resource and exits.
 
 extern crate alloc;
 
@@ -64,6 +65,37 @@ fn main() {
         script.entry(f.parse().expect("frame number")).or_default().push(k.to_lowercase());
     }
     let ipl = ipl::Ipl::parse(&rom).expect("parse ipl");
+    // DUMP=layout:N or DUMP=strings:N prints a resource and exits.
+    if let Ok(d) = std::env::var("DUMP") {
+        let (kind, id) = d.split_once(':').expect("DUMP=kind:id");
+        let r = ipl.resource(id.parse().expect("id")).expect("resource");
+        match kind {
+            "model" => {
+                let m = ipl::j3d::Model::parse(&r).expect("model");
+                for (i, d) in m.draws.iter().enumerate() {
+                    let sh = &m.shapes[d.shape as usize];
+                    let (mut lo, mut hi) = ([f32::MAX; 3], [f32::MIN; 3]);
+                    for v in &sh.vertices {
+                        let p = ipl::j3d::Model::joint_world(&m, v.joint);
+                        let q = bs2::mtx::apply(&p, v.pos);
+                        for k in 0..3 {
+                            lo[k] = lo[k].min(q[k]);
+                            hi[k] = hi[k].max(q[k]);
+                        }
+                    }
+                    let mt = &m.materials[d.material as usize];
+                    println!("draw {i}: shape {} mat {} {:?} flag {} colors {:?} tex {:?} bbox {lo:?}..{hi:?}", d.shape, d.material, mt.name, mt.flag, mt.mat_colors, mt.tex_gens.len());
+                }
+            }
+            "layout" => println!("{:#?}", ipl::glh::Layout::parse(&r).expect("layout")),
+            _ => {
+                for (i, s) in ipl::glh::Strings::parse(&r).expect("strings").0.iter().enumerate() {
+                    println!("{i:3} pane {:2} {:?}", s.pane, String::from_utf8_lossy(&s.text));
+                }
+            }
+        }
+        return;
+    }
     let assets = bs2::Assets::load(&ipl).expect("load intro assets");
     let ma = MenuAssets::load(&ipl).expect("load menu assets");
     let last_input = script.keys().copied().max().unwrap_or(0);
