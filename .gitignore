@@ -4,3 +4,7 @@ screenshots-raw/
 ipl.bin
 *.ipl.bin
 ipl-extracted/
+# Your own files (console dump, reference videos): see local/README.md
+local/*
+!local/README.md
+*.mp4

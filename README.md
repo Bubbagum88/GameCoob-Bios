@@ -47,6 +47,19 @@ provide one; see [docs/ROADMAP.md](docs/ROADMAP.md).
 ## Build and run
 
 You need Rust (stable) with the UEFI target, plus QEMU and OVMF to test.
+Put your own files in `local/` (git ignores it): your dump as
+`local/ipl.bin` and any reference videos in `local/reference/`. The build
+scripts pick up `local/ipl.bin` automatically.
+
+On Windows (PowerShell):
+
+```powershell
+scripts\build.ps1                         # build; boot files land in target\esp
+scripts\build.ps1 -Run                    # same, then boot it in QEMU for Windows
+scripts\build.ps1 -Usb F:                 # same, then copy to a FAT32 USB stick
+```
+
+On Linux:
 
 ```sh
 rustup target add x86_64-unknown-uefi
@@ -54,7 +67,7 @@ sudo apt install qemu-system-x86 ovmf     # Debian/Ubuntu
 
 cargo build --release                     # -> target/x86_64-unknown-uefi/release/gamecoob.efi
 scripts/run-qemu.sh                       # boots it in a QEMU window
-IPL=~/ipl.bin scripts/run-qemu.sh         # same, with your dump for the real intro
+IPL=~/ipl.bin scripts/run-qemu.sh         # same, with a dump from somewhere other than local/
 scripts/screenshots.py out/               # headless run that saves PNGs (needs Pillow)
 ```
 
@@ -82,7 +95,8 @@ src/
   math.rs    vectors, rotation matrices, easing
   vars.rs    UEFI variables: Boot####, BootOrder, BootNext, Timeout, OsIndications
   clock.rs   TSC-based timer for frame-rate-independent animation
-scripts/     QEMU runner and screenshot automation
+scripts/     build.ps1 (Windows build), QEMU runner, screenshot automation
+local/       your own dump and reference files, never committed
 tools/       host-side checks: ipl-preview (models to PNG), intro-render (intro frames to PNG)
 docs/        roadmap and screenshots
 ```
