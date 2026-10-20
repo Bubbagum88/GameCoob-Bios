@@ -9,7 +9,8 @@
 //! start, system (F10), eject (D), slot1, slot2. Lines starting with `#` are ignored. Without frames, every 10th
 //! frame up to the last scripted frame + 200 is written.
 //! Env: THREADS=n rasterizes on n threads; SKIP=1 skips the intro;
-//! DUMP=layout:N, strings:N or model:N prints that resource and exits.
+//! DUMP=layout:N, strings:N, model:N or raw:N prints that resource and exits
+//! (raw writes the decompressed bytes to stdout).
 
 extern crate alloc;
 
@@ -121,6 +122,10 @@ fn main() {
                 }
             }
             "layout" => println!("{:#?}", ipl::glh::Layout::parse(&r).expect("layout")),
+            "raw" => {
+                use std::io::Write;
+                std::io::stdout().write_all(&r).unwrap();
+            }
             _ => {
                 for (i, s) in ipl::glh::Strings::parse(&r).expect("strings").0.iter().enumerate() {
                     println!("{i:3} pane {:2} {:?}", s.pane, String::from_utf8_lossy(&s.text));
@@ -181,6 +186,7 @@ fn main() {
                     println!("frame {f}: action {act:?}");
                 }
                 m.tick_guide();
+                m.update_fx(&ma, &intro.sin);
             }
         }
         if frames.contains(&f) {
