@@ -1,0 +1,12 @@
+# See config.example.yml in decomp-toolkit's dtk-template for documentation.
+# bs2.dol is produced from your own ipl.bin by tools/extract_bs2.py (configure.py runs it).
+object_base: orig/PAL10
+object: bs2.dol
+hash: d57ac1ed02a153ffc458eceff04cfc1622fc8bcb
+symbols: config/PAL10/symbols.txt
+splits: config/PAL10/splits.txt
+mw_comment_version: 8
+detect_objects: true
+detect_strings: true
+write_asm: true
+fill_gaps: true
