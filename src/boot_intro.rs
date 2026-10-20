@@ -208,9 +208,7 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
                     }
                 }
                 m.tick_guide();
-                if let Some(ma) = ma {
-                    m.update_fx(ma, &intro.sin);
-                }
+                m.update_fx(ma, &intro.sin);
                 pad = Pad::default();
                 continue;
             }
