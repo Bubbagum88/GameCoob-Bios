@@ -90,7 +90,6 @@ fn main() {
                     let mt = &m.materials[d.material as usize];
                     if std::env::var("VERTS").is_ok() { for v in sh.vertices.iter() { println!("  v {:?} n {:?} j {}", v.pos, v.normal, v.joint); } }
                     if std::env::var("MATS").is_ok() { let mut c = mt.clone(); c.raw.clear(); println!("{c:#?}"); }
-                    println!("draw {i}: shape {} mat {} {:?} flag {} colors {:?} tex {:?} bbox {lo:?}..{hi:?}", d.shape, d.material, mt.name, mt.flag, mt.mat_colors, mt.tex_gens.len());
                     if std::env::var("VERBOSE").is_ok() {
                         let mut m2 = mt.clone();
                         m2.raw.clear();
