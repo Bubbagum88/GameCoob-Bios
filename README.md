@@ -67,6 +67,11 @@ scripts\build.ps1 -Run                    # same, then boot it in QEMU for Windo
 scripts\build.ps1 -Usb F:                 # same, then copy to a FAT32 USB stick
 ```
 
+To try a downloaded build in **QEMU** (`winget install SoftwareFreedomConservancy.QEMU`),
+drop the GameCoob-boot-files zip (or its unzipped folder) into `local\` and run
+`scripts\run-qemu.ps1`. It picks the newest build, adds your `local\ipl.bin`
+and boots it. Add `-Fast` to use Windows Hypervisor Platform.
+
 To try it in **VMware Workstation**, unzip the download (or run
 `scripts\build.ps1`) into `local\`, then run `scripts\make-vm.ps1`. It asks
 for administrator rights, builds a small virtual disk with the boot files and
