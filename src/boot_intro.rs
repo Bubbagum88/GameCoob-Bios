@@ -139,9 +139,9 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
     let mut intro = Intro::new(assets);
     let mut menu: Option<Menu> = None;
     let cores = Cores::open();
-    // Full GX resolution unless this machine can't keep up, then half.
+    // Always full GX resolution: a smaller target only looks blurry once
+    // it is scaled up to the screen.
     let mut target = Target::new(render::EFB_W, render::EFB_H);
-    let mut slow_frames = 0;
     let t0 = clock.now();
     let mut done_frames = 0u32;
     let mut a_until = -1.0f32;
@@ -228,18 +228,11 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
         if !stepped {
             continue;
         }
-        let d0 = clock.now();
         let par = |job: &Job| match &cores {
             Some(c) => c.run(job),
             None => job.work(),
         };
         intro.render_with_menu(&mut target, assets, ma, menu.as_ref(), &par);
-        if clock.now() - d0 > 1.0 / 30.0 && target.w == render::EFB_W {
-            slow_frames += 1;
-            if slow_frames > 10 {
-                target = Target::new(render::EFB_W / 2, render::EFB_H / 2);
-            }
-        }
         cv.blit_frame(&target.color, target.w, target.h);
         cv.present(gop);
     }
