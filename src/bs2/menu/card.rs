@@ -793,7 +793,10 @@ impl Card {
         }
         self.poll_slot(cards, 0);
         self.poll_slot(cards, 1);
-        self.update_tiles(cards, fade_done);
+        // The blocks wait for the cube to finish zooming in.
+        if !(self.entering && !zoom_full) {
+            self.update_tiles(cards, fade_done);
+        }
         match self.ui {
             1 => self.browse(p, cards, zoom_full, fade_done),
             2 => {

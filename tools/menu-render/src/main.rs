@@ -10,7 +10,6 @@
 //! frame up to the last scripted frame + 200 is written.
 //! Env: THREADS=n rasterizes on n threads; SKIP=1 skips the intro;
 //! CARDS=a,b sets each slot to saves, none or a blank card of N blocks;
-//! DUMP=layout:N, strings:N or model:N prints that resource and exits.
 //! DUMP=layout:N, strings:N, model:N or raw:N prints that resource and exits
 //! (raw writes the decompressed bytes to stdout).
 
