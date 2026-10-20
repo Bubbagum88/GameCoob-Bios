@@ -7,10 +7,11 @@
 #   plain emulation, which is many times slower: GameCoob draws every frame
 #   with floating-point math, which emulation does in software.
 #   -Fast insists on Windows Hypervisor Platform; -Slow skips it.
+#   -Cpus N gives the VM N processors (default: up to 8).
 # Your dump at local\ipl.bin is added so the real intro plays. Frame timings
 # (fps, render/scale/present ms) are written to local\qemu\serial.log,
 # which starts over on each restart.
-param([string]$Boot, [switch]$Fast, [switch]$Slow)
+param([string]$Boot, [switch]$Fast, [switch]$Slow, [int]$Cpus = 0)
 $ErrorActionPreference = "Stop"
 $root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 Set-Location $root
@@ -67,6 +68,7 @@ $tcg = @("-accel", "tcg,thread=multi,tb-size=512")
 $accel = if ($Fast) { $whpx } elseif ($Slow) { $tcg } else { $whpx + $tcg }
 # The renderer splits each frame across every CPU it is given.
 $cpus = [Math]::Max(2, [Math]::Min(8, [Environment]::ProcessorCount))
+if ($Cpus -gt 0) { $cpus = $Cpus }
 # Show the screen 1:1 instead of stretched to the window, which blurs it.
 $display = @()
 $displays = try { & $qemu -display help 2>$null } catch { @() }
