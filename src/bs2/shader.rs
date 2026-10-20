@@ -14,7 +14,15 @@ pub struct FastTex {
     texels: Vec<[f32; 4]>,
 }
 
+/// floor() without a libm call: x86-64's baseline SSE2 has no rounding
+/// instruction, and libm's portable floorf is slow on the per-pixel path.
 #[inline]
+fn floor(x: f32) -> f32 {
+    let i = x as i32 as f32;
+    if i > x { i - 1.0 } else { i }
+}
+
+#[inline(always)]
 fn wrap(i: i32, n: i32, mode: u8) -> i32 {
     // Every IPL texture is a power of two, so wrap with masks when possible.
     if n & (n - 1) == 0 {
@@ -89,19 +97,17 @@ impl FastTex {
     }
 
     #[inline]
-    fn at(&self, x: i32, y: i32) -> &[f32; 4] {
-        let i = (wrap(y, self.h, self.wrap_t) * self.w + wrap(x, self.w, self.wrap_s)) as usize;
-        self.texels.get(i).unwrap_or(&[1.0; 4])
-    }
-
-    #[inline]
     pub fn sample(&self, s: f32, t: f32) -> [f32; 4] {
         let fx = s * self.w as f32 - 0.5;
         let fy = t * self.h as f32 - 0.5;
-        let (x0, y0) = (libm::floorf(fx), libm::floorf(fy));
+        let (x0, y0) = (floor(fx), floor(fy));
         let (ax, ay) = (fx - x0, fy - y0);
         let (x0, y0) = (x0 as i32, y0 as i32);
-        let (a, b, c, d) = (self.at(x0, y0), self.at(x0 + 1, y0), self.at(x0, y0 + 1), self.at(x0 + 1, y0 + 1));
+        // Wrap each row and column once, not once per texel.
+        let (xa, xb) = (wrap(x0, self.w, self.wrap_s), wrap(x0 + 1, self.w, self.wrap_s));
+        let (ya, yb) = (wrap(y0, self.h, self.wrap_t) * self.w, wrap(y0 + 1, self.h, self.wrap_t) * self.w);
+        let at = |i: i32| self.texels.get(i as usize).unwrap_or(&[1.0; 4]);
+        let (a, b, c, d) = (at(ya + xa), at(ya + xb), at(yb + xa), at(yb + xb));
         let mut o = [0.0; 4];
         for i in 0..4 {
             let top = a[i] + (b[i] - a[i]) * ax;
@@ -223,24 +229,21 @@ impl Shader {
                 1 => [1.0; 4],
                 _ => [0.0; 4],
             };
-            let cin = |id: u8, k: usize, regs: &[[f32; 4]; 4]| -> f32 {
-                match id {
-                    0 => regs[0][k],
-                    1 => regs[0][3],
-                    2 => regs[1][k],
-                    3 => regs[1][3],
-                    4 => regs[2][k],
-                    5 => regs[2][3],
-                    6 => regs[3][k],
-                    7 => regs[3][3],
-                    8 => t[k],
-                    9 => t[3],
-                    10 => r[k],
-                    11 => r[3],
-                    12 | 14 => 1.0,
-                    13 => 0.5,
-                    _ => 0.0,
-                }
+            // Resolve each of the four inputs once per stage (the GX TEV
+            // input selects), then do the lerp on all three channels.
+            let cin = |id: u8, regs: &[[f32; 4]; 4]| -> [f32; 3] {
+                let v = match id {
+                    0 | 2 | 4 | 6 => regs[(id / 2) as usize],
+                    1 | 3 | 5 | 7 => [regs[(id / 2) as usize][3]; 4],
+                    8 => t,
+                    9 => [t[3]; 4],
+                    10 => r,
+                    11 => [r[3]; 4],
+                    12 | 14 => [1.0; 4],
+                    13 => [0.5; 4],
+                    _ => [0.0; 4],
+                };
+                [v[0], v[1], v[2]]
             };
             let ain = |id: u8, regs: &[[f32; 4]; 4]| -> f32 {
                 match id {
@@ -252,17 +255,14 @@ impl Shader {
                 }
             };
             let st = &s.st;
+            let [ca, cb, cc, cd] = st.color_in.map(|id| cin(id, &regs));
+            let sub = st.color_op & 1 == 1;
             let mut outc = [0.0f32; 3];
-            for (k, o) in outc.iter_mut().enumerate() {
-                let (a, b, c, d) = (
-                    c01(cin(st.color_in[0], k, &regs)),
-                    c01(cin(st.color_in[1], k, &regs)),
-                    c01(cin(st.color_in[2], k, &regs)),
-                    cin(st.color_in[3], k, &regs),
-                );
+            for k in 0..3 {
+                let (a, b, c, d) = (c01(ca[k]), c01(cb[k]), c01(cc[k]), cd[k]);
                 let l = a * (1.0 - c) + b * c;
-                let v = ((if st.color_op & 1 == 1 { d - l } else { d + l }) + s.cbias) * s.cscale;
-                *o = if st.color_clamp { c01(v) } else { v.clamp(-4.0, 4.0) };
+                let v = ((if sub { d - l } else { d + l }) + s.cbias) * s.cscale;
+                outc[k] = if st.color_clamp { c01(v) } else { v.clamp(-4.0, 4.0) };
             }
             let (a, b, c, d) = (
                 c01(ain(st.alpha_in[0], &regs)),

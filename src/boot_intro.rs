@@ -12,6 +12,7 @@ use crate::ipl::Ipl;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::ffi::c_void;
+use core::sync::atomic::{AtomicPtr, AtomicU32, Ordering};
 use uefi::boot::{self, EventType, ScopedProtocol, Tpl};
 use uefi::proto::pi::mp::MpServices;
 use uefi::Event;
@@ -83,15 +84,41 @@ fn perform(a: Action) -> Option<String> {
 /// The other processors, used to rasterize bands of each frame in parallel.
 /// They only run pure computation on memory the frame owns: no firmware calls
 /// and no allocation happen on them.
+///
+/// They are started once and then wait for work by watching `GEN`, rather
+/// than being started again for every frame: waking a processor through the
+/// firmware costs interrupts, which are slow in a VM.
 struct Cores {
-    mp: ScopedProtocol<MpServices>,
-    done: Event,
+    aps: u32,
+    // Kept alive while the processors run; they never return.
+    _mp: ScopedProtocol<MpServices>,
+    _done: Event,
 }
 
-extern "efiapi" fn ap_work(arg: *mut c_void) {
-    // SAFETY: `arg` is the `Job` the BSP keeps alive until every AP returns.
-    let job = unsafe { &*(arg as *const Job) };
-    job.work();
+/// Bumped once per frame to hand `JOB` to the waiting processors.
+static GEN: AtomicU32 = AtomicU32::new(0);
+/// The frame's `Job`, valid while `BUSY` is nonzero.
+static JOB: AtomicPtr<c_void> = AtomicPtr::new(core::ptr::null_mut());
+/// Processors still working on the current frame.
+static BUSY: AtomicU32 = AtomicU32::new(0);
+/// Bands the other processors rasterized, for the timing report.
+static AP_BANDS: AtomicU32 = AtomicU32::new(0);
+
+extern "efiapi" fn ap_loop(_: *mut c_void) {
+    let mut seen = 0;
+    loop {
+        let g = GEN.load(Ordering::Acquire);
+        if g == seen {
+            core::hint::spin_loop();
+            continue;
+        }
+        seen = g;
+        // SAFETY: the BSP keeps the `Job` alive until `BUSY` drops to zero.
+        let job = unsafe { &*(JOB.load(Ordering::Acquire) as *const Job) };
+        let did = job.work();
+        AP_BANDS.fetch_add(did as u32, Ordering::Relaxed);
+        BUSY.fetch_sub(1, Ordering::AcqRel);
+    }
 }
 
 impl Cores {
@@ -104,24 +131,21 @@ impl Cores {
         }
         // SAFETY: a plain event with no notification function.
         let done = unsafe { boot::create_event(EventType::empty(), Tpl::CALLBACK, None, None) }.ok()?;
-        Some(Cores { mp, done })
+        // SAFETY: the event handle stays owned by `Cores`.
+        let ev = unsafe { done.unsafe_clone() };
+        // Non-blocking (an event is given), so the loops keep running.
+        mp.startup_all_aps(false, ap_loop, core::ptr::null_mut(), Some(ev), None).ok()?;
+        Some(Cores { aps: n.enabled as u32 - 1, _mp: mp, _done: done })
     }
 
     /// Rasterize `job` on every processor; returns once all are idle again.
     fn run(&self, job: &Job) {
-        let arg = job as *const Job as *mut c_void;
-        // SAFETY: the event handle stays owned by `self`.
-        let ev = unsafe { self.done.unsafe_clone() };
-        let started = self.mp.startup_all_aps(false, ap_work, arg, Some(ev), None).is_ok();
-        job.work();
-        if started {
-            while !job.finished() {
-                core::hint::spin_loop();
-            }
-            // The last AP may still be returning from `ap_work`.
-            while !matches!(boot::check_event(&self.done), Ok(true)) {
-                core::hint::spin_loop();
-            }
+        BUSY.store(self.aps, Ordering::Release);
+        JOB.store(job as *const Job as *mut c_void, Ordering::Release);
+        GEN.fetch_add(1, Ordering::AcqRel);
+        let _ = job.work();
+        while BUSY.load(Ordering::Acquire) != 0 {
+            core::hint::spin_loop();
         }
     }
 }
@@ -236,7 +260,9 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
         }
         let par = |job: &Job| match &cores {
             Some(c) => c.run(job),
-            None => job.work(),
+            None => {
+                let _ = job.work();
+            }
         };
         let (w, h) = res.size(cv);
         if (w, h) != (target.w, target.h) {
@@ -251,7 +277,7 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
         let d3 = clock.now();
         res.frame(d3 - d0);
         if stats.add(d3, [d1 - d0, d2 - d1, d3 - d2]) && (log_stats || show_stats) {
-            stats.report(&target, cv);
+            stats.report(&target, cv, cores.as_ref().map_or(1, |c| c.aps + 1));
         }
     }
 }
@@ -278,11 +304,14 @@ impl Stats {
         now - self.since >= 2.0
     }
 
-    fn report(&mut self, t: &Target, cv: &Canvas) {
+    fn report(&mut self, t: &Target, cv: &Canvas, cpus: u32) {
         let n = self.frames.max(1) as f32;
+        // Share of the frame's bands (16 rows each) the other processors did.
+        let bands = n * t.h.div_ceil(16) as f32;
+        let others = AP_BANDS.swap(0, Ordering::Relaxed) as f32 * 100.0 / bands;
         let ms = |s: f32| s / n * 1000.0;
         let line = alloc::format!(
-            "GameCoob: {:.1} fps, render {}x{} {:.1} ms, scale to {}x{} {:.1} ms, present {:.1} ms (screen {}x{})\r\n",
+            "GameCoob: {:.1} fps, render {}x{} {:.1} ms, scale to {}x{} {:.1} ms, present {:.1} ms (screen {}x{}), {} CPUs, {:.0}% of rows on the others\r\n",
             n / (self.now - self.since),
             t.w,
             t.h,
@@ -293,6 +322,8 @@ impl Stats {
             ms(self.sum[2]),
             cv.w,
             cv.h,
+            cpus,
+            others,
         );
         crate::firmware::serial_write(&line);
         *self = Stats { since: self.now, ..Stats::default() };

@@ -139,12 +139,15 @@ impl<'a> Job<'a> {
     }
 
     /// Rasterize bands until none are left. Safe to call from many threads.
-    pub fn work(&self) {
+    /// Returns how many bands this caller did.
+    pub fn work(&self) -> usize {
+        let mut did = 0;
         loop {
             let b = self.next.fetch_add(1, Ordering::AcqRel);
             if b >= self.bands() {
-                return;
+                return did;
             }
+            did += 1;
             let y0 = b * self.band_h;
             let y1 = (y0 + self.band_h).min(self.h);
             for p in self.prims {
@@ -163,6 +166,10 @@ impl<'a> Job<'a> {
     unsafe fn tri(&self, p: &Prim, band_y0: i64, band_y1: i64) {
         let st = p.st;
         let [a, b, c] = p.v;
+        // Most triangles miss a given band: reject those before any setup.
+        if a.y.max(b.y).max(c.y) < band_y0 as f32 || a.y.min(b.y).min(c.y) > band_y1 as f32 + 1.0 {
+            return;
+        }
         let area = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
         if area.abs() < 1e-8 {
             return;
@@ -174,10 +181,10 @@ impl<'a> Job<'a> {
             _ => {}
         }
         let inv = 1.0 / area;
-        let minx = libm::floorf(a.x.min(b.x).min(c.x)).max(0.0) as i64;
-        let maxx = (libm::ceilf(a.x.max(b.x).max(c.x)) as i64).min(self.w as i64 - 1);
-        let miny = (libm::floorf(a.y.min(b.y).min(c.y)).max(0.0) as i64).max(band_y0);
-        let maxy = (libm::ceilf(a.y.max(b.y).max(c.y)) as i64).min(self.h as i64 - 1).min(band_y1);
+        let minx = floorf(a.x.min(b.x).min(c.x)).max(0.0) as i64;
+        let maxx = (ceilf(a.x.max(b.x).max(c.x)) as i64).min(self.w as i64 - 1);
+        let miny = (floorf(a.y.min(b.y).min(c.y)).max(0.0) as i64).max(band_y0);
+        let maxy = (ceilf(a.y.max(b.y).max(c.y)) as i64).min(self.h as i64 - 1).min(band_y1);
         if maxx < minx || maxy < miny {
             return;
         }
@@ -213,8 +220,8 @@ impl<'a> Job<'a> {
             if empty || lo > hi {
                 continue;
             }
-            let xa = (libm::ceilf(lo - 0.5) as i64).max(minx);
-            let xb = (libm::floorf(hi - 0.5) as i64).min(maxx);
+            let xa = (ceilf(lo - 0.5) as i64).max(minx);
+            let xb = (floorf(hi - 0.5) as i64).min(maxx);
             for x in xa..=xb {
                 let fx = x as f32 + 0.5;
                 let w0 = (e0.0 * fx + e0.1 * fy + e0.2).max(0.0);
@@ -265,4 +272,18 @@ impl<'a> Job<'a> {
             }
         }
     }
+}
+
+/// floor()/ceil() without libm: x86-64's baseline SSE2 has no rounding
+/// instruction, and libm's portable versions are slow on hot paths.
+#[inline]
+fn floorf(x: f32) -> f32 {
+    let i = x as i32 as f32;
+    if i > x { i - 1.0 } else { i }
+}
+
+#[inline]
+fn ceilf(x: f32) -> f32 {
+    let i = x as i32 as f32;
+    if i < x { i + 1.0 } else { i }
 }
