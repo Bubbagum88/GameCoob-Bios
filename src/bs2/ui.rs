@@ -113,14 +113,15 @@ impl<'a> Ui<'a, '_> {
         self.rect(x, y, w, h, [[0.0; 2]; 4], c, None);
     }
 
-    /// A picture pane (flags: bit 0 mirrors s, bit 1 mirrors t, bit 2 turns 90 degrees).
+    /// A picture pane (flags: bit 0 mirrors t, bit 1 mirrors s, bit 2 turns
+    /// 90 degrees; `Glh_DrawPaneQuad` 0x81309E54).
     pub fn pic(&mut self, p: &Pic, tex: &'a FastTex, c: Rgba, dx: f32, dy: f32) {
         let (mut s0, mut s1, mut t0, mut t1) = (0.0, 1.0, 0.0, 1.0);
         if p.flags & 1 != 0 {
-            core::mem::swap(&mut s0, &mut s1);
+            core::mem::swap(&mut t0, &mut t1);
         }
         if p.flags & 2 != 0 {
-            core::mem::swap(&mut t0, &mut t1);
+            core::mem::swap(&mut s0, &mut s1);
         }
         let uv = if p.flags & 4 != 0 {
             [[s0, t1], [s0, t0], [s1, t0], [s1, t1]]
