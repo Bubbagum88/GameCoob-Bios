@@ -11,6 +11,8 @@
 //! Env: THREADS=n rasterizes on n threads; SKIP=1 skips the intro;
 //! CARDS=a,b sets each slot to saves, none or a blank card of N blocks;
 //! DUMP=layout:N, strings:N or model:N prints that resource and exits.
+//! DUMP=layout:N, strings:N, model:N or raw:N prints that resource and exits
+//! (raw writes the decompressed bytes to stdout).
 
 extern crate alloc;
 
@@ -73,6 +75,10 @@ fn main() {
         match kind {
             "model" => {
                 let m = ipl::j3d::Model::parse(&r).expect("model");
+                for (i, t) in m.textures.iter().enumerate() {
+                    println!("tex {i}: {:?} fmt {} {}x{} wrap {} {}", t.name, t.format, t.width, t.height, t.wrap_s, t.wrap_t);
+                    png::write_rgba(&out.join(format!("tex{i}.png")), t.width as usize, t.height as usize, &t.rgba).unwrap();
+                }
                 for (i, d) in m.draws.iter().enumerate() {
                     let sh = &m.shapes[d.shape as usize];
                     let (mut lo, mut hi) = ([f32::MAX; 3], [f32::MIN; 3]);
@@ -85,6 +91,9 @@ fn main() {
                         }
                     }
                     let mt = &m.materials[d.material as usize];
+                    if std::env::var("VERTS").is_ok() { for v in sh.vertices.iter() { println!("  v {:?} n {:?} j {}", v.pos, v.normal, v.joint); } }
+                    if std::env::var("MATS").is_ok() { let mut c = mt.clone(); c.raw.clear(); println!("{c:#?}"); }
+                    println!("draw {i}: shape {} mat {} {:?} flag {} colors {:?} tex {:?} bbox {lo:?}..{hi:?}", d.shape, d.material, mt.name, mt.flag, mt.mat_colors, mt.tex_gens.len());
                     if std::env::var("VERBOSE").is_ok() {
                         let mut m2 = mt.clone();
                         m2.raw.clear();
@@ -94,7 +103,31 @@ fn main() {
                     println!("draw {i}: shape {} mat {} {:?} flag {} colors {:?} tev {:?} maps {:?} stages {} tex {:?} bbox {lo:?}..{hi:?}", d.shape, d.material, mt.name, mt.flag, mt.mat_colors, mt.tev_colors, mt.textures, mt.tev_stages.len(), mt.tex_gens.len());
                 }
             }
+            "inf1" => {
+                let b = &r[..];
+                let be32 = |o: usize| u32::from_be_bytes([b[o], b[o + 1], b[o + 2], b[o + 3]]) as usize;
+                let mut s = 0x20;
+                while &b[s..s + 4] != b"INF1" { s += be32(s + 4); }
+                let mut p = s + be32(s + 0x14);
+                let mut n = 0;
+                let mut depth = 0;
+                loop {
+                    let ty = u16::from_be_bytes([b[p], b[p + 1]]);
+                    let i = u16::from_be_bytes([b[p + 2], b[p + 3]]);
+                    p += 4;
+                    match ty {
+                        0 => break,
+                        1 => depth += 1,
+                        2 => depth -= 1,
+                        _ => { println!("node {n:2} (+{:4}) {}{ty:#x} {i}", n * 24, "  ".repeat(depth)); n += 1; }
+                    }
+                }
+            }
             "layout" => println!("{:#?}", ipl::glh::Layout::parse(&r).expect("layout")),
+            "raw" => {
+                use std::io::Write;
+                std::io::stdout().write_all(&r).unwrap();
+            }
             _ => {
                 for (i, s) in ipl::glh::Strings::parse(&r).expect("strings").0.iter().enumerate() {
                     println!("{i:3} pane {:2} {:?}", s.pane, String::from_utf8_lossy(&s.text));
@@ -125,6 +158,13 @@ fn main() {
         match &mut menu {
             None => {
                 intro.update(bs2::Input { a: has("a"), egg: None });
+                if std::env::var("TRACE").is_ok() {
+                    let sc = &intro.scene;
+                    println!(
+                        "trace f{f} state={:?} spin={} speed={:.3} accel={:.3} wph={} wamp={} t={} mwob={} land={} drop={}",
+                        intro.state, sc.spin, sc.spin_speed, sc.spin_accel, sc.wobble_phase, sc.wobble_amp, intro.spin_frame, intro.wobble_frame, sc.land_impulse, sc.drop_impulse
+                    );
+                }
                 if intro.finished() {
                     println!("frame {f}: menu starts");
                     let mut cards = FakeCards::new();
@@ -159,6 +199,7 @@ fn main() {
                     println!("frame {f}: action {act:?}");
                 }
                 m.tick_guide();
+                m.update_fx(&ma, &intro.sin);
             }
         }
         if frames.contains(&f) {

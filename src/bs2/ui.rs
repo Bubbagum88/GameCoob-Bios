@@ -23,7 +23,8 @@ pub fn with_alpha(c: Rgba, a: f32) -> Rgba {
     [c[0], c[1], c[2], c[3] * a]
 }
 
-const ST: State = State { z_compare: false, z_update: false, blend: BlendMode::Alpha, cull: 0 };
+/// GX_Setup2D also sets GX_CULL_BACK, so faces turned away are not drawn.
+const ST: State = State { z_compare: false, z_update: false, blend: BlendMode::Alpha, cull: 2 };
 
 /// The ROM font with one texture per glyph sheet.
 pub struct UiFont {

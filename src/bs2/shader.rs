@@ -112,6 +112,7 @@ impl FastTex {
     }
 }
 
+#[derive(Clone)]
 struct Stage {
     tex: Option<(usize, usize)>, // (texture index in model, texcoord)
     ras: u8,                     // 0 = COLOR0A0, 1 = COLOR1A1, 2 = zero
@@ -122,6 +123,7 @@ struct Stage {
     abias: f32,
 }
 
+#[derive(Clone)]
 pub struct Shader {
     regs: [[f32; 4]; 4],
     stages: Vec<Stage>,
@@ -192,6 +194,15 @@ impl Shader {
         let ac = m.alpha_compare;
         let alpha_always = (ac.op == 1 && (ac.comp0 == 7 || ac.comp1 == 7)) || (ac.op == 0 && ac.comp0 == 7 && ac.comp1 == 7);
         Shader { regs, stages, alpha_always, mat_alpha_test: m.clone() }
+    }
+
+    /// Replace the colour a material's `tev_colors[i]` loaded (0..2 are
+    /// TEVREG0..2, 3 is TEVPREV), RGBA 0..1.
+    pub fn set_reg(&mut self, i: usize, c: [f32; 4]) {
+        let r = if i == 3 { 0 } else { i + 1 };
+        if let Some(reg) = self.regs.get_mut(r) {
+            *reg = c;
+        }
     }
 
     /// Run the stages. `tex(index, texcoord)` samples a model texture.

@@ -7,6 +7,7 @@
 
 pub mod anim;
 pub mod cube;
+pub mod fx;
 pub mod menu;
 pub mod mtx;
 pub mod raster;
@@ -122,7 +123,7 @@ impl Intro {
             scene: Scene::new(),
             state: State0::Intro,
             hold: 0,
-            spin_frame: 0,
+            spin_frame: 1,
             spin_start: 0,
             frame: 0,
             wobble_frame: 0,
@@ -135,29 +136,37 @@ impl Intro {
         let mut jingle = None;
         match self.state {
             State0::Intro => {
-                if self.cube.done {
-                    self.hold += 1;
-                }
-                let force = self.hold > HOLD_FRAMES;
-                if !self.cube.done || force {
-                    let _whoosh = self.scene.update_spin(input.a, self.cube.running, force);
+                // Scene_UpdateNoDisc: A spins the cube while it runs; once
+                // it is done (and the disc text has faded) the scene spins
+                // itself, with a second spin and wobble step that frame.
+                if !self.cube.done {
+                    let _whoosh = self.scene.update_spin(input.a, self.cube.running, false);
                 }
                 self.scene.update_wobble();
                 jingle = self.cube.update(&mut self.scene, input.egg.unwrap_or(Jingle::Normal));
                 if self.scene.spin_speed > self.scene.spin_threshold {
-                    self.state = State0::SpinOut;
-                    self.spin_start = self.scene.spin;
+                    self.start_spin_out();
+                } else if self.cube.done {
+                    self.hold += 1;
+                    if self.hold > HOLD_FRAMES {
+                        let _whoosh = self.scene.update_spin(false, self.cube.running, true);
+                        self.scene.update_wobble();
+                        if self.scene.spin_speed > self.scene.spin_threshold {
+                            self.start_spin_out();
+                        }
+                    }
                 }
             }
             State0::SpinOut => {
-                // Scene_CalcSpinOutMtx restarts the wobble clock on the first
-                // spin-out frame and advances it by 7 per frame.
-                if self.spin_frame == 0 {
+                // Scene_SpinOut: the spin-out counter starts at 1 (Scene_Reset).
+                // Scene_CalcSpinOutMtx drives the menu's wobble clock (still 0
+                // from Menu_Init) by 7 per frame.
+                if self.spin_frame == 1 {
                     self.wobble_frame = 0;
                 }
                 self.update_spin_out();
+                // The scene wobble is frozen during the spin-out.
                 self.wobble_frame = self.wobble_frame.wrapping_add(7);
-                self.scene.update_wobble();
                 if self.spin_frame > SPINOUT_END {
                     self.state = State0::Done;
                 }
@@ -165,6 +174,13 @@ impl Intro {
             State0::Done => {}
         }
         jingle
+    }
+
+    /// Entering Scene state 4 snaps the scene spin to spinRest (0).
+    fn start_spin_out(&mut self) {
+        self.state = State0::SpinOut;
+        self.scene.spin = 0;
+        self.spin_start = 0;
     }
 
     /// Scene_UpdateSpinOut: brake the spin with Hermite curves so the menu
@@ -217,7 +233,7 @@ impl Intro {
                 // Scene_Draw2DSpinOut: the front face fades in over the
                 // last 100 frames of the spin-out.
                 let f = self.spin_frame - (SPINOUT_END - SPINOUT_FACE);
-                if self.state != State0::Intro && f > 0 {
+                if self.state != State0::Intro && f >= 0 {
                     let alpha = (255 * f.min(SPINOUT_FACE) / SPINOUT_FACE) as u8;
                     menu::Menu::draw_spin_out_face(&mut list, ma, &self.spin_out_view(vp), &self.spin_out_mtx(), alpha, &self.sin);
                 }
@@ -305,7 +321,7 @@ impl Intro {
         let mut text_view = View::intro(-55.0, true);
         text_view.vp = view.vp;
         let k = sc.spin_speed / sc.spin_threshold;
-        if f <= fade {
+        if f < fade {
             // The logo scene (inner background and wordmark) fades out.
             let shake = (sc.land_impulse as i32 + sc.drop_impulse as i32 + sc.wobble_amp as i32).min(3000);
             let a_in = ((fade - f) * 255 * shake / (fade * 3000)) as u8;
@@ -320,7 +336,7 @@ impl Intro {
         let sxz = base + sc.squash_xz * k;
         let sy = base + (1.0 + sc.stretch_y) * k;
         let m = mtx::concat(&m, &mtx::scale(sxz, sy, sxz));
-        let cube_a = if f <= fade { (255 * f / fade) as u8 } else { 255 };
+        let cube_a = if f < fade { (255 * f / fade) as u8 } else { 255 };
         view.ambient = [40.0 / 255.0, 40.0 / 255.0, 40.0 / 255.0, 1.0];
         render::draw_model(t, &a.big_cube, &m, &view, &DrawOpts { alpha: cube_a, ..Default::default() });
     }

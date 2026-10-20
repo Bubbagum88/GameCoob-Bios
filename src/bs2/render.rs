@@ -72,6 +72,11 @@ pub struct Prepared {
 }
 
 impl Prepared {
+    /// The compiled TEV program of material `i`.
+    pub fn shader(&self, i: usize) -> Option<&Shader> {
+        self.shaders.get(i)
+    }
+
     pub fn new(model: Model) -> Prepared {
         let shaders = model.materials.iter().map(Shader::new).collect();
         let texs = model.textures.iter().map(FastTex::new).collect();
@@ -118,17 +123,31 @@ fn norm(v: [f32; 3]) -> [f32; 3] {
 /// Queue a model's triangles. `base` is model-to-world (world matrix times
 /// model scale).
 pub fn draw_model<'a>(list: &mut Vec<Prim<'a>>, p: &'a Prepared, base: &Mtx, v: &View, o: &DrawOpts) {
-    draw_model_impl(list, p, base, v, o, None);
+    draw_model_impl(list, p, None, base, v, o, None);
+}
+
+/// [`draw_model`] with every material's TEV program replaced by `shader`
+/// (a copy with its own colour registers, see [`Shader::set_reg`]).
+pub fn draw_model_with<'a>(list: &mut Vec<Prim<'a>>, p: &'a Prepared, shader: Option<&'a Shader>, base: &Mtx, v: &View, o: &DrawOpts) {
+    draw_model_impl(list, p, shader, base, v, o, None);
 }
 
 /// [`draw_model`] with `tex` in place of the materials' TEV stages: each
 /// draw is lit vertex color times `tex` (TEX0), the way BS2 draws a memory
 /// card file's icon on its block with the icon loaded into GX_TEXMAP0.
 pub fn draw_model_tex<'a>(list: &mut Vec<Prim<'a>>, p: &'a Prepared, base: &Mtx, v: &View, o: &DrawOpts, tex: &'a FastTex) {
-    draw_model_impl(list, p, base, v, o, Some(tex));
+    draw_model_impl(list, p, None, base, v, o, Some(tex));
 }
 
-fn draw_model_impl<'a>(list: &mut Vec<Prim<'a>>, p: &'a Prepared, base: &Mtx, v: &View, o: &DrawOpts, tex: Option<&'a FastTex>) {
+fn draw_model_impl<'a>(
+    list: &mut Vec<Prim<'a>>,
+    p: &'a Prepared,
+    shader: Option<&'a Shader>,
+    base: &Mtx,
+    v: &View,
+    o: &DrawOpts,
+    tex: Option<&'a FastTex>,
+) {
     let m = &p.model;
     if o.alpha == 0 {
         return;
@@ -138,7 +157,7 @@ fn draw_model_impl<'a>(list: &mut Vec<Prim<'a>>, p: &'a Prepared, base: &Mtx, v:
     for d in m.draws.get(range).unwrap_or(&[]) {
         let Some(shape) = m.shapes.get(d.shape as usize) else { continue };
         let Some(mat0) = m.materials.get(d.material as usize) else { continue };
-        let Some(shader) = p.shaders.get(d.material as usize) else { continue };
+        let Some(shader) = shader.or(p.shaders.get(d.material as usize)) else { continue };
         let over = o.mat_colors.iter().find(|(i, _)| *i == d.material);
         let mut mat_over;
         let mat = match over {
@@ -186,11 +205,14 @@ fn draw_model_impl<'a>(list: &mut Vec<Prim<'a>>, p: &'a Prepared, base: &Mtx, v:
                 let vc = vx.color.map(|c| c as f32 / 255.0);
                 let ras = mat.ras_color(0, vc, [diff; 3], v.ambient);
                 let mut uv = [[0.0; 2]; MAX_TC];
+                // J3D env mapping (texgens from the normal): the stored matrix
+                // is concatenated with the model-view matrix minus its
+                // translation, so the normal is not renormalised and keeps
+                // the model's scale.
+                let env_n = mtx::apply_dir(&mv, vx.normal);
                 for (g, out) in uv.iter_mut().enumerate() {
-                    // J3D env mapping (texmtx mode 1): the stored matrix is
-                    // applied to the view-space normal.
                     let env = mat.tex_gens.get(g).is_some_and(|tg| tg.src == 1);
-                    *out = mat.texcoord(g, vx.pos, if env { n } else { vx.normal }, vx.uv);
+                    *out = mat.texcoord(g, vx.pos, if env { env_n } else { vx.normal }, vx.uv);
                 }
                 Some(SVert { x: s[0], y: s[1], z: s[2], rw: s[3], color: ras, uv })
             })
