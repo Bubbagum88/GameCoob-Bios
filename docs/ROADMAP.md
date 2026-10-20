@@ -44,10 +44,13 @@ Language: Rust with the [`uefi`](https://crates.io/crates/uefi) crate, `no_std`.
 ## Phase 3: Look and feel closer to the console
 
 - [ ] Gouraud shading and per-vertex color so cubes glow like the original
-- [ ] Optional assets from the user's own `ipl.bin` (see "Assets" below):
-      menu textures, fonts, and model data loaded at runtime from the ESP
-- [ ] Reimplement the intro choreography by studying BS2 (gc-ipl listing,
-      cubeboot) rather than copying any recorded animation
+- [x] Optional assets from the user's own `ipl.bin` (see "Assets" below):
+      models, textures and animations loaded at runtime from the ESP
+- [x] Reimplement the intro by decompiling BS2: the cube path, timings,
+      camera, shake, wordmark animation and spin-out follow the IPL's code
+- [ ] Port the main menu (the glass cube with Game Play, Memory Card,
+      Calendar and Options) from the decompiled BS2 menu code
+- [ ] Boot jingle and spin whoosh from the IPL's own audio
 - [ ] More easter eggs in spirit: held buttons that change the intro, a
       secret sound or palette on certain dates, a hidden "cube" menu toy
 
@@ -91,11 +94,13 @@ This repository only ever contains original code and art. Nintendo's assets
 are used only by the person who owns the console, from their own dump:
 
 1. Dump `ipl.bin` from your own GameCube with Swiss.
-2. Run the extractor (currently at `tools/ipl-extract` in the project's shared
-   files, Python 3, no dependencies). It descrambles the ROM, splits BS1/BS2,
-   and writes textures, J3D models, fonts, audio and strings to a folder.
-3. A later converter turns the parts GameCoob uses into a compact pack on the
-   ESP, which the app loads at startup if present and ignores otherwise.
+2. Copy it to the boot partition as `\EFI\GameCoob\ipl.bin`. GameCoob
+   descrambles it at startup and reads the models, textures, animations and
+   the cube's path straight from it (`src/ipl`). Without it, the original
+   GameCoob intro plays instead.
+3. For inspecting a dump, the extractor (currently at `tools/ipl-extract` in
+   the project's shared files) writes textures, models, fonts, audio and
+   strings to a folder.
 
 Extracted output must never be committed. The extractor will move into this
 repo under `tools/` once it settles; its output paths are already gitignored

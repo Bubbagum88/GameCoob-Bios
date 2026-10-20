@@ -1,0 +1,15 @@
+[package]
+name = "ipl-preview"
+version = "0.1.0"
+edition = "2024"
+description = "Host-side check of src/ipl: renders IPL models and textures to PNG"
+
+# Standalone: not part of the UEFI crate. The repo's .cargo/config.toml forces
+# the UEFI target, so build with --target x86_64-unknown-linux-gnu.
+[workspace]
+
+[dependencies]
+libm = "0.2.16"
+
+[profile.release]
+opt-level = 3
