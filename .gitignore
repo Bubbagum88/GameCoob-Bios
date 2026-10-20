@@ -1,0 +1,6 @@
+target/
+screenshots-raw/
+# Never commit Nintendo data from a console dump
+ipl.bin
+*.ipl.bin
+ipl-extracted/
