@@ -294,16 +294,7 @@ impl Stats {
             cv.w,
             cv.h,
         );
-        serial_write(&line);
+        crate::firmware::serial_write(&line);
         *self = Stats { since: self.now, ..Stats::default() };
-    }
-}
-
-/// Write to COM1 directly: the firmware's console would draw over the
-/// picture. Harmless on a PC without the port.
-fn serial_write(s: &str) {
-    for b in s.bytes() {
-        // SAFETY: a byte to the standard COM1 data port.
-        unsafe { core::arch::asm!("out dx, al", in("dx") 0x3f8u16, in("al") b, options(nomem, nostack)) };
     }
 }
