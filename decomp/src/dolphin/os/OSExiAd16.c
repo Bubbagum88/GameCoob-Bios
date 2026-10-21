@@ -1,99 +1,67 @@
+// AD16 (EXI channel 2 debug A/D board), written from the IPL's own code.
 #include <dolphin/os.h>
 #include <dolphin/exi.h>
 
+#define AD16_CHAN 2
+#define AD16_DEV 0
+#define AD16_ID 0x04120000
+#define AD16_CMD_WRITE_REG 0xA0000000
+
 static BOOL Initialized;
 
-int AD16Init(void) {
-    int err;
+BOOL AD16Init(void) {
+    BOOL fail;
     u32 cmd;
     u32 id;
 
     if (Initialized) {
-        return 1;
+        return TRUE;
     }
-
-    if (!EXILock(2, 0, NULL)) {
-        return 0;
+    if (!EXILock(AD16_CHAN, AD16_DEV, NULL)) {
+        return FALSE;
     }
-
-    if (!EXISelect(2, 0, EXI_FREQ_1M)) {
-        EXIUnlock(2);
-        return 0;
+    if (!EXISelect(AD16_CHAN, AD16_DEV, EXI_FREQ_1M)) {
+        EXIUnlock(AD16_CHAN);
+        return FALSE;
     }
-
     cmd = 0;
-    err = 0;
-    err |= !EXIImm(2, &cmd, 2, EXI_WRITE, NULL);
-    err |= !EXISync(2);
-    err |= !EXIImm(2, &id, 4, EXI_READ, NULL);
-    err |= !EXISync(2);
-    err |= !EXIDeselect(2);
+    fail = !EXIImm(AD16_CHAN, &cmd, 2, EXI_WRITE, NULL);
+    fail |= !EXISync(AD16_CHAN);
+    fail |= !EXIImm(AD16_CHAN, &id, 4, EXI_READ, NULL);
+    fail |= !EXISync(AD16_CHAN);
+    fail |= !EXIDeselect(AD16_CHAN);
+    EXIUnlock(AD16_CHAN);
 
-    EXIUnlock(2);
-    if (err != 0 || (id - 0x04120000) != 0) {
-        return 0;
+    if (fail || id != AD16_ID) {
+        return FALSE;
     }
-
     Initialized = TRUE;
-    return 1;
+    return TRUE;
 }
 
-int AD16WriteReg(u32 word) {
-    int err;
+BOOL AD16WriteReg(u32 word) {
+    BOOL fail;
     u32 cmd;
 
-    if (!Initialized || !EXILock(2, 0, NULL)) {
-        return 0;
+    if (!Initialized || !EXILock(AD16_CHAN, AD16_DEV, NULL)) {
+        return FALSE;
     }
-
-    if (!EXISelect(2, 0, EXI_FREQ_8M)) {
-        EXIUnlock(2);
-        return 0;
+    if (!EXISelect(AD16_CHAN, AD16_DEV, EXI_FREQ_8M)) {
+        EXIUnlock(AD16_CHAN);
+        return FALSE;
     }
+    cmd = AD16_CMD_WRITE_REG;
+    fail = !EXIImm(AD16_CHAN, &cmd, 1, EXI_WRITE, NULL);
+    fail |= !EXISync(AD16_CHAN);
+    fail |= !EXIImm(AD16_CHAN, &word, 4, EXI_WRITE, NULL);
+    fail |= !EXISync(AD16_CHAN);
+    fail |= !EXIDeselect(AD16_CHAN);
+    EXIUnlock(AD16_CHAN);
 
-    cmd = 0xA0000000;
-    err = 0;
-    err |= !EXIImm(2, &cmd, 1, EXI_WRITE, NULL);
-    err |= !EXISync(2);
-    err |= !EXIImm(2, &word, 4, EXI_WRITE, NULL);
-    err |= !EXISync(2);
-    err |= !EXIDeselect(2);
-
-    EXIUnlock(2);
-    if (err != 0) {
-        return 0;
+    if (fail) {
+        return FALSE;
     }
-
-    return 1;
-}
-
-int AD16ReadReg(u32* word) {
-    int err;
-    u32 cmd;
-
-    if (!Initialized || !EXILock(2, 0, NULL)) {
-        return 0;
-    }
-
-    if (!EXISelect(2, 0, EXI_FREQ_8M)) {
-        EXIUnlock(2);
-        return 0;
-    }
-
-    cmd = 0xA2000000;
-    err = 0;
-    err |= !EXIImm(2, &cmd, 1, EXI_WRITE, NULL);
-    err |= !EXISync(2);
-    err |= !EXIImm(2, word, 4, EXI_READ, NULL);
-    err |= !EXISync(2);
-    err |= !EXIDeselect(2);
-
-    EXIUnlock(2);
-    if (err != 0) {
-        return 0;
-    }
-
-    return 1;
+    return TRUE;
 }
 
 BOOL AD16Probe(void) {

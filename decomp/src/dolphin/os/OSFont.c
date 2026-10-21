@@ -1,3 +1,4 @@
+// Based on the Pikmin decomp (CC0) OSFont.c
 #include <dolphin/os.h>
 #include <dolphin/hw_regs.h>
 
