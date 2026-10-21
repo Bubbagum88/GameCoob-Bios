@@ -206,16 +206,17 @@ _bs1_sha = Path("config") / config.version / "bs1.sha1"
 if _bs1_sha.exists():
     _bs1_dir = Path(config.build_dir) / config.version / "bs1"
     _binutils = Path(config.binutils_path or Path(config.build_dir) / "binutils")
-    _dtk = config.dtk_path or Path(config.build_dir) / "tools" / "dtk"
+    _exe = ".exe" if is_windows() else ""
+    _dtk = config.dtk_path or Path(config.build_dir) / "tools" / f"dtk{_exe}"
     config.custom_build_rules = [
         {
             "name": "bs1_as",
-            "command": f"{_binutils / 'powerpc-eabi-as'} -mgekko -mregnames -o $out $in",
+            "command": f"{_binutils / f'powerpc-eabi-as{_exe}'} -mgekko -mregnames -o $out $in",
             "description": "AS $in",
         },
         {
             "name": "bs1_bin",
-            "command": f"{_binutils / 'powerpc-eabi-objcopy'} -O binary -j .text $in $out",
+            "command": f"{_binutils / f'powerpc-eabi-objcopy{_exe}'} -O binary -j .text $in $out",
             "description": "OBJCOPY $out",
         },
         {
