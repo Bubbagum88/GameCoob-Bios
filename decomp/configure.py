@@ -600,7 +600,7 @@ config.libs = [
             Object(NonMatching, "jaudio/ipl_813396C0.c"),  # IPL-only, no source yet
             Object(Matching, "jaudio/streamctrl.c"),
             Object(Matching, "jaudio/dspbuf.c"),
-            Object(NonMatching, "jaudio/cpubuf.c"),
+            Object(Matching, "jaudio/cpubuf.c"),
             Object(Matching, "jaudio/playercall.c"),
             Object(NonMatching, "jaudio/dvdthread.c"),
             Object(NonMatching, "jaudio/ipl_8133B560.c"),  # IPL-only, no source yet
@@ -617,7 +617,7 @@ config.libs = [
             Object(NonMatching, "jaudio/driverinterface.c"),
             Object(Matching, "jaudio/dspdriver.c"),
             Object(NonMatching, "jaudio/dspinterface.c"),
-            Object(NonMatching, "jaudio/fxinterface.c"),
+            Object(Matching, "jaudio/fxinterface.c"),
             Object(Matching, "jaudio/bankread.c"),
             Object(Matching, "jaudio/waveread.c"),
             Object(Matching, "jaudio/connect.c"),
@@ -626,7 +626,7 @@ config.libs = [
             Object(NonMatching, "jaudio/ipl_81352A80.c"),  # IPL-only, no source yet
             Object(Matching, "jaudio/aramcall.c"),
             Object(Matching, "jaudio/ja_calc.c"),
-            Object(NonMatching, "jaudio/fat.c"),
+            Object(Matching, "jaudio/fat.c"),
             Object(Matching, "jaudio/cmdstack.c"),
             Object(Matching, "jaudio/virload.c"),
             Object(Matching, "jaudio/heapctrl.c"),

@@ -10,6 +10,9 @@ static u8 dspstatus    = 0;
 
 static s16* dsp_buf[DSPBUF_NUM];
 
+// IPL-only, in the unsplit audiothread code at 813396C0: posts a mixed buffer to the audio thread
+extern "C" u32 fn_81339880(s16* buffer);
+
 /**
  * @TODO: Documentation
  * BS2: 8133A260, size 0x210 (Pikmin 0x1f8)
@@ -47,7 +50,9 @@ s16* CpubufProcess(DSPBUF_EVENTS event)
 			dspstatus = 0;
 		} else {
 			write_buffer = write;
-			dspstatus    = 1;
+			if (fn_81339880(dsp_buf[write_buffer]) == 1) {
+				dspstatus = 1;
+			}
 		}
 		break;
 	}
@@ -89,11 +94,18 @@ s16* CpubufProcess(DSPBUF_EVENTS event)
 
 /**
  * @TODO: Documentation
- * @note UNUSED Size: 000040
+ * BS2: 8133A480, size 0x40 (Pikmin 0x40, unused there)
  */
-void MixCpu(s32)
+s16* MixCpu(s32)
 {
-	TRAP_UNIMPLEMENTED;
+	static u32 mixcpu_unk;
+	static s8 mixcpu_init;
+
+	if (!mixcpu_init) {
+		mixcpu_unk  = 0;
+		mixcpu_init = 1;
+	}
+	return CpubufProcess(DSPBUF_EVENT_MIX);
 }
 
 /**
@@ -104,6 +116,3 @@ void CpuFrameEnd()
 {
 	CpubufProcess(DSPBUF_EVENT_FRAME_END);
 }
-
-// IPL-only functions in this unit with no Pikmin counterpart, still assembly:
-//   fn_8133A480 (size 0x40)
