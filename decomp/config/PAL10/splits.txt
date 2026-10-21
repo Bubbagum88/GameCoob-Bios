@@ -274,6 +274,7 @@ jaudio/jamosc.c:
 jaudio/oneshot.c:
 	.text       start:0x81359140 end:0x8135A8E0 align:32
 	.data       start:0x813F7330 end:0x813F7370
+	.sdata      start:0x814AD150 end:0x814AD158
 	.sdata2     start:0x814AE470 end:0x814AE4A0
 
 jaudio/ipl_8135A8E0.c:
