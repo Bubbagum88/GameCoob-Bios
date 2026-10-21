@@ -8,6 +8,14 @@ It runs after your motherboard's firmware and before any operating system, so
 nothing gets flashed and nothing can be bricked. If something goes wrong, your
 normal boot menu is still there.
 
+The repository also holds a matching decompilation of the GameCube IPL's BS2
+program (the intro and menus), aiming to rebuild every unit byte for byte with
+the original CodeWarrior compiler, starting with PAL 1.0 and later every IPL
+revision. The app is original Rust written from specs drawn from that work.
+
+No Nintendo binaries or assets ship here. Both the app and the decomp read
+everything they need from an `ipl.bin` you dump from your own console.
+
 ## Decomp progress
 
 [![code](decomp/progress/badge-code.svg)](decomp/README.md) [![functions](decomp/progress/badge-functions.svg)](decomp/README.md)
@@ -66,16 +74,19 @@ The NINTENDO GAMECUBE wordmark is blanked out of these images.
 
 ## Assets and Nintendo content
 
-This repository contains only original code and art. Nintendo's code,
-models, textures, fonts and sounds are **never** committed here (the
-screenshots above are renders, with the wordmark removed). GameCoob
-reads them at boot from an `ipl.bin` dump of your own console, if you
-provide one; see [docs/ROADMAP.md](docs/ROADMAP.md).
+Everything in this repository was written by this project, plus reference
+material: screenshots rendered from a dump or captured from the real IPL in
+Dolphin (wordmark removed), and specs and symbol maps written from studying
+the IPL. Nintendo's binaries, models, textures, fonts and sounds are
+**never** committed here; the decomp is hand-written C that rebuilds the
+original program when compiled. GameCoob reads the assets at boot from an
+`ipl.bin` dump of your own console, if you provide one; see
+[docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Download
 
 Every push to `main` is built by GitHub Actions. Open the latest run under
-[Actions â†’ Build](https://github.com/Bubbagum88/GameCoob-Bios/actions/workflows/build.yml)
+[Actions → Build](https://github.com/Bubbagum88/GameCoob-Bios/actions/workflows/build.yml)
 and download **GameCoob-boot-files**. It holds `EFI\BOOT\BOOTX64.EFI`; copy
 the `EFI` folder to a FAT32 USB stick and add your dump as
 `EFI\GameCoob\ipl.bin`.
