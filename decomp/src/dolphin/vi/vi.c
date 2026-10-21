@@ -1,10 +1,14 @@
-// Based on the Pikmin decomp (CC0) vi.c. Not built yet: the IPL's VIInit
-// and VIConfigure differ from every game, so they still need IPL edits.
+// Based on the Pikmin decomp (CC0) vi.c, adapted to the IPL's older SDK
+// revision from the IPL asm: getTiming has no DEBUG_PAL modes, no
+// CurrTiming (field parity is read back from the VI registers),
+// VIConfigure takes the timing from obj->viTVmode, VIGetNextField uses
+// adjDispPosY, and __VISetAdjustingValues is implemented.
 #include <dolphin/vi.h>
 #include <dolphin/gx.h>
 #include <dolphin/hw_regs.h>
 #include <dolphin/os.h>
 #include <dolphin/si.h>
+#include <macros.h>
 
 // Useful macros.
 #define CLAMP(x, l, h)    (((x) > (h)) ? (h) : (((x) < (l)) ? (l) : (x)))
@@ -37,7 +41,6 @@ static vu16 shdwRegs[59];
 
 static VIPositionInfo HorVer;
 
-static VITimingInfo* CurrTiming;
 static s32 CurrTvMode;
 
 // clang-format off
@@ -103,8 +106,6 @@ static BOOL VISetRegs(void) {
 
         shdwChangeMode = 0;
 
-        CurrTiming = HorVer.timing;
-
         return TRUE;
     }
     return FALSE;
@@ -155,8 +156,6 @@ static void __VIRetraceHandler(__OSInterrupt interrupt, OSContext* context) {
     if (flushFlag) {
         if (VISetRegs()) {
             flushFlag = 0;
-
-            __PADRefreshSamplingRate();
         }
     }
 
@@ -168,32 +167,6 @@ static void __VIRetraceHandler(__OSInterrupt interrupt, OSContext* context) {
     OSWakeupThread(&retraceQueue);
     OSClearContext(&exceptionContext);
     OSSetCurrentContext(context);
-}
-
-VIRetraceCallback VISetPreRetraceCallback(VIRetraceCallback callback) {
-    BOOL interrupt;
-    VIRetraceCallback oldCallback;
-
-    oldCallback = PreCB;
-
-    interrupt = OSDisableInterrupts();
-    PreCB     = callback;
-    OSRestoreInterrupts(interrupt);
-
-    return oldCallback;
-}
-
-VIRetraceCallback VISetPostRetraceCallback(VIRetraceCallback callback) {
-    BOOL interrupt;
-    VIRetraceCallback oldCallback;
-
-    oldCallback = PostCB;
-
-    interrupt = OSDisableInterrupts();
-    PostCB    = callback;
-    OSRestoreInterrupts(interrupt);
-
-    return oldCallback;
 }
 
 #pragma dont_inline on
@@ -230,15 +203,6 @@ static VITimingInfo* getTiming(VITVMode mode) {
     case VI_TVMODE_NTSC_PROG:
     {
         return &timing[6];
-    }
-
-    case VI_TVMODE_DEBUG_PAL_INT:
-    {
-        return &timing[2];
-    }
-    case VI_TVMODE_DEBUG_PAL_DS:
-    {
-        return &timing[3];
     }
     }
 
@@ -659,7 +623,7 @@ void VIConfigure(const GXRenderModeObj* obj) {
                              : (HorVer.xfbMode == VI_XFBMODE_SF) ? (u16)(2 * HorVer.panSizeY)
                                                                  : HorVer.panSizeY);
 
-    tm = getTiming((VITVMode)VI_TVMODE(HorVer.tv, HorVer.nonInter));
+    tm = getTiming(obj->viTVmode);
     HorVer.timing = tm;
 
     AdjustPosition(tm->acv);
@@ -707,10 +671,6 @@ void VIConfigure(const GXRenderModeObj* obj) {
     OSRestoreInterrupts(enabled);
 }
 
-void VIConfigurePan(u16 panPosX, u16 panPosY, u16 panSizeX, u16 panSizeY) {
-    TRAP_UNIMPLEMENTED;
-}
-
 void VIFlush(void) {
     BOOL enabled;
     s32 regIndex;
@@ -739,10 +699,6 @@ void VISetNextFrameBuffer(void* fb) {
     OSRestoreInterrupts(enabled);
 }
 
-void VISetNextRightFrameBuffer(void* fb) {
-    TRAP_UNIMPLEMENTED;
-}
-
 void VISetBlack(BOOL isBlack) {
     int interrupt;
     VITimingInfo* tm;
@@ -755,19 +711,13 @@ void VISetBlack(BOOL isBlack) {
     OSRestoreInterrupts(interrupt);
 }
 
-void VISet3D(void) {
-    TRAP_UNIMPLEMENTED;
-}
-
-u32 VIGetRetraceCount(void) {
-    return retraceCount;
-}
-
 static u32 getCurrentHalfLine(void) {
     u32 hcount;
     u32 vcount0;
     u32 vcount;
+    VITimingInfo* tm;
 
+    tm     = HorVer.timing;
     vcount = __VIRegs[VI_VERT_COUNT] & 0x7FF;
     do {
         vcount0 = vcount;
@@ -775,7 +725,7 @@ static u32 getCurrentHalfLine(void) {
         vcount  = __VIRegs[VI_VERT_COUNT] & 0x7FF;
     } while (vcount0 != vcount);
 
-    return ((vcount - 1) * 2) + ((hcount - 1) / CurrTiming->hlw);
+    return ((vcount - 1) * 2) + ((hcount - 1) / tm->hlw);
 }
 
 static u32 getCurrentFieldEvenOdd() {
@@ -786,7 +736,18 @@ static u32 getCurrentFieldEvenOdd() {
     u32 nhlines;
     VITimingInfo* tm;
 
-    if (getCurrentHalfLine() < CurrTiming->numHalfLines) {
+    if (__VIRegs[VI_CLOCK_SEL] & 1) {
+        tm = getTiming(VI_TVMODE_NTSC_PROG);
+    } else {
+        value  = __VIRegs[VI_DISP_CONFIG];
+        fmt    = (value >> 8) & 3;
+        nin    = (value >> 2) & 1;
+        tvMode = VI_TVMODE(fmt, nin);
+        tm     = getTiming(tvMode);
+    }
+
+    nhlines = tm->numHalfLines;
+    if (getCurrentHalfLine() < nhlines) {
         return 1;
     }
     return 0;
@@ -795,46 +756,32 @@ static u32 getCurrentFieldEvenOdd() {
 u32 VIGetNextField(void) {
     s32 nextField;
     BOOL enabled;
+    STACK_PAD_VAR(1); // for stack.
 
     enabled   = OSDisableInterrupts();
     nextField = getCurrentFieldEvenOdd() ^ 1;
     OSRestoreInterrupts(enabled);
-    return nextField ^ (HorVer.panPosY & 1);
-}
-
-u32 VIGetCurrentLine(void) {
-    u32 halfLine;
-    VITimingInfo* tm;
-    BOOL enabled;
-
-    tm = CurrTiming;
-    enabled  = OSDisableInterrupts();
-    halfLine = getCurrentHalfLine();
-    OSRestoreInterrupts(enabled);
-    if (halfLine >= tm->numHalfLines) {
-        halfLine -= tm->numHalfLines;
-    }
-    return halfLine >> 1U;
+    return nextField ^ (HorVer.adjDispPosY & 1);
 }
 
 u32 VIGetTvFormat(void) {
     return *(u32*)OSPhysicalToCached(0xCC);
 }
 
-u32 VIGetDTVStatus(void) {
-    u32 stat;
-    int interrupt;
+void __VISetAdjustingValues(s16 x, s16 y) {
+    BOOL enabled;
+    VITimingInfo* tm;
 
-    interrupt = OSDisableInterrupts();
-    stat      = (__VIRegs[VI_DTV_STAT] & 3);
-    OSRestoreInterrupts(interrupt);
-    return (stat & 1);
-}
-
-void __VISetAdjustingValues(void) {
-    TRAP_UNIMPLEMENTED;
-}
-
-void __VIGetAdjustingValues(void) {
-    TRAP_UNIMPLEMENTED;
+    enabled        = OSDisableInterrupts();
+    displayOffsetH = x;
+    displayOffsetV = y;
+    tm             = HorVer.timing;
+    AdjustPosition(tm->acv);
+    setHorizontalRegs(tm, HorVer.adjDispPosX, HorVer.dispSizeX);
+    if (FBSet) {
+        setFbbRegs(&HorVer, &HorVer.tfbb, &HorVer.bfbb, &HorVer.rtfbb, &HorVer.rbfbb);
+    }
+    setVerticalRegs(HorVer.adjDispPosY, HorVer.adjDispSizeY, tm->equ, tm->acv, tm->prbOdd, tm->prbEven, tm->psbOdd, tm->psbEven,
+                    HorVer.isBlack);
+    OSRestoreInterrupts(enabled);
 }

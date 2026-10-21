@@ -508,6 +508,12 @@ config.libs = [
         ],
     ),
     DolphinLib(
+        "vi",
+        [
+            Object(Matching, "dolphin/vi/vi.c"),
+        ],
+    ),
+    DolphinLib(
         "db",
         [
             Object(Matching, "dolphin/db/db.c"),
