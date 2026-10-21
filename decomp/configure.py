@@ -612,7 +612,7 @@ config.libs = [
             Object(NonMatching, "jaudio/ipl_8133EF20.c"),  # IPL-only, no source yet
             Object(Matching, "jaudio/dspboot.c"),
             Object(Matching, "jaudio/dspproc.c", mw_version="GC/1.2.5"),
-            Object(NonMatching, "jaudio/ipldec.c", mw_version="GC/1.2.5"),
+            Object(Matching, "jaudio/ipldec.c", mw_version="GC/1.2.5"),
             Object(Matching, "jaudio/dsp_cardunlock.c"),
             Object(NonMatching, "jaudio/driverinterface.c"),
             Object(Matching, "jaudio/dspdriver.c"),
