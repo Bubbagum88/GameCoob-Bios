@@ -108,6 +108,9 @@ dolphin/os/OSTime.c:
 	.text       start:0x81363764 end:0x81363F00
 	.data       start:0x814ABFC0 end:0x814AC020
 
+MSL_C/PPCEABI/bare/H/ansi_files.c:
+	.data       start:0x814ACC90 end:0x814ACD68
+
 dolphin/mtx/mtx.c:
 	.text       start:0x813642D0 end:0x8136472C
 	.sdata      start:0x814AD178 end:0x814AD180
@@ -123,3 +126,111 @@ dolphin/mtx/mtx44.c:
 dolphin/mtx/vec.c:
 	.text       start:0x813648E8 end:0x8136498C
 	.sdata2     start:0x814AE510 end:0x814AE518
+
+Runtime/PPCEABI/H/__va_arg.c:
+	.text       start:0x8137AB60 end:0x8137AC54
+
+Runtime/PPCEABI/H/global_destructor_chain.c:
+	.text       start:0x8137AC54 end:0x8137AC9C
+	.dtors      start:0x8137EAC0 end:0x8137EAC4
+	.sbss       start:0x814ADAF0 end:0x814ADAF8
+
+Runtime/PPCEABI/H/runtime.c:
+	.text       start:0x8137AC9C end:0x8137B394
+	.rodata     start:0x81380A28 end:0x81380A40
+
+MSL_C/PPCEABI/bare/H/abort_exit.c:
+	.text       start:0x8137B394 end:0x8137B4A0
+	.sbss       start:0x814ADAF8 end:0x814ADB10
+	.bss        start:0x815D5948 end:0x815D5B48
+
+MSL_C/PPCEABI/bare/H/ansi_fp.c:
+	.text       start:0x8137B4A0 end:0x8137B854
+	.rodata     start:0x81380A40 end:0x81380AC8
+	.sdata2     start:0x814AE5F8 end:0x814AE620
+
+MSL_C/PPCEABI/bare/H/buffer_io.c:
+	.text       start:0x8137B854 end:0x8137B954
+
+MSL_C/PPCEABI/bare/H/critical_regions.ppc_eabi.c:
+	.text       start:0x8137B954 end:0x8137B958
+
+MSL_C/PPCEABI/bare/H/ctype.c:
+	.text       start:0x8137B958 end:0x8137B980
+	.rodata     start:0x81380AC8 end:0x81380CC8
+
+MSL_C/PPCEABI/bare/H/direct_io.c:
+	.text       start:0x8137B980 end:0x8137BC5C
+
+MSL_C/PPCEABI/bare/H/mbstring.c:
+	.text       start:0x8137BC5C end:0x8137BC98
+
+MSL_C/PPCEABI/bare/H/mem.c:
+	.text       start:0x8137BC98 end:0x8137BDE4
+
+MSL_C/PPCEABI/bare/H/mem_funcs.c:
+	.text       start:0x8137BDE4 end:0x8137C0C0
+
+MSL_C/PPCEABI/bare/H/misc_io.c:
+	.text       start:0x8137C0C0 end:0x8137C0C4
+
+MSL_C/PPCEABI/bare/H/printf.c:
+	.text       start:0x8137C0C4 end:0x8137DA50
+	.rodata     start:0x81380CC8 end:0x81380CD8
+	.data       start:0x814ACD68 end:0x814ACF88
+	.sdata      start:0x814AD230 end:0x814AD238
+	.sdata2     start:0x814AE620 end:0x814AE628
+
+MSL_C/PPCEABI/bare/H/qsort.c:
+	.text       start:0x8137DA50 end:0x8137DBB8
+
+MSL_C/PPCEABI/bare/H/rand.c:
+	.text       start:0x8137DBB8 end:0x8137DBE4
+	.sdata      start:0x814AD238 end:0x814AD240
+
+MSL_C/PPCEABI/bare/H/string.c:
+	.text       start:0x8137DBE4 end:0x8137DEBC
+	.sdata      start:0x814AD240 end:0x814AD248
+
+MSL_C/PPCEABI/bare/H/uart_console_io.c:
+	.text       start:0x8137DEBC end:0x8137E03C
+	.sbss       start:0x814ADB10 end:0x814ADB14
+
+MSL_C/PPCEABI/bare/H/wchar_io.c:
+	.text       start:0x8137E03C end:0x8137E0BC
+
+MSL_C/PPCEABI/bare/H/e_asin.c:
+	.text       start:0x8137E0BC end:0x8137E0C4
+
+MSL_C/PPCEABI/bare/H/e_atan2.c:
+	.text       start:0x8137E0C4 end:0x8137E35C
+	.sdata2     start:0x814AE628 end:0x814AE680
+
+MSL_C/PPCEABI/bare/H/s_atan.c:
+	.text       start:0x8137E35C end:0x8137E59C
+	.rodata     start:0x81380CD8 end:0x81380D70
+	.sdata2     start:0x814AE680 end:0x814AE6A8
+
+MSL_C/PPCEABI/bare/H/s_frexp.c:
+	.text       start:0x8137E59C end:0x8137E638
+	.sdata2     start:0x814AE6A8 end:0x814AE6B0
+
+MSL_C/PPCEABI/bare/H/w_atan2.c:
+	.text       start:0x8137E638 end:0x8137E658
+
+MSL_C/PPCEABI/bare/H/hyperbolicsf.c:
+	.text       start:0x8137E658 end:0x8137E660
+
+MSL_C/PPCEABI/bare/H/trigf.c:
+	.text       start:0x8137E660 end:0x8137EA4C
+	.ctors      start:0x8137EAA0 end:0x8137EAA4
+	.rodata     start:0x81380D70 end:0x81380D80
+	.data       start:0x814ACF88 end:0x814ACF98
+	.sdata2     start:0x814AE6B0 end:0x814AE6C8
+
+MSL_C/PPCEABI/bare/H/common_float_tables.c:
+	.rodata     start:0x81380D80 end:0x81380DC8
+
+TRK_MINNOW_DOLPHIN/dolphin_trk_glue.c:
+	.text       start:0x8137EA4C end:0x8137EA9C
+	.data       start:0x814ACF98 end:0x814ACFB4
