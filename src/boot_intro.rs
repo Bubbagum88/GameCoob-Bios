@@ -5,7 +5,7 @@
 use crate::bs2::menu::backend::{FakeCards, FakeDrive};
 use crate::bs2::menu::{Action, Menu, MenuAssets, Pad, SysInfo};
 use alloc::boxed::Box;
-use crate::bs2::{Assets, Input, Intro, cube::Jingle, raster::{Job, Target}, render};
+use crate::bs2::{Assets, Input, Intro, cube::Jingle, raster::{Job, Target, Work}, render};
 use crate::clock::Clock;
 use crate::gfx::{Canvas, ResScale};
 use crate::ipl::Ipl;
@@ -98,12 +98,12 @@ struct Cores {
 
 /// Bumped once per frame to hand `JOB` to the waiting processors.
 static GEN: AtomicU32 = AtomicU32::new(0);
-/// The frame's `Job`, valid while `BUSY` is nonzero.
+/// The current work, a `*const &dyn Work`, valid while `BUSY` is nonzero.
 static JOB: AtomicPtr<c_void> = AtomicPtr::new(core::ptr::null_mut());
 /// Processors still working on the current frame.
 static BUSY: AtomicU32 = AtomicU32::new(0);
-/// Bands the other processors rasterized, for the timing report.
-static AP_BANDS: AtomicU32 = AtomicU32::new(0);
+/// Pieces of the current work the other processors did.
+static AP_DID: AtomicU32 = AtomicU32::new(0);
 
 extern "efiapi" fn ap_loop(_: *mut c_void) {
     let mut seen = 0;
@@ -114,10 +114,9 @@ extern "efiapi" fn ap_loop(_: *mut c_void) {
             continue;
         }
         seen = g;
-        // SAFETY: the BSP keeps the `Job` alive until `BUSY` drops to zero.
-        let job = unsafe { &*(JOB.load(Ordering::Acquire) as *const Job) };
-        let did = job.work();
-        AP_BANDS.fetch_add(did as u32, Ordering::Relaxed);
+        // SAFETY: the BSP keeps the work alive until `BUSY` drops to zero.
+        let w = unsafe { *(JOB.load(Ordering::Acquire) as *const &dyn Work) };
+        AP_DID.fetch_add(w.work() as u32, Ordering::Relaxed);
         BUSY.fetch_sub(1, Ordering::AcqRel);
     }
 }
@@ -139,15 +138,18 @@ impl Cores {
         Some(Cores { aps: n.enabled as u32 - 1, _mp: mp, _done: done })
     }
 
-    /// Rasterize `job` on every processor; returns once all are idle again.
-    fn run(&self, job: &Job) {
+    /// Run `w` on every processor; returns once all are idle again, with
+    /// how many pieces the others did.
+    fn run(&self, w: &dyn Work) -> u32 {
+        AP_DID.store(0, Ordering::Relaxed);
         BUSY.store(self.aps, Ordering::Release);
-        JOB.store(job as *const Job as *mut c_void, Ordering::Release);
+        JOB.store(&w as *const &dyn Work as *mut c_void, Ordering::Release);
         GEN.fetch_add(1, Ordering::AcqRel);
-        let _ = job.work();
+        let _ = w.work();
         while BUSY.load(Ordering::Acquire) != 0 {
             core::hint::spin_loop();
         }
+        AP_DID.load(Ordering::Relaxed)
     }
 }
 
@@ -259,12 +261,14 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
         if !stepped {
             continue;
         }
-        let par = |job: &Job| match &cores {
-            Some(c) => c.run(job),
+        let run = |w: &dyn Work| match &cores {
+            Some(c) => c.run(w),
             None => {
-                let _ = job.work();
+                let _ = w.work();
+                0
             }
         };
+        let par = |job: &Job| stats.ap_bands.set(stats.ap_bands.get() + run(job));
         let (w, h) = res.size(cv);
         if (w, h) != (target.w, target.h) {
             target = Target::new(w, h);
@@ -272,7 +276,9 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
         let d0 = clock.now();
         intro.render_with_menu(&mut target, assets, ma, menu.as_ref(), &par);
         let d1 = clock.now();
-        cv.blit_frame(&target.color, target.w, target.h);
+        cv.blit_frame(&target.color, target.w, target.h, &|w| {
+            run(w);
+        });
         let d2 = clock.now();
         cv.present(gop);
         let d3 = clock.now();
@@ -291,6 +297,8 @@ struct Stats {
     now: f32,
     frames: u32,
     sum: [f32; 3],
+    /// Raster bands the other processors did.
+    ap_bands: core::cell::Cell<u32>,
 }
 
 impl Stats {
@@ -309,7 +317,7 @@ impl Stats {
         let n = self.frames.max(1) as f32;
         // Share of the frame's bands (16 rows each) the other processors did.
         let bands = n * t.h.div_ceil(16) as f32;
-        let others = AP_BANDS.swap(0, Ordering::Relaxed) as f32 * 100.0 / bands;
+        let others = self.ap_bands.get() as f32 * 100.0 / bands;
         let ms = |s: f32| s / n * 1000.0;
         let line = alloc::format!(
             "GameCoob: {:.1} fps, render {}x{} {:.1} ms, scale to {}x{} {:.1} ms, present {:.1} ms (screen {}x{}), {} CPUs, {:.0}% of rows on the others\r\n",

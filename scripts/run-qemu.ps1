@@ -7,7 +7,7 @@
 #   plain emulation, which is many times slower: GameCoob draws every frame
 #   with floating-point math, which emulation does in software.
 #   -Fast insists on Windows Hypervisor Platform; -Slow skips it.
-#   -Cpus N gives the VM N processors (default: up to 8).
+#   -Cpus N gives the VM N processors (default: one per physical core, up to 8).
 # Your dump at local\ipl.bin is added so the real intro plays. Frame timings
 # (fps, render/scale/present ms) are written to local\qemu\serial.log,
 # which starts over on each restart.
@@ -67,7 +67,11 @@ $whpx = @("-accel", "whpx,kernel-irqchip=off")
 $tcg = @("-accel", "tcg,thread=multi,tb-size=512")
 $accel = if ($Fast) { $whpx } elseif ($Slow) { $tcg } else { $whpx + $tcg }
 # The renderer splits each frame across every CPU it is given.
-$cpus = [Math]::Max(2, [Math]::Min(8, [Environment]::ProcessorCount))
+# One per physical core: hyperthread pairs share a core's float units, and a
+# VM's spinning processors fight over them.
+$cores = try { (Get-CimInstance Win32_Processor | Measure-Object NumberOfCores -Sum).Sum } catch { 0 }
+if (-not $cores) { $cores = [Environment]::ProcessorCount }
+$cpus = [Math]::Max(2, [Math]::Min(8, $cores))
 if ($Cpus -gt 0) { $cpus = $Cpus }
 # Show the screen 1:1 instead of stretched to the window, which blurs it.
 $display = @()
