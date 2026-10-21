@@ -41,23 +41,6 @@ typedef struct J3DAnmColor {
     void *data;            /* 0x1C */
 } J3DAnmColor;
 
-/* A model resource and the instance that draws it */
-typedef struct SceneModel {
-    J3DModel model;            /* 0x00 */
-    J3DModelInstance inst;     /* 0x38 */
-} SceneModel;
-
-typedef struct SceneModels {
-    SceneModel bgInner;        /* 0x000 res 0x23 */
-    SceneModel bigCube;        /* 0x0B0 res 0x67 */
-    SceneModel logo;           /* 0x160 res 0x66 */
-    SceneModel bgOuter;        /* 0x210 res 0x24 */
-    J3DModelInstance text;     /* 0x2C0 "GAMECUBE" wordmark */
-    J3DModel textModel;        /* 0x338 res 0x6B */
-    J3DAnmJoint textBck;       /* 0x370 res 0x69 */
-    J3DAnmColor textBrk;       /* 0x388 res 0x6A */
-} SceneModels;
-
 /* Not yet decompiled */
 void InitDVDLoader(void);                                   /* 0x813020C8 */
 BOOL fn_813020B8(void);                                     /* 0x813020B8 disc is bootable */
@@ -92,7 +75,18 @@ static s16 sPrevSpin;                /* 0x814AD3D0 */
 
 static Scene sSceneDefault;          /* 0x814AF878 */
 static Mtx sWorldMtx;                /* 0x814AF950 */
-static SceneModels gScene;           /* 0x814AF980 */
+static J3DModel sBgInnerModel;       /* 0x814AF980 res 0x23 */
+static J3DModelInstance sBgInner;    /* 0x814AF9B8 */
+static J3DModel sBigCubeModel;       /* 0x814AFA30 res 0x67 */
+static J3DModelInstance sBigCube;    /* 0x814AFA68 */
+static J3DModel sLogoModel;          /* 0x814AFAE0 res 0x66 */
+static J3DModelInstance sLogo;       /* 0x814AFB18 */
+static J3DModel sBgOuterModel;       /* 0x814AFB90 res 0x24 */
+static J3DModelInstance sBgOuter;    /* 0x814AFBC8 */
+static J3DModelInstance sText;       /* 0x814AFC40 "GAMECUBE" wordmark */
+static J3DModel sTextModel;          /* 0x814AFCB8 res 0x6B */
+static J3DAnmJoint sTextBck;         /* 0x814AFCF0 res 0x69 */
+static J3DAnmColor sTextBrk;         /* 0x814AFD08 res 0x6A */
 static Mtx sSpinOutMtx;              /* 0x814AFD28 */
 
 static void Scene_SetDefaults(Scene *s);
@@ -141,6 +135,8 @@ void Scene_Update(void) {
         }
         sNextState = Menu_Update();
         break;
+    case 6:
+        break;
     }
 }
 
@@ -162,6 +158,8 @@ void Scene_Draw2D(void) {
         break;
     case SCENE_MENU:
         Scene_Draw2DMenu();
+        break;
+    case 6:
         break;
     }
 }
@@ -825,53 +823,53 @@ void Scene_LoadLangRes(void) {
 
 /* 0x8130D5E0 */
 static void Scene_InitModels(void) {
-    gScene.bgInner.model.data = ResGet(0x23);
-    gScene.bgInner.inst.model = &gScene.bgInner.model;
-    J3D_InitModel(&gScene.bgInner.inst, 1);
-    gScene.bigCube.model.data = ResGet(0x67);
-    gScene.bigCube.inst.model = &gScene.bigCube.model;
-    J3D_InitModel(&gScene.bigCube.inst, 1);
-    gScene.logo.model.data = ResGet(0x66);
-    gScene.logo.inst.model = &gScene.logo.model;
-    J3D_InitModel(&gScene.logo.inst, 1);
-    gScene.bgOuter.model.data = ResGet(0x24);
-    gScene.bgOuter.inst.model = &gScene.bgOuter.model;
-    J3D_InitModel(&gScene.bgOuter.inst, 1);
-    gScene.textModel.data = ResGet(0x6B);
-    gScene.text.model = &gScene.textModel;
-    J3D_InitModel(&gScene.text, 1);
-    gScene.textBck.data = ResGet(0x69);
-    fn_81303B00(&gScene.textBck, 1);
-    gScene.textBrk.data = ResGet(0x6A);
-    fn_81303BA4(&gScene.text, &gScene.textBrk, 1);
-    fn_81303B9C(&gScene.text, &gScene.textBck);
+    sBgInnerModel.data = ResGet(0x23);
+    sBgInner.model = &sBgInnerModel;
+    J3D_InitModel(&sBgInner, 1);
+    sBigCubeModel.data = ResGet(0x67);
+    sBigCube.model = &sBigCubeModel;
+    J3D_InitModel(&sBigCube, 1);
+    sLogoModel.data = ResGet(0x66);
+    sLogo.model = &sLogoModel;
+    J3D_InitModel(&sLogo, 1);
+    sBgOuterModel.data = ResGet(0x24);
+    sBgOuter.model = &sBgOuterModel;
+    J3D_InitModel(&sBgOuter, 1);
+    sTextModel.data = ResGet(0x6B);
+    sText.model = &sTextModel;
+    J3D_InitModel(&sText, 1);
+    sTextBck.data = ResGet(0x69);
+    fn_81303B00(&sTextBck, 1);
+    sTextBrk.data = ResGet(0x6A);
+    fn_81303BA4(&sText, &sTextBrk, 1);
+    fn_81303B9C(&sText, &sTextBck);
     sDialogGlh = ResGet(Res_DialogLayout());
     sDialogSth = ResGet(Res_DialogStrings());
 }
 
 /* 0x8130D700 */
 J3DModelInstance *Scene_GetBgInner(void) {
-    return &gScene.bgInner.inst;
+    return &sBgInner;
 }
 
 /* 0x8130D70C */
 J3DModelInstance *Scene_GetBigCube(void) {
-    return &gScene.bigCube.inst;
+    return &sBigCube;
 }
 
 /* 0x8130D718 */
 J3DModelInstance *Scene_GetLogo(void) {
-    return &gScene.logo.inst;
+    return &sLogo;
 }
 
 /* 0x8130D724 */
 void *Scene_GetLogoText(void) {
-    return &gScene.text;
+    return &sText;
 }
 
 /* 0x8130D730 */
 J3DModelInstance *Scene_GetBgOuter(void) {
-    return &gScene.bgOuter.inst;
+    return &sBgOuter;
 }
 
 #define SCENE_SHAKE_MAX 3000
@@ -899,28 +897,28 @@ static void Scene_Draw2DNoDisc(void) {
     if (shake > SCENE_SHAKE_MAX) {
         shake = SCENE_SHAKE_MAX;
     }
-    gScene.text.alpha = (u8)(fade * 255 / 255);
-    J3D_Draw(&gScene.text);
+    sText.alpha = (u8)(fade * 255 / 255);
+    J3D_Draw(&sText);
     fn_81304CE8();
-    gScene.bgInner.inst.alpha = (u8)(fade * Scene_ShakeAlpha(s, shake) / 255);
-    if (gScene.bgInner.inst.alpha > 0) {
-        J3D_Draw(&gScene.bgInner.inst);
+    sBgInner.alpha = (u8)(fade * Scene_ShakeAlpha(s, shake) / 255);
+    if (sBgInner.alpha > 0) {
+        J3D_Draw(&sBgInner);
     }
     wobble = s->wobbleAmp;
     if (wobble > SCENE_SHAKE_MAX) {
         wobble = SCENE_SHAKE_MAX;
     }
-    gScene.bgOuter.inst.alpha = (u8)(fade * Scene_ShakeAlpha(s, wobble) / 255);
-    if (gScene.bgOuter.inst.alpha > 0) {
-        J3D_DrawPacket(&gScene.bgOuter.inst, (u8 *)gScene.bgOuter.inst.model->packets + 0x30);
+    sBgOuter.alpha = (u8)(fade * Scene_ShakeAlpha(s, wobble) / 255);
+    if (sBgOuter.alpha > 0) {
+        J3D_DrawPacket(&sBgOuter, (u8 *)sBgOuter.model->packets + 0x30);
     }
     Cube_DrawBig((255 - s->logoAlpha) * fade / 255);
-    gScene.logo.inst.alpha = (u8)(s->logoAlpha * fade / 255);
-    if (gScene.logo.inst.alpha > 0) {
-        J3D_Draw(&gScene.logo.inst);
+    sLogo.alpha = (u8)(s->logoAlpha * fade / 255);
+    if (sLogo.alpha > 0) {
+        J3D_Draw(&sLogo);
     }
-    if (gScene.bgOuter.inst.alpha > 0) {
-        J3D_DrawPacket(&gScene.bgOuter.inst, (u8 *)gScene.bgOuter.inst.model->packets + 0x78);
+    if (sBgOuter.alpha > 0) {
+        J3D_DrawPacket(&sBgOuter, (u8 *)sBgOuter.model->packets + 0x78);
     }
 
     c.a = s->fatalFade * 255 / s->fatalFadeFrames;
@@ -1025,32 +1023,32 @@ static void Scene_Draw2DMode0(void) {
         return;
     }
 
-    gScene.text.alpha = (u8)(s->m0LogoFade * 255 / s->m0LogoFrames);
-    J3D_Draw(&gScene.text);
+    sText.alpha = (u8)(s->m0LogoFade * 255 / s->m0LogoFrames);
+    J3D_Draw(&sText);
     shake = s->landImpulse + s->dropImpulse;
     if (shake > SCENE_SHAKE_MAX) {
         shake = SCENE_SHAKE_MAX;
     }
-    gScene.bgInner.inst.alpha = Scene_ShakeAlpha(s, shake);
+    sBgInner.alpha = Scene_ShakeAlpha(s, shake);
     fn_81304CE8();
-    if (gScene.bgInner.inst.alpha > 0) {
-        J3D_Draw(&gScene.bgInner.inst);
+    if (sBgInner.alpha > 0) {
+        J3D_Draw(&sBgInner);
     }
     wobble = s->wobbleAmp;
     if (wobble > SCENE_SHAKE_MAX) {
         wobble = SCENE_SHAKE_MAX;
     }
-    gScene.bgOuter.inst.alpha = Scene_ShakeAlpha(s, wobble);
-    if (gScene.bgOuter.inst.alpha > 0) {
-        J3D_DrawPacket(&gScene.bgOuter.inst, (u8 *)gScene.bgOuter.inst.model->packets + 0x30);
+    sBgOuter.alpha = Scene_ShakeAlpha(s, wobble);
+    if (sBgOuter.alpha > 0) {
+        J3D_DrawPacket(&sBgOuter, (u8 *)sBgOuter.model->packets + 0x30);
     }
     Cube_DrawBig(255 - s->logoAlpha);
-    gScene.logo.inst.alpha = s->logoAlpha;
-    if (gScene.logo.inst.alpha > 0) {
-        J3D_Draw(&gScene.logo.inst);
+    sLogo.alpha = s->logoAlpha;
+    if (sLogo.alpha > 0) {
+        J3D_Draw(&sLogo);
     }
-    if (gScene.bgOuter.inst.alpha > 0) {
-        J3D_DrawPacket(&gScene.bgOuter.inst, (u8 *)gScene.bgOuter.inst.model->packets + 0x78);
+    if (sBgOuter.alpha > 0) {
+        J3D_DrawPacket(&sBgOuter, (u8 *)sBgOuter.model->packets + 0x78);
     }
 
     GX_Setup2DView();
@@ -1122,23 +1120,23 @@ static void Scene_Draw2DDisc(void) {
     if (wobble > SCENE_SHAKE_MAX) {
         wobble = SCENE_SHAKE_MAX;
     }
-    gScene.bgOuter.inst.alpha = Scene_ShakeAlpha(s, wobble);
-    if (gScene.bgOuter.inst.alpha > 0) {
-        J3D_DrawPacket(&gScene.bgOuter.inst, (u8 *)gScene.bgOuter.inst.model->packets + 0x30);
+    sBgOuter.alpha = Scene_ShakeAlpha(s, wobble);
+    if (sBgOuter.alpha > 0) {
+        J3D_DrawPacket(&sBgOuter, (u8 *)sBgOuter.model->packets + 0x30);
     }
-    gScene.logo.inst.alpha = s->logoAlpha - s->discLogoDim * s->discFade / s->discFadeFrames;
-    gScene.text.alpha = gScene.logo.inst.alpha;
-    if (gScene.logo.inst.alpha > 0) {
-        J3D_Draw(&gScene.logo.inst);
-        J3D_Draw(&gScene.text);
+    sLogo.alpha = s->logoAlpha - s->discLogoDim * s->discFade / s->discFadeFrames;
+    sText.alpha = sLogo.alpha;
+    if (sLogo.alpha > 0) {
+        J3D_Draw(&sLogo);
+        J3D_Draw(&sText);
     }
     wobble = s->wobbleAmp;
     if (wobble > SCENE_SHAKE_MAX) {
         wobble = SCENE_SHAKE_MAX;
     }
-    gScene.bgOuter.inst.alpha = Scene_ShakeAlpha(s, wobble);
-    if (gScene.bgOuter.inst.alpha > 0) {
-        J3D_DrawPacket(&gScene.bgOuter.inst, (u8 *)gScene.bgOuter.inst.model->packets + 0x78);
+    sBgOuter.alpha = Scene_ShakeAlpha(s, wobble);
+    if (sBgOuter.alpha > 0) {
+        J3D_DrawPacket(&sBgOuter, (u8 *)sBgOuter.model->packets + 0x78);
     }
     Scene_DrawAsk(s, 0, s->askChoice, s->askFade * 255 / s->askFadeFrames);
     c.a = s->fatalFade * 255 / s->fatalFadeFrames;
@@ -1161,25 +1159,25 @@ static void Scene_Draw2DSpinOut(void) {
         if (shake > SCENE_SHAKE_MAX) {
             shake = SCENE_SHAKE_MAX;
         }
-        gScene.bgInner.inst.alpha = Scene_ShakeAlpha(s, shake);
-        gScene.bigCube.inst.alpha = (u8)(s->bgAlpha * s->outFrame / s->outFadeFrames);
-        gScene.text.alpha = (u8)(s->bgAlpha * s->outFrame / s->outFadeFrames);
-        gScene.bgInner.inst.alpha = (u8)((s->outFadeFrames - s->outFrame) * (s->shakeAlpha * shake) /
+        sBgInner.alpha = Scene_ShakeAlpha(s, shake);
+        sBigCube.alpha = (u8)(s->bgAlpha * s->outFrame / s->outFadeFrames);
+        sText.alpha = (u8)(s->bgAlpha * s->outFrame / s->outFadeFrames);
+        sBgInner.alpha = (u8)((s->outFadeFrames - s->outFrame) * (s->shakeAlpha * shake) /
                                          (s->outFadeFrames * SCENE_SHAKE_MAX));
-        gScene.text.alpha = gScene.bgInner.inst.alpha * s->m0LogoFade / s->m0LogoFrames;
-        if (gScene.text.alpha < 0) {
-            gScene.text.alpha = 0;
+        sText.alpha = sBgInner.alpha * s->m0LogoFade / s->m0LogoFrames;
+        if (sText.alpha < 0) {
+            sText.alpha = 0;
         }
-        J3D_Draw(&gScene.bgInner.inst);
-        J3D_Draw(&gScene.text);
+        J3D_Draw(&sBgInner);
+        J3D_Draw(&sText);
     } else {
-        gScene.bigCube.inst.alpha = s->bgAlpha;
+        sBigCube.alpha = s->bgAlpha;
     }
-    if (gScene.bigCube.inst.alpha > 0) {
+    if (sBigCube.alpha > 0) {
         GXColor fog = { 0x28, 0x28, 0x28, 0xFF };
         GXColor nofog = { 0xFF, 0xFF, 0xFF, 0xFF };
         GXSetFog_(4, fog);
-        J3D_Draw(&gScene.bigCube.inst);
+        J3D_Draw(&sBigCube);
         GXSetFog_(4, nofog);
     }
     end = s->outTurnFrames + s->outSettleFrames + s->outCoastFrames;
@@ -1199,23 +1197,23 @@ static void Scene_Draw2DMenu(void) {
     Scene_Get();
     menu = Menu_Get();
     alpha = menu->bgMinAlpha + (255 - menu->bgMinAlpha) * (0x7FFF - menu->zoom) / 0x7FFF;
-    gScene.bigCube.inst.alpha = alpha;
-    if (gScene.bigCube.inst.alpha > 0) {
+    sBigCube.alpha = alpha;
+    if (sBigCube.alpha > 0) {
         GXColor fog = { 0x28, 0x28, 0x28, 0xFF };
         GXColor nofog = { 0xFF, 0xFF, 0xFF, 0xFF };
         GXSetFog_(4, fog);
-        J3D_DrawPacket(&gScene.bigCube.inst, (u8 *)gScene.bigCube.inst.model->packets + 0x78);
+        J3D_DrawPacket(&sBigCube, (u8 *)sBigCube.model->packets + 0x78);
         GXSetFog_(4, nofog);
     }
     CardIcon_Draw();
     GameIcon_Draw();
     OptionIcon_Draw();
     ClockIcon_Draw();
-    if (gScene.bigCube.inst.alpha > 0) {
+    if (sBigCube.alpha > 0) {
         GXColor fog = { 0x28, 0x28, 0x28, 0xFF };
         GXColor nofog = { 0xFF, 0xFF, 0xFF, 0xFF };
         GXSetFog_(4, fog);
-        J3D_DrawPacket(&gScene.bigCube.inst, (u8 *)gScene.bigCube.inst.model->packets + 0x168);
+        J3D_DrawPacket(&sBigCube, (u8 *)sBigCube.model->packets + 0x168);
         GXSetFog_(4, nofog);
     }
     Menu_Draw2D(alpha);
