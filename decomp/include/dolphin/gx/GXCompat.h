@@ -45,6 +45,8 @@ u32 PPCMfwpar(void);
 
 #ifdef __MWERKS__
 #define AT_ADDRESS(addr) : (addr)
+#define __mwerks_sync() __sync()
+#define __mwerks_cntlzw(x) __cntlzw(x)
 #else
 #define AT_ADDRESS(addr)
 #define __mwerks_cntlzw(x) __builtin_clz(x)
