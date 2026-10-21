@@ -7,6 +7,7 @@ BEGIN_SCOPE_EXTERN_C
 
 typedef unsigned long size_t;
 
+#undef NULL
 #if defined(__cplusplus)
 #define NULL (0)
 #else
