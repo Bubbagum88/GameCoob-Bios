@@ -12,7 +12,10 @@ typedef struct J3DMaterial {
 } J3DMaterial;
 
 typedef struct J3DModel {
-    u8 pad0[0x10];
+    void* data;            /* 0x00 BMD resource */
+    u8 pad4[0x8 - 0x4];
+    u8* packets;           /* 0x08 display list packets */
+    u8 padC[0x10 - 0xC];
     J3DMaterial* material; /* 0x10 */
     u8 pad14[0x38 - 0x14];
 } J3DModel;
@@ -29,7 +32,7 @@ void J3D_InitModel(J3DModelInstance* inst, s32 flags);                 /* 0x8130
 void J3D_CopyInstance(J3DModelInstance* dst, J3DModelInstance* src);   /* 0x81303A9C */
 void J3D_CalcJoints(J3DModelInstance* inst);                           /* 0x8130418C */
 void J3D_Draw(J3DModelInstance* inst);                                 /* 0x813051AC */
-void J3D_SetModelMtx(J3DModelInstance* inst, Mtx m, Vec* scale);       /* 0x8130537C */
+void J3D_SetModelMtx(J3DModelInstance* inst, Mtx m, Vec scale);       /* 0x8130537C */
 void J3D_SetViewMtx(J3DModelInstance* inst, MtxPtr view);              /* 0x813053C8 */
 
 /* BS2 math helpers */

@@ -3,8 +3,8 @@
 
 #include <dolphin/types.h>
 
-typedef BOOL (*OSResetFunction)(BOOL final);
 typedef struct OSResetFunctionInfo OSResetFunctionInfo;
+typedef BOOL (*OSResetFunction)(BOOL final);
 
 struct OSResetFunctionInfo {
     OSResetFunction func;
@@ -15,5 +15,7 @@ struct OSResetFunctionInfo {
 
 void OSRegisterResetFunction(OSResetFunctionInfo* info);
 u32 OSGetResetCode(void);
+
+#define OS_RESETCODE_RESTART 0x80000000
 
 #endif

@@ -1,50 +1,107 @@
-// Non-matching: functionally equivalent decompilation of the rolling-cube
-// intro (PAL 1.0 BS2, 0x8130EF48..0x81310F58). Addresses are given above
-// each function. Data such as the path table lives in the user's ipl.bin.
+// Rolling-cube intro (PAL 1.0 BS2, 0x8130EF48..0x81310F58): the small cube
+// falls, rolls a path over three faces leaving tiles behind, rises, drops
+// into the big cube and the logo fades in.
+//
+// Draft for matching (m2c first pass, cleaned up against the asm); not yet
+// compiled with CodeWarrior.
 
 #include "bs2/cube.h"
 #include "bs2/scene.h"
 #include "bs2/j3d.h"
-#include "bs2/res.h"
-#include "bs2/sound.h"
-#include "bs2/pad.h"
-#include <dolphin/gx.h>
+#include "bs2/menu.h"
 
-extern CubePathStep cubePath[];          /* 0x81381160 */
+/* Not yet in the SDK headers */
+typedef struct PADStatus {
+    u16 button;
+    s8 stickX, stickY;
+    s8 substickX, substickY;
+    u8 triggerL, triggerR;
+    u8 analogA, analogB;
+    s8 err;
+} PADStatus;
 
-static CubeTile cubeGrid[CUBE_FACES][CUBE_GRID][CUBE_GRID]; /* 0x814AFD58 */
-static Mtx cubeMtx;                      /* 0x814B5DC0 (grid + 0x6068) */
-static J3DModel cubeSmall;               /* 0x814B5DF0 */
-static J3DModelInstance cubeSmallInst;   /* 0x814B5E28 */
-static CubeState cubeDefault;            /* 0x814B5D58 */
+typedef union {
+    u8 u8;
+    u16 u16;
+    u32 u32;
+    s8 s8;
+    s16 s16;
+    s32 s32;
+    f32 f32;
+} PPCWGPipe;
 
-static CubeState *cube;                  /* 0x814AD3D8 */
-static s32 cubePhase;                    /* 0x814AD3DC */
-static s32 cubeNextPhase;                /* 0x814AD3E0 */
-static BOOL cubeRunning;                 /* 0x814AD3E4 */
-static void *cubeTileTex;                /* 0x814AD3E8: resource 0x65 */
-static u8 cubeLandPending;               /* 0x814ACFF8 */
-static u8 cubeDropPending;               /* 0x814ACFF9 */
-static u8 cubeJinglePending;             /* 0x814ACFFA */
+#define GXWGFifo (*(volatile PPCWGPipe *)0xCC008000)
 
-static CubePathStep *Cube_PathStep(void) { return &cubePath[cube->step]; }
+static inline void GXPosition3s16(s16 x, s16 y, s16 z) {
+    GXWGFifo.s16 = x;
+    GXWGFifo.s16 = y;
+    GXWGFifo.s16 = z;
+}
+
+static inline void GXTexCoord2s16(s16 s, s16 t) {
+    GXWGFifo.s16 = s;
+    GXWGFifo.s16 = t;
+}
+
+u32 PADRead(PADStatus *status);                            /* 0x8136B670 */
+void GXBegin(s32 type, s32 fmt, u16 count);                /* 0x813767C8 */
+void GXSetVtxAttrFmt(s32 fmt, s32 attr, s32 cnt, s32 type, u8 frac); /* 0x813757A0 */
+void GXSetCullMode(s32 mode);                              /* 0x81376A3C */
+void GXSetChanMatColor(s32 chan, GXColor color);           /* 0x81377704 */
+u32 Pad_GetEasterEgg(void);                                /* 0x81302DE8 */
+void J3D_AnimateJoints(void *inst, f32 frame);             /* 0x813043BC */
+void J3D_LoadTexture(s32 map, void *tex);                  /* 0x81305F58 */
+void MtxRotAxis(Mtx m, s32 axis, s16 angle);               /* 0x81307208 */
+
+static CubePathStep sCubePath[] = {                        /* 0x81381160 */
+    { 0, 1, 5 },    { 0, 1, 0xFF }, { 3, 1, 0xFF }, { 3, 1, 0xFF }, { 5, 1, 0xFF },
+    { 0, 2, 0xFF }, { 0, 2, 0xFF }, { 3, 2, 0xFF }, { 3, 2, 0xFF }, { 6, 2, 0xFF },
+    { 0, 3, 0xFF }, { 0, 3, 0xFF }, { 3, 3, 0xFF }, { 3, 3, 0xFF }, { 2, 3, 0xFF },
+    { 2, 3, 0xFF }, { 7, 3, 0xFF }, { 3, 1, 0xFF }, { 3, 1, 5 },    { 3, 1, 5 },
+    { 3, 1, 5 },    { 3, 1, 5 },    { 3, 1, 5 },    { 3, 1, 5 },    { 3, 1, 5 },
+    { 3, 1, 5 },    { 3, 1, 5 },    { 3, 1, 5 },    { 3, 1, 5 },    { 3, 1, 5 },
+    { 2, 1, 5 },    { 2, 1, 5 },    { 2, 1, 5 },    { 8, 0, 0 },
+};
+
+static u8 sLandPending = TRUE;       /* 0x814ACFF8 */
+static u8 sDropPending = TRUE;       /* 0x814ACFF9 */
+static u8 sJinglePending = TRUE;     /* 0x814ACFFA */
+
+static CubeState *sCube;             /* 0x814AD3D8 */
+static s32 sPhase;                   /* 0x814AD3DC */
+static s32 sNextPhase;               /* 0x814AD3E0 */
+static BOOL sRunning;                /* 0x814AD3E4 */
+static void *sTileTex;               /* 0x814AD3E8 res 0x65 */
+
+static CubeTile sGrid[CUBE_FACES][CUBE_GRID][CUBE_GRID]; /* 0x814AFD58 */
+static CubeState sCubeDefault;       /* 0x814B5D58 */
+static Mtx sCubeMtx;                 /* 0x814B5DC0 */
+static J3DModel sCubeModel;          /* 0x814B5DF0 res 0xA8 */
+static J3DModelInstance sCubeInst;   /* 0x814B5E28 */
 
 /* 0x8130EF48 */
-CubeTile *Cube_GetGrid(void) { return &cubeGrid[0][0][0]; }
+CubeTile *Cube_GetGrid(void) {
+    return &sGrid[0][0][0];
+}
 
 /* 0x8130EF54 */
-CubeState *Cube_Get(void) { return cube; }
+CubeState *Cube_Get(void) {
+    return sCube;
+}
 
 /* 0x8130EF5C */
 static void Cube_ClearGrid(void) {
     s32 f, x, y;
-    for (f = 0; f < CUBE_FACES; f++)
-        for (x = 0; x < CUBE_GRID; x++)
+
+    for (f = 0; f < CUBE_FACES; f++) {
+        for (x = 0; x < CUBE_GRID; x++) {
             for (y = 0; y < CUBE_GRID; y++) {
-                cubeGrid[f][x][y].life = 0;
-                cubeGrid[f][x][y].group = 0;
-                cubeGrid[f][x][y].state = 0;
+                sGrid[f][x][y].life = 0;
+                sGrid[f][x][y].group = 0;
+                sGrid[f][x][y].state = 0;
             }
+        }
+    }
 }
 
 /* 0x8130F06C */
@@ -53,26 +110,27 @@ static void Cube_Reset(CubeState *c) {
     c->y = 18;
     c->face = 0;
     c->step = 0;
-    c->dir = cubePath[c->step].dir;
+    c->dir = sCubePath[c->step].dir;
     c->tileInset = 0;
     c->done = 0;
-    if (!(c->flags & 1))
+    if (!(c->flags & 1)) {
         c->color = 0x9664FF00;
-    cubePhase = CUBE_PHASE_FALL;
-    cubeNextPhase = CUBE_PHASE_FALL;
+    }
+    sPhase = CUBE_PHASE_FALL;
+    sNextPhase = CUBE_PHASE_FALL;
 
     /* Constant acceleration so the fall covers fallHeight0 in fallFrames. */
     c->fallVel = 0.0f;
-    c->fallAccel = (2.0f * c->fallHeight0) / (f32)(c->fallFrames * c->fallFrames);
+    c->fallAccel = 2.0f * c->fallHeight0 / (c->fallFrames * c->fallFrames);
     c->fallHeight = c->fallHeight0;
 
-    /* The drop starts with dropVel0 and accelerates to land in dropFrames. */
+    /* The drop starts at dropVel0 and accelerates to land in dropFrames. */
     c->dropHeight0 = c->riseHeight;
     c->dropVel = c->dropVel0;
-    c->dropAccel = (2.0f * c->dropHeight0) / (f32)(c->dropFrames * c->dropFrames)
-                 - c->dropVel / (f32)c->dropFrames;
-    if (c->dropAccel < 0.0f)
+    c->dropAccel = 2.0f * c->dropHeight0 / (c->dropFrames * c->dropFrames) - c->dropVel / c->dropFrames;
+    if (c->dropAccel < 0.0f) {
         c->dropAccel = 0.0f;
+    }
     c->dropHeight = c->dropHeight0;
 
     c->fallFrame = 0;
@@ -82,7 +140,7 @@ static void Cube_Reset(CubeState *c) {
     c->logoFrame = 0;
     c->textFrame = 0;
     c->jingleFrame = 0;
-    cubeJinglePending = TRUE;
+    sJinglePending = TRUE;
 }
 
 /* 0x8130F1C0 */
@@ -99,7 +157,7 @@ static void Cube_SetDefaults(CubeState *c) {
     c->sideFrames = 8;
     c->cornerFrames = 15;
     c->stepDelay = 0;
-    c->alpha = 0xFF;
+    c->alpha = 255;
     c->unk1C = 5;
     c->riseTurns = 6;
     c->riseFrames = 15;
@@ -120,25 +178,28 @@ static void Cube_SetDefaults(CubeState *c) {
 /* 0x8130F28C */
 void Cube_Init(BOOL first) {
     if (first) {
-        cube = &cubeDefault;
-        Cube_SetDefaults(&cubeDefault);
+        sCube = &sCubeDefault;
+        Cube_SetDefaults(&sCubeDefault);
     }
     Cube_ClearGrid();
-    Cube_Reset(cube);
-    if (first)
+    Cube_Reset(sCube);
+    if (first) {
         Cube_InitModels();
-    cubeRunning = TRUE;
-    cubeLandPending = TRUE;
-    cubeDropPending = TRUE;
+    }
+    sRunning = TRUE;
+    sLandPending = TRUE;
+    sDropPending = TRUE;
 }
 
 /* 0x8130F2F0: advance tile lifetimes by one path step. */
 static void Cube_TickTiles(void) {
     s32 f, x, y;
-    for (f = 0; f < CUBE_FACES; f++)
-        for (x = 0; x < CUBE_GRID; x++)
+    CubeTile *t;
+
+    for (f = 0; f < CUBE_FACES; f++) {
+        for (x = 0; x < CUBE_GRID; x++) {
             for (y = 0; y < CUBE_GRID; y++) {
-                CubeTile *t = &cubeGrid[f][x][y];
+                t = &sGrid[f][x][y];
                 if (t->state == 2) {
                     t->state = 0;
                     t->group = 0;
@@ -146,446 +207,530 @@ static void Cube_TickTiles(void) {
                 } else if (t->state == 1) {
                     t->state = 0;
                 } else if (t->group != 0 && t->life != 0xFF) {
-                    if (--t->life == 0)
+                    t->life--;
+                    if (t->life == 0) {
                         t->state = 2;
+                    }
                 }
             }
+        }
+    }
 }
 
-/* 0x8130F418: move the cube one cell (or onto the next face) and drop a tile. */
+/* 0x8130F418: move one cell (or over an edge onto another face) and leave
+   a tile there. */
 static void Cube_StepGrid(void) {
     CubeTile *t;
-    s32 rel;
+    s8 face;
 
-    switch ((s8)cube->dir) {
-    case CUBE_DIR_XPOS: cube->x = cube->x < 32 ? cube->x + 1 : 32; break;
-    case CUBE_DIR_YPOS: cube->y = cube->y < 32 ? cube->y + 1 : 32; break;
-    case CUBE_DIR_XNEG: cube->x = cube->x > 0 ? cube->x - 1 : 0; break;
-    case CUBE_DIR_YNEG: cube->y = cube->y > 0 ? cube->y - 1 : 0; break;
-    default: {
-        s8 face = (s8)cube->dir - CUBE_DIR_FACE0;
-        rel = (face + 3 - (s8)cube->face) % 3;
-        /* Crossing an edge swaps which axis sits on the shared edge (16). */
-        if (rel == 1 && cube->y == 16) {
-            cube->y = cube->x;
-            cube->x = 16;
-            cube->face = face;
+    switch (sCube->dir) {
+    case CUBE_DIR_XPOS:
+        sCube->x = sCube->x < CUBE_GRID ? sCube->x + 1 : CUBE_GRID;
+        break;
+    case CUBE_DIR_YPOS:
+        sCube->y = sCube->y < CUBE_GRID ? sCube->y + 1 : CUBE_GRID;
+        break;
+    case CUBE_DIR_XNEG:
+        sCube->x = sCube->x > 0 ? sCube->x - 1 : 0;
+        break;
+    case CUBE_DIR_YNEG:
+        sCube->y = sCube->y > 0 ? sCube->y - 1 : 0;
+        break;
+    default:
+        face = sCube->dir - CUBE_DIR_FACE0;
+        if ((face + 3 - sCube->face) % 3 == 1 && sCube->y == 16) {
+            sCube->y = sCube->x;
+            sCube->x = 16;
+            sCube->face = face;
         }
-        rel = (face + 3 - (s8)cube->face) % 3;
-        if (rel == 2 && cube->x == 16) {
-            cube->x = cube->y;
-            cube->y = 16;
-            cube->face = face;
+        if ((face + 3 - sCube->face) % 3 == 2 && sCube->x == 16) {
+            sCube->x = sCube->y;
+            sCube->y = 16;
+            sCube->face = face;
         }
         break;
     }
-    }
-
     Cube_TickTiles();
-    t = &cubeGrid[(s8)cube->face][cube->x][cube->y];
-    t->life = Cube_PathStep()->life;
-    t->group = Cube_PathStep()->group;
-    t->state = 1;
-    t->color = cube->color;
+    sGrid[sCube->face][sCube->x][sCube->y].life = sCubePath[sCube->step].life;
+    sGrid[sCube->face][sCube->x][sCube->y].group = sCubePath[sCube->step].group;
+    sGrid[sCube->face][sCube->x][sCube->y].state = 1;
+    sGrid[sCube->face][sCube->x][sCube->y].color = sCube->color;
 }
 
-static s32 Cube_RollAngle(s32 *max) {
-    if ((s8)cube->dir >= CUBE_DIR_FACE0) {
-        *max = 0x8000;
-        return (cube->stepFrame << 15) / (cube->cornerFrames - cube->stepDelay);
-    }
-    *max = 0x4000;
-    return (cube->stepFrame << 14) / (cube->sideFrames - cube->stepDelay);
-}
-
-/* 0x8130F6B8: rotate about the leading bottom edge. */
+/* 0x8130F6B8: roll about the leading bottom edge. */
 static void Cube_CalcRollMtx(Mtx m) {
-    Mtx t, r;
-    s32 max;
-    s32 angle = Cube_RollAngle(&max);
-    s32 half = cube->size / 2;
-    if (angle > max)
+    Mtx t;
+    Mtx rot;
+    s32 angle;
+    s32 max = 0x4000;
+
+    if (sCube->dir >= CUBE_DIR_FACE0) {
+        max = 0x8000;
+        angle = (sCube->stepFrame << 15) / (sCube->cornerFrames - sCube->stepDelay);
+    } else {
+        angle = (sCube->stepFrame << 14) / (sCube->sideFrames - sCube->stepDelay);
+    }
+    if (angle > max) {
         angle = max;
-    MtxRotTrans(0, 0, 0, t, -half, half, -half);
+    }
+    MtxRotTrans(0, 0, 0, t, -sCube->size / 2, sCube->size / 2, -sCube->size / 2);
     PSMTXConcat(m, t, m);
-    MtxRotAxis(r, 'x', (s16)angle);
-    PSMTXConcat(r, m, m);
+    MtxRotAxis(rot, 'x', angle);
+    PSMTXConcat(rot, m, m);
 }
 
-/* 0x8130F7F0: orient the roll along dir and place the cube on its cell/face. */
+/* 0x8130F7F0: turn to the step direction, move to the grid cell, and onto
+   the current face. */
 static void Cube_CalcGridMtx(Mtx m) {
-    Mtx t, r;
+    Mtx t;
+    Mtx face;
     s16 yaw = 0;
-    s32 half = cube->size / 2;
 
-    switch ((s8)cube->dir) {
-    case CUBE_DIR_XPOS: yaw = -0x4000; break;
-    case CUBE_DIR_YPOS: yaw = 0x7FFF; break;
-    case CUBE_DIR_XNEG: yaw = 0x4000; break;
-    case CUBE_DIR_YNEG: yaw = 0; break;
+    switch (sCube->dir) {
+    case CUBE_DIR_XPOS:
+        yaw = -0x4000;
+        break;
+    case CUBE_DIR_YPOS:
+        yaw = 0x7FFF;
+        break;
+    case CUBE_DIR_XNEG:
+        yaw = 0x4000;
+        break;
+    case CUBE_DIR_YNEG:
+        yaw = 0;
+        break;
     }
-    PSMTXTrans(t, half, 0.0f, half);
+    PSMTXTrans(t, sCube->size / 2, 0.0f, sCube->size / 2);
     PSMTXConcat(t, m, m);
-    MtxRotTrans(0, yaw, 0, t, -half, 0.0f, -half);
+    MtxRotTrans(0, yaw, 0, t, -sCube->size / 2, 0.0f, -sCube->size / 2);
     PSMTXConcat(t, m, m);
-    PSMTXTrans(t, -(cube->x - 16) * cube->size, 0.0f, -(cube->y - 16) * cube->size);
+    PSMTXTrans(t, -(sCube->x - 16) * sCube->size, 0.0f, -(sCube->y - 16) * sCube->size);
     PSMTXConcat(t, m, m);
-    if (cube->face == 1) {
-        MtxRotTrans(0x4000, 0, 0x4000, r, 0.0f, 0.0f, 0.0f);
-        PSMTXConcat(r, m, m);
+    if (sCube->face == 1) {
+        MtxRotTrans(0x4000, 0, 0x4000, face, 0.0f, 0.0f, 0.0f);
+        PSMTXConcat(face, m, m);
     }
-    if (cube->face == 2) {
-        MtxRotTrans(0, -0x4000, -0x4000, r, 0.0f, 0.0f, 0.0f);
-        PSMTXConcat(r, m, m);
+    if (sCube->face == 2) {
+        MtxRotTrans(0, -0x4000, -0x4000, face, 0.0f, 0.0f, 0.0f);
+        PSMTXConcat(face, m, m);
     }
 }
 
 /* 0x8130FA3C */
-MtxPtr Cube_GetMtx(void) { return cubeMtx; }
+MtxPtr Cube_GetMtx(void) {
+    return sCubeMtx;
+}
 
 /* 0x8130FA48 */
 static BOOL Cube_IsStepDone(void) {
-    s32 max;
-    s32 angle = Cube_RollAngle(&max);
-    if (angle > max && cube->stepDoneFrame == 0)
-        cube->stepDoneFrame = cube->stepFrame;
-    if (cube->stepDoneFrame > 0 && cube->stepFrame >= cube->stepDoneFrame + cube->stepDelay)
+    s32 angle;
+    s32 max = 0x4000;
+
+    if (sCube->dir >= CUBE_DIR_FACE0) {
+        max = 0x8000;
+        angle = (sCube->stepFrame << 15) / (sCube->cornerFrames - sCube->stepDelay);
+    } else {
+        angle = (sCube->stepFrame << 14) / (sCube->sideFrames - sCube->stepDelay);
+    }
+    if (angle > max && sCube->stepDoneFrame == 0) {
+        sCube->stepDoneFrame = sCube->stepFrame;
+    }
+    if (sCube->stepDoneFrame > 0 && sCube->stepFrame >= sCube->stepDoneFrame + sCube->stepDelay) {
         return TRUE;
+    }
     return FALSE;
 }
 
-/* 0x8130FAF0: initial fall; kicks the scene's landing shake on impact. */
-static BOOL Cube_UpdateFall(void) {
-    Scene *scene = Scene_Get();
-    if (cube->holdFall)
-        return FALSE;
-    cube->fallHeight -= cube->fallVel;
-    if (cube->fallHeight < 0.0f) {
-        cube->fallHeight = 0.0f;
-        if (cubeLandPending) {
-            scene->landImpulse = scene->landImpulse0;
-            scene->shakePhase = 0x7FFF;
-            cubeLandPending = FALSE;
+/* 0x8130FAF0 */
+static s32 Cube_UpdateFall(void) {
+    Scene *s = Scene_Get();
+
+    if (sCube->holdFall) {
+        return CUBE_PHASE_FALL;
+    }
+    sCube->fallHeight -= sCube->fallVel;
+    if (sCube->fallHeight < 0.0f) {
+        sCube->fallHeight = 0.0f;
+        if (sLandPending) {
+            s->landImpulse = s->landImpulse0;
+            s->shakePhase = 0x7FFF;
+            sLandPending = FALSE;
         }
     }
-    cube->fallVel += cube->fallAccel;
-    if (cube->fallFrame > cube->fallFrames + cube->fallDelay) {
-        cubeLandPending = TRUE;
-        return TRUE;
+    sCube->fallVel += sCube->fallAccel;
+    if (sCube->fallFrame > sCube->fallFrames + sCube->fallDelay) {
+        sLandPending = TRUE;
+        return CUBE_PHASE_PATH;
     }
-    cube->fallFrame++;
-    return FALSE;
+    sCube->fallFrame++;
+    return CUBE_PHASE_FALL;
 }
 
-/* 0x8130FBC4: grow to 1.5x while flipping riseTurns quarter turns about X. */
+/* 0x8130FBC4: grow to 1.5x while making riseTurns quarter turns. */
 static void Cube_CalcRiseMtx(Mtx m) {
     Mtx t;
-    f32 scale = 1.0f + (0.5f * cube->riseFrame) / cube->riseFrames;
-    s32 maxAngle = cube->riseTurns << 14;
-    s32 angle = (maxAngle * cube->riseFrame) / cube->riseFrames;
-    f32 lift, minLift;
-    if (scale > 1.5f)
-        scale = 1.5f;
-    if (angle > maxAngle)
-        angle = maxAngle;
+    f32 scale;
+    s32 max;
+    s32 angle;
+    f32 y;
+    f32 lo;
 
+    scale = 1.0f + 0.5f * sCube->riseFrame / sCube->riseFrames;
+    if (scale > 1.5f) {
+        scale = 1.5f;
+    }
+    max = sCube->riseTurns << 14;
+    angle = max * sCube->riseFrame / sCube->riseFrames;
+    if (angle > max) {
+        angle = max;
+    }
     PSMTXScale(m, scale, scale, scale);
-    lift = cube->size / 2
-         - ((cube->riseFrame * ((1.0f + scale) * cube->size)) / cube->riseFrames) * 0.5f;
-    minLift = -(scale * cube->size * 0.5f);
-    if (lift < minLift)
-        lift = minLift;
-    MtxRotTrans((s16)angle, 0, 0, t, scale * -cube->size * 0.5f, lift, scale * -cube->size * 0.5f);
+    y = sCube->size / 2 - sCube->riseFrame * ((1.0f + scale) * sCube->size) / sCube->riseFrames * 0.5f;
+    lo = -(scale * sCube->size * 0.5f);
+    if (y < lo) {
+        y = lo;
+    }
+    MtxRotTrans(angle, 0, 0, t, scale * -sCube->size * 0.5f, y, scale * -sCube->size * 0.5f);
     PSMTXConcat(t, m, m);
     MtxRotTrans(0, -0x4000, -0x4000, t, 0.0f, 0.0f, 0.0f);
     PSMTXConcat(t, m, m);
 }
 
-/* Shared tail of the small-cube draw: world, height, then submit model. */
-static void Cube_SubmitSmall(const Vec *scaleSrc) {
-    Scene *scene = Scene_Get();
-    Vec scale;
-    scale.x = scale.y = scale.z = scene->modelScale;
-    J3D_SetModelMtx(Cube_GetModel(), cubeMtx, &scale);
-    J3D_SetViewMtx(Cube_GetModel(), Camera_GetView());
+/* 0x8130FDE0: phases 2..4 (rise, drop, logo). */
+static void Cube_DrawRise(void) {
+    Scene *s = Scene_Get();
+    s32 n = sCube->riseFrames;
+    s32 r = n - sCube->riseFrame;
+    Mtx t;
+    Vec scale = { 0.0f, 0.0f, 0.0f };
+    MtxPtr view;
+    f32 h;
+    f32 y;
+
+    PSMTXIdentity(sCubeMtx);
+    Cube_CalcRiseMtx(sCubeMtx);
+    MtxRotTrans(0, 0, 0, t, sCube->size * 3 / 2, sCube->size * 3 / 2, sCube->size * 3 / 2);
+    PSMTXConcat(t, sCubeMtx, sCubeMtx);
+    PSMTXConcat(Scene_GetWorldMtx(), sCubeMtx, sCubeMtx);
+    switch (sPhase) {
+    case CUBE_PHASE_RISE:
+        /* Ease out: h * (1 - r^4 / n^4) */
+        if (r < 0) {
+            r = 0;
+        }
+        h = sCube->riseHeight;
+        y = h - r * (r * (r * (h * r))) / (n * (n * (n * n)));
+        if (y > h) {
+            y = h;
+        }
+        PSMTXTrans(t, 0.0f, y, 0.0f);
+        break;
+    case CUBE_PHASE_DROP:
+    case CUBE_PHASE_LOGO:
+        PSMTXTrans(t, 0.0f, sCube->dropHeight, 0.0f);
+        break;
+    }
+    PSMTXConcat(t, sCubeMtx, sCubeMtx);
+    scale.x = scale.y = scale.z = s->modelScale;
+    J3D_SetModelMtx(Cube_GetModel(), sCubeMtx, scale);
+    view = Camera_GetView();
+    J3D_SetViewMtx(Cube_GetModel(), view);
     J3D_CalcJoints(Cube_GetModel());
 }
 
-/* 0x8130FDE0: phases 2..4 (rise, drop, logo). */
-static void Cube_DrawRise(void) {
+/* Phases 0 and 1: fall, then roll along the path. */
+static inline void Cube_DrawPath(void) {
+    Scene *s = Scene_Get();
     Mtx t;
-    s32 n = cube->riseFrames;
-    s32 r = n - cube->riseFrame;
-    s32 c3 = cube->size * 3 / 2;
+    Vec scale = { 0.0f, 0.0f, 0.0f };
+    MtxPtr view;
 
-    PSMTXIdentity(cubeMtx);
-    Cube_CalcRiseMtx(cubeMtx);
-    MtxRotTrans(0, 0, 0, t, c3, c3, c3);
-    PSMTXConcat(t, cubeMtx, cubeMtx);
-    PSMTXConcat(Scene_GetWorldMtx(), cubeMtx, cubeMtx);
-
-    if (cubePhase == CUBE_PHASE_RISE) {
-        /* Ease-out: h * (1 - r^4 / n^4) */
-        f32 h = cube->riseHeight;
-        f32 y;
-        if (r < 0)
-            r = 0;
-        y = h - ((f32)r * r * r * (h * r)) / (f32)(n * n * n * n);
-        if (y > h)
-            y = h;
-        PSMTXTrans(t, 0.0f, y, 0.0f);
-    } else {
-        PSMTXTrans(t, 0.0f, cube->dropHeight, 0.0f);
+    PSMTXIdentity(sCubeMtx);
+    Cube_CalcRollMtx(sCubeMtx);
+    Cube_CalcGridMtx(sCubeMtx);
+    MtxRotTrans(0, 0, 0, t, sCube->size * 3 / 2, sCube->size * 3 / 2, sCube->size * 3 / 2);
+    PSMTXConcat(t, sCubeMtx, sCubeMtx);
+    PSMTXConcat(Scene_GetWorldMtx(), sCubeMtx, sCubeMtx);
+    if (sPhase == CUBE_PHASE_FALL) {
+        PSMTXTrans(t, 0.0f, sCube->fallHeight, 0.0f);
+        PSMTXConcat(t, sCubeMtx, sCubeMtx);
     }
-    PSMTXConcat(t, cubeMtx, cubeMtx);
-    Cube_SubmitSmall(NULL);
+    scale.x = scale.y = scale.z = s->modelScale;
+    J3D_SetModelMtx(Cube_GetModel(), sCubeMtx, scale);
+    view = Camera_GetView();
+    J3D_SetViewMtx(Cube_GetModel(), view);
+    J3D_CalcJoints(Cube_GetModel());
 }
 
 /* 0x81310060 */
 void Cube_Draw(void) {
-    Mtx t, textMtx;
-    Vec one;
-    f32 textFrame;
+    Mtx m;
+    Vec one = { 1.0f, 1.0f, 1.0f };
+    MtxPtr view;
+    f32 frame;
 
-    switch (cubePhase) {
+    switch (sPhase) {
     case CUBE_PHASE_FALL:
-    case CUBE_PHASE_PATH: {
-        s32 c3 = cube->size * 3 / 2;
-        PSMTXIdentity(cubeMtx);
-        Cube_CalcRollMtx(cubeMtx);
-        Cube_CalcGridMtx(cubeMtx);
-        MtxRotTrans(0, 0, 0, t, c3, c3, c3);
-        PSMTXConcat(t, cubeMtx, cubeMtx);
-        PSMTXConcat(Scene_GetWorldMtx(), cubeMtx, cubeMtx);
-        if (cubePhase == CUBE_PHASE_FALL) {
-            PSMTXTrans(t, 0.0f, cube->fallHeight, 0.0f);
-            PSMTXConcat(t, cubeMtx, cubeMtx);
-        }
-        Cube_SubmitSmall(NULL);
+        Cube_DrawPath();
         break;
-    }
+    case CUBE_PHASE_PATH:
+        Cube_DrawPath();
+        break;
     case CUBE_PHASE_RISE:
+        Cube_DrawRise();
+        break;
     case CUBE_PHASE_DROP:
+        Cube_DrawRise();
+        break;
     case CUBE_PHASE_LOGO:
         Cube_DrawRise();
         break;
     }
 
-    /* The "GAMECUBE" wordmark animation (BCK, 60 frames) is driven here. */
-    if (cube->textFrame > cube->textDelay)
-        textFrame = 60.0f * ((f32)(cube->textFrame - cube->textDelay) / cube->textFrames);
-    else
-        textFrame = 0.0f;
-    PSMTXIdentity(textMtx);
-    one.x = one.y = one.z = 1.0f;
-    J3D_SetModelMtx(Scene_GetLogoText(), textMtx, &one);
-    J3D_SetViewMtx(Scene_GetLogoText(), Camera_GetView());
-    J3D_AnimateJoints(Scene_GetLogoText(), textFrame);
+    /* The "GAMECUBE" wordmark joint animation (60 frames) runs off the
+       text clock that starts with the drop. */
+    if (sCube->textFrame > sCube->textDelay) {
+        frame = 60.0f * ((f32)(sCube->textFrame - sCube->textDelay) / sCube->textFrames);
+    } else {
+        frame = 0.0f;
+    }
+    PSMTXIdentity(m);
+    J3D_SetModelMtx(Scene_GetLogoText(), m, one);
+    view = Camera_GetView();
+    J3D_SetViewMtx(Scene_GetLogoText(), view);
+    J3D_AnimateJoints(Scene_GetLogoText(), frame);
 }
 
-/* 0x81310494: choose and start the boot jingle (Z easter eggs). */
+/* 0x81310494: the boot jingle, with the Z easter eggs. */
 static void Cube_UpdateJingle(void) {
     PADStatus pads[4];
+
     PADRead(pads);
-    if (Pad_GetEasterEgg() == 2) {          /* Z held on all four pads */
-        if (cubeJinglePending && cube->jingleFrame > cube->jingleDelay[1]) {
+    if (Pad_GetEasterEgg() == 2) {
+        /* Z held on all four controllers */
+        if (sJinglePending && sCube->jingleFrame > sCube->jingleDelay[1]) {
             Sound_Play(1);
-            cubeJinglePending = FALSE;
+            sJinglePending = FALSE;
         }
-    } else if (Pad_GetEasterEgg() == 1) {   /* Z held on the first pad */
-        if (cubeJinglePending && cube->jingleFrame > cube->jingleDelay[2]) {
+    } else if (Pad_GetEasterEgg() == 1) {
+        /* Z held on controller 1 */
+        if (sJinglePending && sCube->jingleFrame > sCube->jingleDelay[2]) {
             Sound_Play(2);
-            cubeJinglePending = FALSE;
+            sJinglePending = FALSE;
         }
-    } else if (cubeJinglePending && cube->jingleFrame > cube->jingleDelay[0]) {
+    } else if (sJinglePending && sCube->jingleFrame > sCube->jingleDelay[0]) {
         Sound_Play(0);
-        cubeJinglePending = FALSE;
+        sJinglePending = FALSE;
     }
-    if (cubeJinglePending)
-        cube->jingleFrame++;
+    if (sJinglePending) {
+        sCube->jingleFrame++;
+    }
 }
 
 /* 0x81310584: one logic frame. */
 s32 Cube_Update(BOOL playJingle) {
-    Scene *scene;
+    Scene *s;
     BOOL textDone;
 
-    cubePhase = cubeNextPhase;
-    if (playJingle)
+    sPhase = sNextPhase;
+    if (playJingle) {
         Cube_UpdateJingle();
-
-    switch (cubePhase) {
+    }
+    switch (sPhase) {
     case CUBE_PHASE_FALL:
-        cubeNextPhase = Cube_UpdateFall();
+        sNextPhase = Cube_UpdateFall();
         break;
-
     case CUBE_PHASE_PATH:
         if (Cube_IsStepDone()) {
-            cube->stepFrame = 0;
-            cube->stepDoneFrame = 0;
-            cube->step++;
-            if (Cube_PathStep()->dir == CUBE_DIR_END) {
-                cube->done = TRUE;
+            sCube->stepFrame = 0;
+            sCube->stepDoneFrame = 0;
+            sCube->step++;
+            if (sCubePath[sCube->step].dir == CUBE_DIR_END) {
+                sCube->done = 1;
                 Cube_TickTiles();
             } else {
                 Cube_StepGrid();
-                cube->dir = Cube_PathStep()->dir;
+                sCube->dir = sCubePath[sCube->step].dir;
             }
         }
-        if (cube->dir == CUBE_DIR_RISE) {
-            cubeNextPhase = CUBE_PHASE_RISE;
+        if (sCube->dir == CUBE_DIR_RISE) {
+            sNextPhase = CUBE_PHASE_RISE;
         } else {
-            cubeNextPhase = CUBE_PHASE_PATH;
-            cube->stepFrame++;
+            sCube->stepFrame++;
+            sNextPhase = CUBE_PHASE_PATH;
         }
         break;
-
     case CUBE_PHASE_RISE:
-        cubeRunning = FALSE;
-        cube->riseFrame++;
-        cubeNextPhase = cube->riseFrame > cube->riseFrames + cube->riseDelay
-                      ? CUBE_PHASE_DROP : CUBE_PHASE_RISE;
+        sRunning = FALSE;
+        sCube->riseFrame++;
+        sNextPhase = sCube->riseFrame > sCube->riseFrames + sCube->riseDelay ? CUBE_PHASE_DROP : CUBE_PHASE_RISE;
         break;
-
     case CUBE_PHASE_DROP:
-        scene = Scene_Get();
-        cube->dropHeight -= cube->dropVel;
-        if (cube->dropHeight < 0.0f) {
-            cube->dropHeight = 0.0f;
-            if (cubeDropPending) {
-                scene->dropImpulse = scene->dropImpulse0;
-                scene->shakePhase = 0x7FFF;
-                cubeDropPending = FALSE;
+        s = Scene_Get();
+        sCube->dropHeight -= sCube->dropVel;
+        if (sCube->dropHeight < 0.0f) {
+            sCube->dropHeight = 0.0f;
+            if (sDropPending) {
+                s->dropImpulse = s->dropImpulse0;
+                s->shakePhase = 0x7FFF;
+                sDropPending = FALSE;
             }
         }
-        cube->dropVel += cube->dropAccel;
-        if (cube->dropFrame > cube->dropFrames + cube->dropDelay) {
-            cubeDropPending = TRUE;
-            cubeNextPhase = CUBE_PHASE_LOGO;
+        sCube->dropVel += sCube->dropAccel;
+        if (sCube->dropFrame > sCube->dropFrames + sCube->dropDelay) {
+            sDropPending = TRUE;
+            sNextPhase = CUBE_PHASE_LOGO;
         } else {
-            cube->dropFrame++;
-            cube->textFrame++;
-            if (cube->textFrame >= cube->textFrames + cube->textDelay)
-                cube->textFrame = cube->textFrames + cube->textDelay;
-            cubeNextPhase = CUBE_PHASE_DROP;
+            sCube->dropFrame++;
+            sCube->textFrame++;
+            if (sCube->textFrame >= sCube->textFrames + sCube->textDelay) {
+                sCube->textFrame = sCube->textFrames + sCube->textDelay;
+            }
+            sNextPhase = CUBE_PHASE_DROP;
         }
         break;
-
     case CUBE_PHASE_LOGO:
-        scene = Scene_Get();
-        cube->logoFrame++;
-        if (cube->logoFrame > cube->logoFrames) {
-            cube->logoFrame = cube->logoFrames;
-            cube->done = TRUE;
+        s = Scene_Get();
+        sCube->logoFrame++;
+        if (sCube->logoFrame > sCube->logoFrames) {
+            sCube->logoFrame = sCube->logoFrames;
+            sCube->done = 1;
         }
-        scene->logoAlpha = (cube->logoFrame * 0xFF) / cube->logoFrames;
         textDone = FALSE;
-        cube->textFrame++;
-        if (cube->textFrame >= cube->textFrames + cube->textDelay) {
-            cube->textFrame = cube->textFrames + cube->textDelay;
+        s->logoAlpha = sCube->logoFrame * 255 / sCube->logoFrames;
+        sCube->textFrame++;
+        if (sCube->textFrame >= sCube->textFrames + sCube->textDelay) {
+            sCube->textFrame = sCube->textFrames + sCube->textDelay;
             textDone = TRUE;
         }
-        if (!textDone)
-            cube->done = FALSE;
-        if ((f32)scene->dropImpulse != 0.0f)
-            cube->done = FALSE;
+        if (!textDone) {
+            sCube->done = 0;
+        }
+        if (s->dropImpulse != 0.0f) {
+            sCube->done = 0;
+        }
         break;
     }
-    return 1;
+    return TRUE;
 }
 
-/* 0x813108B0: TRUE until the cube lifts off (A-spin is allowed while TRUE). */
-BOOL Cube_IsRunning(void) { return cubeRunning; }
-
-/* 0x81310AD0: one textured quad on face plane `face`, in s16 1/16 units. */
-static void Cube_DrawTile(s32 x, s32 y, s32 face, u8 alpha) {
-    CubeState *c = Cube_Get();
-    s32 inset = c->tileInset;
-    s32 full = c->size * 16;
-    s32 px = (x - 16) * c->size * 16;
-    s32 py = (y - 16) * c->size * 16;
-    GXColor col;
-    s16 v[4][2];
-    s16 uv[4][2] = { {0, 0}, {0, 0x4000}, {0x4000, 0x4000}, {0x4000, 0} };
-    s32 i;
-
-    col.r = c->tileR;
-    col.g = c->tileG;
-    col.b = c->tileB;
-    col.a = alpha;
-    GXSetChanMatColor(GX_COLOR0A0, col);
-    J3D_LoadTexture(0, cubeTileTex);
-
-    v[0][0] = -(px + inset); v[0][1] = -(py + inset);
-    v[1][0] = -(px + full);  v[1][1] = -(py + inset);
-    v[2][0] = -(px + full);  v[2][1] = -(py + full);
-    v[3][0] = -(px + inset); v[3][1] = -(py + full);
-
-    GXBegin(GX_QUADS, GX_VTXFMT1, 4);
-    for (i = 0; i < 4; i++) {
-        /* face 0: (a, 0, b)  face 1: (b, a, 0)  face 2: (0, b, a) */
-        switch (face) {
-        case 0: GXPosition3s16(v[i][0], 0, v[i][1]); break;
-        case 1: GXPosition3s16(v[i][1], v[i][0], 0); break;
-        case 2: GXPosition3s16(0, v[i][1], v[i][0]); break;
-        }
-        GXTexCoord2s16(uv[i][0], uv[i][1]);
-    }
+/* 0x813108B0: TRUE until the cube lifts off (A spins the scene while TRUE). */
+BOOL Cube_IsRunning(void) {
+    return sRunning;
 }
+
+static void Cube_DrawTile(s32 x, s32 y, s32 face, u8 alpha);
+
+#define CUBE_CENTER (Cube_Get()->size * 3 / 2)
 
 /* 0x813108B8 */
 static void Cube_DrawTiles(u8 alpha) {
     CubeState *c = Cube_Get();
-    Mtx m, nrm;
+    CubeTile *grid = Cube_GetGrid();
+    Mtx m;
+    Mtx nrm;
     s32 f, x, y;
-    s32 c3 = c->size * 3 / 2;
+    s32 a;
+    CubeTile *t;
 
-    MtxRotTrans(0, 0, 0, m, c3, c3, c3);
+    MtxRotTrans(0, 0, 0, m, CUBE_CENTER, CUBE_CENTER, CUBE_CENTER);
     PSMTXConcat(Scene_GetWorldMtx(), m, m);
     PSMTXConcat(Camera_GetView(), m, m);
-    MtxInverseTranspose(m, nrm);
+    MtxInverse33(m, nrm);
     GXLoadPosMtxImm(m, GX_PNMTX0);
     GXLoadNrmMtxImm(nrm, GX_PNMTX0);
     GXSetCurrentMtx(GX_PNMTX0);
-
-    for (f = 0; f < CUBE_FACES; f++)
-        for (x = 0; x < CUBE_GRID; x++)
+    for (f = 0; f < CUBE_FACES; f++) {
+        for (x = 0; x < CUBE_GRID; x++) {
             for (y = 0; y < CUBE_GRID; y++) {
-                CubeTile *t = &cubeGrid[f][x][y];
-                s32 a = 0xFF;
-                if (t->group == 0)
+                t = &grid[(f * CUBE_GRID + x) * CUBE_GRID + y];
+                if (t->group == 0) {
                     continue;
-                if (t->state == 1)
-                    a = (c->stepFrame * 0xFF) / c->sideFrames;
-                if (t->state == 2)
-                    a = ((c->sideFrames - c->stepFrame) * 0xFF) / c->sideFrames;
-                if (a > 0xFF) a = 0xFF;
-                if (a < 0) a = 0;
-                Cube_DrawTile(x, y, f, (u8)((a * alpha) / 255));
+                }
+                a = 255;
+                if (t->state == 1) {
+                    a = c->stepFrame * 255 / c->sideFrames;
+                }
+                if (t->state == 2) {
+                    a = (c->sideFrames - c->stepFrame) * 255 / c->sideFrames;
+                }
+                if (a > 255) {
+                    a = 255;
+                }
+                if (a < 0) {
+                    a = 0;
+                }
+                Cube_DrawTile(x, y, f, a * alpha / 255);
             }
+        }
+    }
 }
 
-/* 0x81310E24: tiles first, then the small cube, both scaled by `alpha`. */
+/* face 0: (a, 0, b)  face 1: (b, a, 0)  face 2: (0, b, a) */
+static inline void Cube_TileVtx(s32 face, s16 a, s16 b, s16 s, s16 t) {
+    switch (face) {
+    case 0:
+        GXPosition3s16(a, 0, b);
+        break;
+    case 1:
+        GXPosition3s16(b, a, 0);
+        break;
+    case 2:
+        GXPosition3s16(0, b, a);
+        break;
+    }
+    GXTexCoord2s16(s, t);
+}
+
+/* 0x81310AD0: one textured quad on face plane `face`, in 1/16 units. */
+static void Cube_DrawTile(s32 x, s32 y, s32 face, u8 alpha) {
+    CubeState *c = Cube_Get();
+    u8 inset = c->tileInset;
+    CubeTile *grid = Cube_GetGrid();
+    s32 full = Cube_Get()->size * 16;
+    s32 px = (x - 16) * Cube_Get()->size * 16;
+    s32 py = (y - 16) * Cube_Get()->size * 16;
+    GXColor color;
+
+    *(u32 *)&color = grid[(face * CUBE_GRID + x) * CUBE_GRID + y].color;
+    color.r = c->tileR;
+    color.g = c->tileG;
+    color.b = c->tileB;
+    color.a = alpha;
+    GXSetChanMatColor(4, color);
+    J3D_LoadTexture(0, sTileTex);
+    GXBegin(0x80, 1, 4);
+    Cube_TileVtx(face, -(px + inset), -(py + inset), 0, 0);
+    Cube_TileVtx(face, -(px + full), -(py + inset), 0, 0x4000);
+    Cube_TileVtx(face, -(px + full), -(py + full), 0x4000, 0x4000);
+    Cube_TileVtx(face, -(px + inset), -(py + full), 0x4000, 0);
+}
+
+/* 0x81310E24: the trail tiles, then the small cube, faded by `alpha`. */
 void Cube_DrawBig(u8 alpha) {
     CubeState *c = Cube_Get();
+    MtxPtr cubeMtx = Cube_GetMtx();
     Mtx m;
-    PSMTXConcat(Camera_GetView(), Cube_GetMtx(), m);
-    GX_SetZMode(TRUE, GX_LEQUAL, FALSE);
-    GXSetBlendMode(GX_BM_BLEND, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_CLEAR);
-    GXSetNumTevStages(1);
+
+    PSMTXConcat(Camera_GetView(), cubeMtx, m);
+    GX_Setup2D(1, 0, 0);
+    GXSetVtxAttrFmt(1, 13, 1, 3, 13);
+    GXSetCullMode(0);
     Cube_DrawTiles(alpha);
-    cubeSmallInst.alpha = (c->alpha * alpha) / 255;
-    J3D_Draw(&cubeSmallInst, c->alpha);
+    sCubeInst.alpha = c->alpha * alpha / 255;
+    J3D_Draw(&sCubeInst);
 }
 
 /* 0x81310EF0 */
 void Cube_InitModels(void) {
-    cubeTileTex = ResGet(0x65);
-    cubeSmall.data = ResGet(0xA8);
-    cubeSmall.self = &cubeSmall;
-    cubeSmall.alpha = 0xFF;
-    J3D_InitModel(&cubeSmall.inst, 1);
+    sTileTex = ResGet(0x65);
+    sCubeModel.data = ResGet(0xA8);
+    sCubeInst.model = &sCubeModel;
+    sCubeInst.alpha = 255;
+    J3D_InitModel(&sCubeInst, 1);
 }
 
 /* 0x81310F4C */
-void *Cube_GetModel(void) { return &cubeSmallInst; }
+J3DModelInstance *Cube_GetModel(void) {
+    return &sCubeInst;
+}
