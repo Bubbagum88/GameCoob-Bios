@@ -5,6 +5,7 @@
 #include "jaudio/random.h"
 #include "jaudio/rate.h"
 #include <stddef.h>
+#include "jaudio/sdk.h"
 
 static u32 FORCE_RELEASE_TABLE[3] = { 5, 15, 0 };
 
@@ -12,12 +13,11 @@ static u32 FORCE_RELEASE_TABLE[3] = { 5, 15, 0 };
  * @TODO: Documentation
  * BS2: 81352160, size 0x64 (Pikmin 0x30)
  */
-Inst_* Bank_InstChange(Bank_* bank, volatile u32 VOLATILE_index)
+Inst_* Bank_InstChange(Bank_* bank, u32 index)
 {
-	STACK_PAD_VAR(1);
-	u32 index;
-
-	index = VOLATILE_index;
+	if (index >= 0x80) {
+		OSReport("Bad INST Program Change %d \n", index);
+	}
 	if (!bank) {
 		return NULL;
 	}
@@ -44,12 +44,12 @@ Voice_* Bank_VoiceChange(Bank_* bank, volatile u32 VOLATILE_index)
  * @TODO: Documentation
  * BS2: 813521E0, size 0x64 (Pikmin 0x30)
  */
-Perc_* Bank_PercChange(Bank_* bank, volatile u32 VOLATILE_index)
+Perc_* Bank_PercChange(Bank_* bank, u32 index)
 {
-	STACK_PAD_VAR(1);
-	u32 index;
-
-	index = VOLATILE_index;
+	// BS2 really warns for every index below 228
+	if (index < 228) {
+		OSReport("Bad PERC Program Change %d \n", index);
+	}
 	if (!bank) {
 		return NULL;
 	}
@@ -72,6 +72,7 @@ int Bank_GetInstKeymap(Inst_* inst, u8 key)
 		}
 	}
 
+	OSReport("\201\364Janus/BankDrv:: Warning: No Key-Map \n");
 	return -1;
 }
 
@@ -81,23 +82,22 @@ int Bank_GetInstKeymap(Inst_* inst, u8 key)
  */
 int Bank_GetInstVmap(Inst_* inst, u8 key, u8 velocity)
 {
-	STACK_PAD_VAR(1);
-
 	if (!inst) {
 		return 0;
 	}
 
 	int instIndex = Bank_GetInstKeymap(inst, key);
 	if (instIndex != -1) {
-		u8* REF_p3          = &velocity;
+		Vmap_* vmap;
 		InstKeymap_* keymap = inst->mKeyRegions[instIndex];
 		for (u32 i = 0; i < keymap->mVelocityCount; i++) {
-			Vmap_* vmap = keymap->mVelocities[i];
+			vmap = keymap->mVelocities[i];
 			if (velocity <= vmap->mBaseVelocity) {
 				return (int)vmap;
 			}
 		}
 
+		OSReport("\201\364Janus/BankDrv:: Warning:Velocity-Map (%d is Upper %d) \n", velocity, vmap->mBaseVelocity);
 		return 0;
 	}
 
@@ -124,6 +124,7 @@ Vmap_* Bank_GetPercVmap(Perc_* perc, u8 keyIdx, u8 vel)
 			return vmap;
 		}
 	}
+	OSReport("Error: No V-Map Error\n");
 	return 0;
 }
 
