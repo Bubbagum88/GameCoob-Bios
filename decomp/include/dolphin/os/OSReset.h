@@ -14,6 +14,7 @@ struct OSResetFunctionInfo {
 };
 
 void OSRegisterResetFunction(OSResetFunctionInfo* info);
+u32 OSGetResetCode(void);
 
 #define OS_RESETCODE_RESTART 0x80000000
 

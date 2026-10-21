@@ -13,3 +13,9 @@ fill_gaps: true
 block_relocations:
 # word in the app's .data asset blob that only looks like a pointer into parse_format
 - source: .data:0x81475984
+
+# Data extracted at build time into build/PAL10/include (never committed)
+extract:
+- symbol: DSPInitCode
+  header: dolphin/os/DSPInitCode.inc
+  header_type: raw

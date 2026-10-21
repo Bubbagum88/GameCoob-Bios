@@ -258,6 +258,11 @@ jaudio/oneshot.c:
 dolphin/base/PPCArch.c:
 	.text       start:0x8135B57C end:0x8135B5E0
 
+dolphin/os/OS.c:
+	.text       start:0x8135B5E0 end:0x8135BE68
+	.data       start:0x814AB2C0 end:0x814AB480
+	.sbss       start:0x814AD840 end:0x814AD860
+
 dolphin/os/OSAlarm.c:
 	.text       start:0x8135BE68 end:0x8135C510
 	.sbss       start:0x814AD860 end:0x814AD868
@@ -291,10 +296,25 @@ dolphin/os/OSError.c:
 	.sdata      start:0x814AD168 end:0x814AD170
 	.bss        start:0x815D40A0 end:0x815D40E0
 
+dolphin/os/OSExi.c:
+	.text       start:0x8135DC60 end:0x8135EF94
+	.bss        start:0x815D40E0 end:0x815D41A0
+
+dolphin/os/OSExiAd16.c:
+	.text       start:0x8135EF94 end:0x8135F1F8
+	.sbss       start:0x814AD880 end:0x814AD888
+
+dolphin/os/OSFont.c:
+	.text       start:0x8135F1F8 end:0x8135F250
+	.sdata      start:0x814AD170 end:0x814AD178
+
 dolphin/os/OSInterrupt.c:
 	.text       start:0x8135F250 end:0x8135FA98
 	.data       start:0x814ABED8 end:0x814ABF08
 	.sbss       start:0x814AD888 end:0x814AD890
+
+dolphin/os/OSLink.c:
+	.text       start:0x8135FA98 end:0x8135FAB0
 
 dolphin/os/OSMessage.c:
 	.text       start:0x8135FAB0 end:0x8135FD88
@@ -310,6 +330,10 @@ dolphin/os/OSResetSW.c:
 	.text       start:0x8135FEAC end:0x81360264
 	.sbss       start:0x814AD898 end:0x814AD8B8
 
+dolphin/os/OSRtc.c:
+	.text       start:0x81360264 end:0x81360FDC
+	.bss        start:0x815D41A0 end:0x815D41F8
+
 dolphin/os/OSSync.c:
 	.text       start:0x813626D8 end:0x8136275C
 
@@ -321,6 +345,11 @@ dolphin/os/OSThread.c:
 dolphin/os/OSTime.c:
 	.text       start:0x81363764 end:0x81363F00
 	.data       start:0x814ABFC0 end:0x814AC020
+
+dolphin/db/db.c:
+	.text       start:0x813641E4 end:0x813642D0
+	.data       start:0x814AC020 end:0x814AC038
+	.sbss       start:0x814AD8E8 end:0x814AD8F0
 
 dolphin/mtx/mtx.c:
 	.text       start:0x813642D0 end:0x8136472C
@@ -371,6 +400,17 @@ dolphin/dvd/fstload.c:
 	.sdata      start:0x814AD198 end:0x814AD1A8
 	.sbss       start:0x814AD9A0 end:0x814AD9B0
 	.bss        start:0x815D4F98 end:0x815D5008
+
+dolphin/pad/Padclamp.c:
+	.text       start:0x8136A7CC end:0x8136AA04
+	.sdata      start:0x814AD1A8 end:0x814AD1B0
+
+dolphin/pad/Pad.c:
+	.text       start:0x8136AA04 end:0x8136C4AC
+	.data       start:0x814AC758 end:0x814AC7C0
+	.sdata      start:0x814AD1B0 end:0x814AD1D8
+	.sbss       start:0x814AD9F8 end:0x814ADA20
+	.bss        start:0x815D5150 end:0x815D51A0
 
 dolphin/ai/ai.c:
 	.text       start:0x8136C4AC end:0x8136CDB4

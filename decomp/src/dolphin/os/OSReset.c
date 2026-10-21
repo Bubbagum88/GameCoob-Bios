@@ -1,16 +1,6 @@
 #include <dolphin/os.h>
 #include <dolphin/hw_regs.h>
 
-typedef BOOL (*OSResetFunction)(BOOL final);
-typedef struct OSResetFunctionInfo OSResetFunctionInfo;
-
-struct OSResetFunctionInfo {
-    OSResetFunction func;
-    u32 priority;
-    OSResetFunctionInfo* next;
-    OSResetFunctionInfo* prev;
-};
-
 typedef struct OSResetFunctionQueue {
     OSResetFunctionInfo* head;
     OSResetFunctionInfo* tail;
