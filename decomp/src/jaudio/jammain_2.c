@@ -797,17 +797,13 @@ void Jam_WriteRegXY(seqp_* track, u32 regXYPacked)
 u32 __ExchangeRegisterValue(seqp_* track, u8 reg)
 {
 	u32 res;
-#if defined(VERSION_GPIJ01_01) || defined(VERSION_DPIJ01_PIKIDEMO) || defined(VERSION_G98P01_PIKIDEMO)
 	u8* REF_reg = &reg;
-#endif
 	if (reg < 64) {
 		res = Jam_ReadReg32(track, reg);
 	} else {
 		res = track->trackPort[reg - 64].value;
 	}
-#if defined(VERSION_GPIJ01_01) || defined(VERSION_DPIJ01_PIKIDEMO) || defined(VERSION_G98P01_PIKIDEMO)
 	u32* REF_res = &res;
-#endif
 	return res;
 }
 
@@ -2599,7 +2595,6 @@ static u32 Cmd_Printf()
 	char fmtStr[0x80];
 	u8 fmtFlags[4];
 	u32 fmtParms[4];
-	STACK_PAD_VAR(4); // Maybe they intended to support floats?
 	size_t fmtCount;
 	size_t i;
 
@@ -2665,12 +2660,6 @@ static u32 Cmd_Printf()
 				fmtStr[i]          = 'x';
 				break;
 			}
-			case 't': // ?
-			{
-				fmtFlags[fmtCount] = 5;
-				fmtStr[i]          = 'x';
-				break;
-			}
 			}
 			++fmtCount;
 			continue;
@@ -2680,16 +2669,13 @@ static u32 Cmd_Printf()
 		fmtParms[i] = __ByteRead(SEQ_P);
 		if (fmtFlags[i] == 2) {
 			fmtParms[i] = (u32)Jam_OfsToAddr(SEQ_P, fmtParms[i]);
-		} else if (fmtFlags[i] == 5) {
-			fmtParms[i] = SEQ_P->trackId;
-		} else if (fmtFlags[i] >= 3) {
+		}
+		if (fmtFlags[i] >= 3) {
 			fmtParms[i] = __ExchangeRegisterValue(SEQ_P, fmtParms[i]);
 		}
 	}
-	// A restoration of this command's functionality can be enabled below:
-#if defined(DEVELOP)
+	// BS2 still prints it (Pikmin compiled this out)
 	OSReport(fmtStr, fmtParms[0], fmtParms[1], fmtParms[2], fmtParms[3]);
-#endif
 	return 0;
 }
 
@@ -2839,13 +2825,6 @@ u32 Cmd_Process(seqp_* track, u8 cmd, u16 argTypeMask)
 	u32 arg;
 	CmdFunction function;
 
-	STACK_PAD_VAR(1);
-	seqp_** REF_track;
-	u8* REF_cmd;
-
-	REF_track = &track;
-	REF_cmd   = &cmd;
-
 	argpair  = Arglist[cmd - 0xC0];
 	argTypes = argpair.argTypes | argTypeMask;
 	for (i = 0; i < argpair.argCount; ++i) {
@@ -2882,6 +2861,8 @@ u32 Cmd_Process(seqp_* track, u8 cmd, u16 argTypeMask)
 
 	function = CMDP_LIST[cmd - 0xC0];
 	if (!function) {
+		OSReport("Error: NULL Command Pointer (cmd. %x ) \n", cmd);
+		OSReport("SEQP %x  Access Offset %d\n", track, track->programCounter);
 		return 0;
 	}
 	return function();
@@ -2956,16 +2937,13 @@ s32 Jam_SeqmainNote(seqp_* track, u8 isMuted)
 	jc_* chan;
 	int waitTimerBytes;
 	u8 reg;
-	STACK_PAD_VAR(6);
+	STACK_PAD_VAR(3);
 
 	if (0) {
 		(void)&noteOpcodeFlags;
 	}
 	if (0) {
 		(void)&pitchBendTargetKey;
-	}
-	if (0) {
-		(void)&chanIdx;
 	}
 
 	updateFlags = 0;
@@ -3081,7 +3059,9 @@ try_interrupt:
 				noteKey += track->finalTranspose;
 			}
 
-			(void)noteKey;
+			if (noteKey >= 0x80) {
+				OSReport("\x81\xf4Jam/Seq :: Error Note %d\n", noteKey);
+			}
 
 			// Handle pitch bend target
 			if (noteOpcodeFlags >> 5 & 2) {
@@ -3142,7 +3122,6 @@ try_interrupt:
 				int unused = j * 2;
 				(void)&noteKey;
 				(void)(s32)noteVelocity;
-				(void)track->activeNotes[reg];
 
 				if (cond) {
 					// Gate mode - note with automatic cutoff
@@ -3229,6 +3208,7 @@ try_interrupt:
 				noteOffCommandByte = __ByteRead(track);
 				voiceIndex         = __ExchangeRegisterValue(track, noteOffCommandByte & 7);
 				if (voiceIndex > 7 || voiceIndex == 0) {
+					OSReport("\x81\xf4Jam/main :: r-noteoff error\n");
 					if ((noteOffCommandByte & 0x80) != 0) {
 						__ByteRead(track);
 					}
@@ -3308,6 +3288,10 @@ try_interrupt:
 				goto try_interrupt; // Retry with interrupt
 			} else if (cmdResult == 3) {
 				return -1; // Fatal error
+			} else if (cmdResult == 0x80) {
+				OSReport("\x1b[4%dm", 1);
+				OSReport("\x81\xf4Jam/seq :: Sequence Error occerd... I try to continue\n");
+				OSReport("\x1b[m");
 			}
 		}
 	}
@@ -3344,6 +3328,9 @@ PROCESS_CHILD_TRACKS:
 	// Process child tracks
 	for (int i = 0; i < 16; i++) {
 		if (track->children[i] && track->children[i]->trackState != 0) {
+			if (track != track->children[i]->parent) {
+				OSReport("##########Error:: Track %d \x82\xcc\x8b\xa4\x97L\x88\xe1\x94\xbd\x82\xc5\x82\xb7\n", i);
+			}
 			// Calculate child mute status
 			BOOL childIsMuted = track->isMuted | ((track->childMuteMask & (1 << i)) >> i);
 
