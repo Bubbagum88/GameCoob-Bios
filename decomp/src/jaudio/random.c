@@ -9,16 +9,15 @@ static s32 v1 = 0x0005555;
 
 /**
  * @TODO: Documentation
+ * BS2: 813529E0, size 0x38 (no interrupt guard in this older build)
  */
 s32 GetRandom_s32()
 {
-	BOOL enabled = OSDisableInterrupts();
 	s32 tmp;
 
 	tmp = (v1 * V1_MULT) + ((v0 * V0_MULT) >> 4);
 	v0  = v1;
 	v1  = ++tmp;
-	OSRestoreInterrupts(enabled);
 	return tmp;
 }
 
@@ -32,7 +31,6 @@ u32 GetRandom_u32()
 
 /**
  * @TODO: Documentation
- * BS2: 813529E0, size 0x38
  */
 u32 GetRandom_ulimit(u32 limit)
 {

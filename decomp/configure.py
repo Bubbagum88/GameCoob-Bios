@@ -622,7 +622,7 @@ config.libs = [
             Object(Matching, "jaudio/waveread.c"),
             Object(Matching, "jaudio/connect.c"),
             Object(Matching, "jaudio/bankdrv.c"),
-            Object(NonMatching, "jaudio/random.c"),
+            Object(Matching, "jaudio/random.c"),
             Object(NonMatching, "jaudio/ipl_81352A80.c"),  # IPL-only, no source yet
             Object(Matching, "jaudio/aramcall.c"),
             Object(Matching, "jaudio/ja_calc.c"),
