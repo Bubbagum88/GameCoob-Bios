@@ -2,6 +2,7 @@
 #define _DOLPHIN_AI_H
 
 #include <dolphin/types.h>
+#include <dolphin/os/OSUtil.h>
 
 
 // TODO: rest of header

@@ -3,6 +3,22 @@
 
 #include <dolphin/types.h>
 
+#ifndef AT_ADDRESS
+#define AT_ADDRESS(addr) : (addr)
+#endif
+
+#ifndef ATTRIBUTE_ALIGN
+#define ATTRIBUTE_ALIGN(num) __attribute__((aligned(num)))
+#endif
+
+#ifndef ASM
+#ifdef __MWERKS__
+#define ASM asm
+#else
+#define ASM
+#endif
+#endif
+
 #define OS_BASE_CACHED 0x80000000
 #define OS_BASE_UNCACHED 0xC0000000
 

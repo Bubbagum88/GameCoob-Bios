@@ -53,4 +53,6 @@ extern volatile u32 __AIRegs[] : 0xCC006C00;
 
 #define PI_RESETCODE 9
 
+#define VI_DTV_STAT 55
+
 #endif

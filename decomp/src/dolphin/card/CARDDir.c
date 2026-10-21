@@ -1,4 +1,5 @@
 #include <dolphin/card.h>
+#include <macros.h>
 #include <stddef.h>
 #include <string.h>
 

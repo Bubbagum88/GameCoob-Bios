@@ -1,4 +1,5 @@
 #include <dolphin/dvd.h>
+#include <macros.h>
 #include <dolphin/os.h>
 
 #if OS_BUILD_VERSION >= 20011217L

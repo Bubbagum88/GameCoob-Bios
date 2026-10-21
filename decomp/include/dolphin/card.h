@@ -2,6 +2,7 @@
 #define _DOLPHIN_CARD_H
 
 #include <dolphin/dsp.h>
+#include <dolphin/dvd.h>
 #include <dolphin/os.h>
 #include <dolphin/types.h>
 #include <dolphin/os/OSVersion.h>

@@ -3,6 +3,7 @@
 
 #include <dolphin/types.h>
 #include <dolphin/os/OSVersion.h>
+#include <dolphin/os/OSUtil.h>
 
 
 ///////////////// AR TYPES /////////////////
