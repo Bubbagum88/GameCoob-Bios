@@ -29,6 +29,8 @@ typedef int BOOL;
 #define TRUE 1
 #define FALSE 0
 
+#define ATTRIBUTE_ALIGN(num) __attribute__((aligned(num)))
+
 #ifndef NULL
 #define NULL 0
 #endif

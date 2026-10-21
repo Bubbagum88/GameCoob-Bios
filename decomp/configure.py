@@ -319,6 +319,7 @@ config.libs = [
     DolphinLib(
         "os",
         [
+            Object(NonMatching, "dolphin/os/OS.c"),
             Object(Matching, "dolphin/os/OSAlarm.c"),
             Object(Matching, "dolphin/os/OSAlloc.c"),
             Object(Matching, "dolphin/os/OSArena.c"),
@@ -327,14 +328,32 @@ config.libs = [
             Object(Matching, "dolphin/os/OSCache.c", extra_cflags=["-inline noauto"]),
             Object(NonMatching, "dolphin/os/OSContext.c"),
             Object(Matching, "dolphin/os/OSError.c"),
+            Object(NonMatching, "dolphin/os/OSExi.c"),
+            Object(NonMatching, "dolphin/os/OSExiAd16.c"),
+            Object(NonMatching, "dolphin/os/OSFont.c"),
             Object(Matching, "dolphin/os/OSInterrupt.c"),
+            Object(NonMatching, "dolphin/os/OSLink.c"),
             Object(Matching, "dolphin/os/OSMessage.c"),
             Object(Matching, "dolphin/os/OSMutex.c"),
             Object(NonMatching, "dolphin/os/OSReset.c"),
             Object(Matching, "dolphin/os/OSResetSW.c"),
+            Object(NonMatching, "dolphin/os/OSRtc.c"),
             Object(Matching, "dolphin/os/OSSync.c"),
             Object(Matching, "dolphin/os/OSThread.c"),
             Object(Matching, "dolphin/os/OSTime.c", extra_cflags=["-inline noauto"]),
+        ],
+    ),
+    DolphinLib(
+        "db",
+        [
+            Object(NonMatching, "dolphin/db/db.c"),
+        ],
+    ),
+    DolphinLib(
+        "pad",
+        [
+            Object(NonMatching, "dolphin/pad/Padclamp.c"),
+            Object(NonMatching, "dolphin/pad/Pad.c"),
         ],
     ),
     DolphinLib(
