@@ -1,7 +1,7 @@
-// Non-matching: functionally equivalent decompilation
+// Partly matching: Clock_Commit and Clock_FixDate still differ (register use).
 //
-// "Calendar" submenu (PAL 1.0 BS2, 0x813217F0..0x813218C8 and
-// 0x81328CA4..0x81329890): view and set the date and time.
+// "Calendar" submenu (PAL 1.0 BS2, 0x81328CA4..0x81329890): view and set the
+// date and time.
 //
 // Sub-states (sClockSub):
 //   0 CLOCK_MENU  up/down picks "date" or "time" (SE 11), A enters (SE 8),
@@ -18,85 +18,41 @@
 #include "bs2/menu.h"
 #include "bs2/scene.h"
 #include "bs2/res.h"
-#include "bs2/sound.h"
-#include <dolphin/os.h>
-#include <dolphin/gx.h>
-#include <dolphin/mtx.h>
+#include <math.h>
 
 enum { CLOCK_MENU = 0, CLOCK_DATE = 1, CLOCK_TIME = 2 };
 enum { CLOCKROW_DATE = 0, CLOCKROW_TIME = 1 };
 
-ClockParams gClockParamsBuf;        /* 0x814D9F38 */
-ClockParams *gClockParams;          /* 0x814AD518 */
+static void* sClockGlh;     /* layout, res 14 */
+static void* sClockSth;     /* strings, res 15..20 */
+static u32 sClockShownSub;  /* sub-state used this frame */
+static s32 sClockSub;
+static s32 sClockRow;       /* 0 date, 1 time */
+static s32 sDateField;      /* 0 year, 1 month, 2 day */
+static s32 sTimeField;      /* 0 hour, 1 minute, 2 second */
+static s16 sClockPulse;     /* 50..120 */
+static s8 sClockPulseStep;  /* +-2 */
 
-static void *sClockGlh;             /* 0x814AD5A0 layout, res 14 */
-static void *sClockSth;             /* 0x814AD5A4 strings, res 15..20 */
-static s32 sClockShownSub;          /* 0x814AD5A8 sub-state used this frame */
-static s32 sClockSub;               /* 0x814AD5AC */
-static s32 sClockRow;               /* 0x814AD5B0 0 date, 1 time */
-static s32 sDateField;              /* 0x814AD5B4 0 year, 1 month, 2 day */
-static s32 sTimeField;              /* 0x814AD5B8 0 hour, 1 minute, 2 second */
-static s16 sClockPulse;             /* 0x814AD5BC 50..120 */
-static s16 sClockPulseStep;         /* 0x814AD5BE +-2 */
+ClockEdit gClockEdit;
 
-ClockEdit gClockEdit;               /* 0x814DE600 */
+/* days before each month, normal and leap year */
+static s32 sDaysInMonth[12] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+static s32 sDaysInMonthLeap[12] = { 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
 
-/* days per month, normal and leap year */
-extern const s32 sDaysInMonth[12];      /* 0x813814C0 */
-extern const s32 sDaysInMonthLeap[12];  /* 0x813814F0 */
+/* Never used by the code, but kept in .rodata ahead of the draw templates. */
+static const u32 sUnusedPane[9] = {
+    0x61616161, 0x12400B40, 0x19000280, 0xFFFFFFFF, 0xFFFFFFFF, 0x00000000, 0x00200020, 0xFFFF0000, 0x00000000,
+};
 
-extern GXColor sClockWhite;         /* 0x814AE068 */
-extern GXColor sClockWhite2;        /* 0x814AE06C */
-extern const SRT sClock2DSRT;       /* 0x8137EF3C S(1,-1,1) T(-292,224,0) */
-extern const Vec sClockCamUp, sClockCamEye, sClockCamAt; /* 0x8137EF5C.. */
-
-#define OS_BUS_CLOCK (*(u32 *)0x800000F8)
-
-static void ClockParams_SetDefaults(ClockParams *p);
-
-/* 0x813217F0 */
-void Clock_InitParams(BOOL first) {
-    if (first) {
-        gClockParams = &gClockParamsBuf;
-        ClockParams_SetDefaults(gClockParams);
-    }
-    Clock_Init(first);
-}
-
-/* 0x81321838 */
-static void ClockParams_SetDefaults(ClockParams *p) {
-    p->tint[0] = 40;
-    p->tint[1] = 20;
-    p->tint[2] = -50;
-    p->tint[3] = 255;
-    p->tint2[0] = 80;
-    p->tint2[1] = 0;
-    p->tint2[2] = -60;
-    p->tint2[3] = 255;
-    p->handLen[0] = 0xFB0;
-    p->handLen[1] = 0x1240;
-    p->handLen[2] = 0x1740;
-    p->handLen[3] = 0xFF0;
-    p->handLen[4] = 0x1240;
-    p->handLen[5] = 0x15D0;
-    p->textColor[0] = 255;
-    p->textColor[1] = 255;
-    p->textColor[2] = 0;
-    p->s24 = 14;
-    p->s22 = 6;
-}
-
-/* 0x813218C0 */
-ClockParams *Clock_GetParams(void) {
-    return gClockParams;
-}
+static const GXColor sClockWhite = { 255, 255, 255, 255 };
+static const GXColor sClockYellow = { 255, 255, 255, 255 };
 
 /* 0x81328CA4: write the edited date or time to the RTC. The RTC itself is
    not written; SRAM counterBias is set so that RTC + bias = new time. */
 void Clock_Commit(void) {
     OSTime t;
     u32 rtc;
-    OSSram *sram;
+    OSSram* sram;
 
     switch (sClockShownSub) {
     case CLOCK_DATE:
@@ -117,12 +73,13 @@ void Clock_Commit(void) {
     default:
         return;
     }
+
     t = OSCalendarTimeToTicks(&gClockEdit.now);
     __OSSetTime(t);
     __OSGetRTC(&rtc);
     sram = __OSLockSram();
-    sram->counterBias = (u32)(t / (OS_BUS_CLOCK / 4)) - rtc;
-    sram->flags |= 0x20;        /* clock has been set */
+    sram->counterBias = (u32)OSTicksToSeconds(t) - rtc;
+    sram->flags |= 0x20; /* clock has been set */
     __OSUnlockSram(TRUE);
     while (!__OSSyncSram()) {
     }
@@ -149,18 +106,24 @@ void Clock_Init(BOOL first) {
 }
 
 /* 0x81328E60 */
-static s32 Clock_UpdateMenu(void) {
-    MenuWork *menu;
+s32 Clock_UpdateMenu(void) {
+    MenuWork* menu;
     s32 next = MENU_CLOCK;
 
-    if (!Fx_IsReady(0)) return MENU_CLOCK;
+    if (!Fx_IsReady(0)) {
+        return MENU_CLOCK;
+    }
 
     if (gMenuPad.dirsNew & DIR_UP) {
-        if (sClockRow != CLOCKROW_DATE) Sound_Play(SE_CURSOR);
+        if (sClockRow != CLOCKROW_DATE) {
+            Sound_Play(SE_CURSOR);
+        }
         sClockRow = CLOCKROW_DATE;
     }
     if (gMenuPad.dirsNew & DIR_DOWN) {
-        if (sClockRow != CLOCKROW_TIME) Sound_Play(SE_CURSOR);
+        if (sClockRow != CLOCKROW_TIME) {
+            Sound_Play(SE_CURSOR);
+        }
         sClockRow = CLOCKROW_TIME;
     }
     if (gMenuPad.buttonDown & PAD_A) {
@@ -193,50 +156,82 @@ static s32 Clock_UpdateMenu(void) {
 }
 
 /* 0x81328FE4: wrap year (2000..2099) and month, keep the day valid. */
-static void Clock_FixDate(void) {
-    s32 *v = gClockEdit.value;
-    s32 leap, days;
+void Clock_FixDate(void) {
+    s32* v = gClockEdit.value;
+    s32* mon;
+    s32* day;
+    s32 leap;
+    s32 days;
 
-    if (v[0] < 2000) v[0] = 2099;
-    if (v[0] > 2099) v[0] = 2000;
-    if (v[1] < 0) v[1] = 11;
-    if (v[1] > 11) v[1] = 0;
+    if (v[0] < 2000) {
+        v[0] = 2099;
+    }
+    if (v[0] > 2099) {
+        v[0] = 2000;
+    }
+    mon = &v[1];
+    if (*mon < 0) {
+        *mon = 11;
+    }
+    if (*mon > 11) {
+        *mon = 0;
+    }
 
     leap = ((v[0] % 4 == 0) && (v[0] % 100 != 0)) || (v[0] % 400 == 0);
-    days = leap ? sDaysInMonthLeap[v[1]] : sDaysInMonth[v[1]];
-
-    if (v[2] > days) {
-        v[2] = (sDateField == 2) ? 1 : days;   /* wrap only when editing the day */
+    if (leap) {
+        days = sDaysInMonthLeap[*mon];
+    } else {
+        days = sDaysInMonth[*mon];
     }
-    if (v[2] < 1) {
-        v[2] = days;
+
+    day = &v[2];
+    if (*day > days) {
+        if (sDateField == 2) { /* wrap only when editing the day */
+            *day = 1;
+        } else {
+            *day = days;
+        }
+    }
+    if (*day < 1) {
+        *day = days;
     }
 }
-
 /* Direction in which "left" moves the field cursor. */
 static s32 Clock_FieldStep(void) {
     switch (Lang_GetCode()) {
     case 0:
     case 2:
         return 1;
-    default:            /* every PAL language (codes 4..9) */
+    case 3:
+        return -1;
+    default: /* every PAL language (codes 4..9) */
         return -1;
     }
 }
 
 /* 0x8132912C */
-static s32 Clock_UpdateDate(void) {
+s32 Clock_UpdateDate(void) {
+    u8 unused[16]; /* never used, but still takes stack space */
+
     if ((gMenuPad.dirsNew & DIR_LEFT) && !(gMenuPad.dirsNew & (DIR_UP | DIR_DOWN))) {
         Sound_Play(SE_CURSOR_H);
         sDateField -= Clock_FieldStep();
-        if (sDateField < 0) sDateField = 2;
-        if (sDateField > 2) sDateField = 0;
+        if (sDateField < 0) {
+            sDateField = 2;
+        }
+        if (sDateField > 2) {
+            sDateField = 0;
+        }
     }
     if ((gMenuPad.dirsNew & DIR_RIGHT) && !(gMenuPad.dirsNew & (DIR_UP | DIR_DOWN))) {
         Sound_Play(SE_CURSOR_H);
         sDateField += Clock_FieldStep();
-        if (sDateField > 2) sDateField = 0;
-        if (sDateField < 0) sDateField = 2;
+        if (sDateField > 2) {
+            sDateField = 0;
+        }
+        if (sDateField < 0) {
+            sDateField = 2;
+        }
     }
     if (gMenuPad.dirsNew & DIR_DOWN) {
         gClockEdit.value[sDateField]--;
@@ -261,25 +256,62 @@ static s32 Clock_UpdateDate(void) {
 }
 
 /* 0x81329338: hours wrap 0..23, minutes and seconds 0..59. */
-static void Clock_FixTime(void) {
-    s32 *v = &gClockEdit.value[sTimeField];
-    s32 max = (sTimeField == 0) ? 23 : 59;
+void Clock_FixTime(void) {
+    s32* v = gClockEdit.value;
 
-    if (*v < 0) *v = max;
-    if (*v > max) *v = 0;
+    switch (sTimeField) {
+    case 0:
+        v = &v[sTimeField];
+        if (*v < 0) {
+            *v = 23;
+        }
+        if (*v > 23) {
+            *v = 0;
+        }
+        break;
+    case 1:
+        v = &v[sTimeField];
+        if (*v < 0) {
+            *v = 59;
+        }
+        if (*v > 59) {
+            *v = 0;
+        }
+        break;
+    case 2:
+        v = &v[sTimeField];
+        if (*v < 0) {
+            *v = 59;
+        }
+        if (*v > 59) {
+            *v = 0;
+        }
+        break;
+    }
 }
-
 /* 0x81329404 */
-static s32 Clock_UpdateTime(void) {
+s32 Clock_UpdateTime(void) {
+    u8 unused[4]; /* never used, but still takes a stack slot */
+
     if ((gMenuPad.dirsNew & DIR_LEFT) && !(gMenuPad.dirsNew & (DIR_UP | DIR_DOWN))) {
         Sound_Play(SE_CURSOR_H);
-        if (--sTimeField < 0) sTimeField = 2;
-        if (sTimeField > 2) sTimeField = 0;
+        sTimeField--;
+        if (sTimeField < 0) {
+            sTimeField = 2;
+        }
+        if (sTimeField > 2) {
+            sTimeField = 0;
+        }
     }
     if ((gMenuPad.dirsNew & DIR_RIGHT) && !(gMenuPad.dirsNew & (DIR_UP | DIR_DOWN))) {
         Sound_Play(SE_CURSOR_H);
-        if (++sTimeField > 2) sTimeField = 0;
-        if (sTimeField < 0) sTimeField = 2;
+        sTimeField++;
+        if (sTimeField > 2) {
+            sTimeField = 0;
+        }
+        if (sTimeField < 0) {
+            sTimeField = 2;
+        }
     }
     if (gMenuPad.dirsNew & DIR_DOWN) {
         Sound_Play(SE_CHANGE);
@@ -305,15 +337,21 @@ static s32 Clock_UpdateTime(void) {
 
 /* 0x81329590: state MENU_CLOCK. Returns the next menu state. */
 s32 Clock_Update(void) {
-    Scene *scene = Scene_Get();
     s32 next = MENU_CLOCK;
+    Scene* scene = Scene_Get();
 
     sClockShownSub = sClockSub;
     if (!SCENE_FATAL_ERROR(scene)) {
         switch (sClockShownSub) {
-        case CLOCK_MENU: next = Clock_UpdateMenu(); break;
-        case CLOCK_DATE: next = Clock_UpdateDate(); break;
-        case CLOCK_TIME: next = Clock_UpdateTime(); break;
+        case CLOCK_MENU:
+            next = Clock_UpdateMenu();
+            break;
+        case CLOCK_DATE:
+            next = Clock_UpdateDate();
+            break;
+        case CLOCK_TIME:
+            next = Clock_UpdateTime();
+            break;
         }
     }
     if (ClockIcon_IsSettled()) {
@@ -321,26 +359,36 @@ s32 Clock_Update(void) {
         Fx_Update();
     }
     sClockPulse += sClockPulseStep;
-    if (sClockPulse > 120) sClockPulseStep = -2;
-    if (sClockPulse < 50) sClockPulseStep = 2;
+    if (sClockPulse > 120) {
+        sClockPulseStep = -2;
+    }
+    if (sClockPulse < 50) {
+        sClockPulseStep = 2;
+    }
     return next;
 }
 
 /* 0x81329680 */
 BOOL Clock_IsTop(void) {
-    return sClockShownSub == CLOCK_MENU;
+    if (sClockShownSub == CLOCK_MENU) {
+        return TRUE;
+    }
+    return FALSE;
 }
 
 /* 0x8132969C: drawn by Menu_DrawSubmenus while zoomed into the Calendar. */
 void Clock_Draw(u8 fxAlpha, u8 bgAlpha, u8 textAlpha) {
-    DispSettings *disp = Disp_GetSettings();
-    SRT srt = sClock2DSRT;
-    Vec up = sClockCamUp;
-    Vec eye = sClockCamEye;
-    Vec at = sClockCamAt;
-    Mtx view, mv, nrm;
-    ClockParams *p;
-    GXColor white, yellow;
+    DispSettings* disp = Disp_GetSettings();
+    SRT srt = { 1.0f, -1.0f, 1.0f, 0, 0, 0, 0, -292.0f, 224.0f, 0.0f };
+    Vec up = { 0.0f, 1.0f, 0.0f };
+    Vec eye = { 0.0f, 0.0f, 0.0f };
+    Vec at = { 0.0f, 0.0f, 0.0f };
+    Mtx mv;
+    Mtx view;
+    Mtx nrm;
+    GXColor yellow;
+    GXColor white;
+    ClockParams* p;
 
     eye.z = 224.0f / tanf(3.141592f * disp->fovy / 360.0f);
     C_MTXLookAt(view, &eye, &up, &at);
@@ -355,15 +403,15 @@ void Clock_Draw(u8 fxAlpha, u8 bgAlpha, u8 textAlpha) {
 
     p = Clock_GetParams();
     white = sClockWhite;
-    yellow = sClockWhite2;
+    yellow = sClockYellow;
     white.a = textAlpha;
     yellow.a = textAlpha;
     GX_Setup2DText();
-    Glh_DrawText(0, sClockSth, sClockGlh, &white);     /* title */
-    yellow.r = (u8)p->textColor[0];
-    yellow.g = (u8)p->textColor[1];
-    yellow.b = (u8)p->textColor[2];
-    Glh_DrawText(1, sClockSth, sClockGlh, &yellow);    /* row labels */
+    Glh_DrawText(0, sClockSth, sClockGlh, &white); /* title */
+    yellow.r = p->textColor[0];
+    yellow.g = p->textColor[1];
+    yellow.b = p->textColor[2];
+    Glh_DrawText(1, sClockSth, sClockGlh, &yellow); /* row labels */
     Glh_DrawText(2, sClockSth, sClockGlh, &yellow);
     if (ClockIcon_IsSettled()) {
         Fx_Draw(fxAlpha);

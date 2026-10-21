@@ -9,3 +9,117 @@ Sections:
 	.sbss       type:bss align:32
 	.sdata2     type:rodata align:16
 	.bss        type:bss align:32
+
+bs2/menu/menu_icon_game.c:
+	.text       start:0x813230F0 end:0x81323C30
+	.rodata     start:0x8137EE30 end:0x8137EE40
+	.sdata      start:0x814AD0C8 end:0x814AD0D0
+	.sbss       start:0x814AD538 end:0x814AD550
+	.sdata2     start:0x814ADFC0 end:0x814ADFD0
+	.bss        start:0x814DB3E8 end:0x814DBCE0
+
+bs2/menu/game.c:
+	.text       start:0x813275CC end:0x81327EE4
+	.rodata     start:0x8137EE88 end:0x8137EED0
+	.data       start:0x81381498 end:0x813814C0
+	.sbss       start:0x814AD570 end:0x814AD588
+	.sdata2     start:0x814AE038 end:0x814AE050
+	.bss        start:0x814DE4B8 end:0x814DE518
+
+bs2/menu/options.c:
+	.text       start:0x81327EE4 end:0x81328CA4
+	.rodata     start:0x8137EED0 end:0x8137EF18
+	.sbss       start:0x814AD588 end:0x814AD5A0
+	.sdata2     start:0x814AE050 end:0x814AE068
+	.bss        start:0x814DE518 end:0x814DE600
+
+bs2/menu/calendar.c:
+	.text       start:0x81328CA4 end:0x81329890
+	.rodata     start:0x8137EF18 end:0x8137EF80
+	.data       start:0x813814C0 end:0x81381520
+	.sbss       start:0x814AD5A0 end:0x814AD5C0
+	.sdata2     start:0x814AE068 end:0x814AE080
+	.bss        start:0x814DE600 end:0x814DE638
+
+dolphin/base/PPCArch.c:
+	.text       start:0x8135B57C end:0x8135B5E0
+
+dolphin/os/OSAlarm.c:
+	.text       start:0x8135BE68 end:0x8135C510
+	.sbss       start:0x814AD860 end:0x814AD868
+
+dolphin/os/OSAlloc.c:
+	.text       start:0x8135C510 end:0x8135C984
+	.data       start:0x814AB480 end:0x814AB818
+	.sdata      start:0x814AD158 end:0x814AD160
+	.sbss       start:0x814AD868 end:0x814AD878
+
+dolphin/os/OSArena.c:
+	.text       start:0x8135C984 end:0x8135C9A4
+	.sdata      start:0x814AD160 end:0x814AD164
+	.sbss       start:0x814AD878 end:0x814AD87C
+
+dolphin/os/OSAudioSystem.c:
+	.text       start:0x8135C9A4 end:0x8135CC38
+	.data       start:0x814AB818 end:0x814AB898
+
+dolphin/os/OSCache.c:
+	.text       start:0x8135CC38 end:0x8135D0BC
+	.data       start:0x814AB898 end:0x814ABAC8
+
+dolphin/os/OSContext.c:
+	.text       start:0x8135D0BC end:0x8135D924
+	.data       start:0x814ABAC8 end:0x814ABCA0
+
+dolphin/os/OSError.c:
+	.text       start:0x8135D924 end:0x8135DC60
+	.data       start:0x814ABCA0 end:0x814ABED8
+	.sdata      start:0x814AD168 end:0x814AD170
+	.bss        start:0x815D40A0 end:0x815D40E0
+
+dolphin/os/OSInterrupt.c:
+	.text       start:0x8135F250 end:0x8135FA98
+	.data       start:0x814ABED8 end:0x814ABF08
+	.sbss       start:0x814AD888 end:0x814AD890
+
+dolphin/os/OSMessage.c:
+	.text       start:0x8135FAB0 end:0x8135FD88
+
+dolphin/os/OSMutex.c:
+	.text       start:0x8135FD88 end:0x8135FDF8
+
+dolphin/os/OSReset.c:
+	.text       start:0x8135FDF8 end:0x8135FEAC
+	.sbss       start:0x814AD890 end:0x814AD898
+
+dolphin/os/OSResetSW.c:
+	.text       start:0x8135FEAC end:0x81360264
+	.sbss       start:0x814AD898 end:0x814AD8B8
+
+dolphin/os/OSSync.c:
+	.text       start:0x813626D8 end:0x8136275C
+
+dolphin/os/OSThread.c:
+	.text       start:0x8136275C end:0x81363764
+	.sbss       start:0x814AD8D0 end:0x814AD8E0
+	.bss        start:0x815D43E8 end:0x815D4DD0
+
+dolphin/os/OSTime.c:
+	.text       start:0x81363764 end:0x81363F00
+	.data       start:0x814ABFC0 end:0x814AC020
+
+dolphin/mtx/mtx.c:
+	.text       start:0x813642D0 end:0x8136472C
+	.sdata      start:0x814AD178 end:0x814AD180
+	.sdata2     start:0x814AE4F0 end:0x814AE4F8
+
+dolphin/mtx/mtxvec.c:
+	.text       start:0x8136472C end:0x81364780
+
+dolphin/mtx/mtx44.c:
+	.text       start:0x81364780 end:0x813648E8
+	.sdata2     start:0x814AE4F8 end:0x814AE510
+
+dolphin/mtx/vec.c:
+	.text       start:0x813648E8 end:0x8136498C
+	.sdata2     start:0x814AE510 end:0x814AE518

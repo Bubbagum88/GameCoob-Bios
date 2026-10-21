@@ -258,13 +258,19 @@ cflags_rel = [
 
 config.linker_version = "GC/1.1"
 
+# Dolphin SDK flags: BS2's SDK was built without fused multiply-add
+cflags_dolphin = [
+    *cflags_base,
+    "-fp_contract off",
+]
+
 
 # Helper function for Dolphin libraries
 def DolphinLib(lib_name: str, objects: List[Object]) -> Dict[str, Any]:
     return {
         "lib": lib_name,
         "mw_version": "GC/1.2.5n",
-        "cflags": cflags_base,
+        "cflags": cflags_dolphin,
         "progress_category": "sdk",
         "objects": objects,
     }
@@ -302,6 +308,54 @@ config.libs = [
         "objects": [
             Object(NonMatching, "Runtime.PPCEABI.H/global_destructor_chain.c"),
             Object(NonMatching, "Runtime.PPCEABI.H/__init_cpp_exceptions.cpp"),
+        ],
+    },
+    DolphinLib(
+        "base",
+        [
+            Object(Matching, "dolphin/base/PPCArch.c"),
+        ],
+    ),
+    DolphinLib(
+        "os",
+        [
+            Object(Matching, "dolphin/os/OSAlarm.c"),
+            Object(Matching, "dolphin/os/OSAlloc.c"),
+            Object(Matching, "dolphin/os/OSArena.c"),
+            Object(NonMatching, "dolphin/os/OSAudioSystem.c"),
+            # Built without auto-inlining: L2GlobalInvalidate stays a call
+            Object(Matching, "dolphin/os/OSCache.c", extra_cflags=["-inline noauto"]),
+            Object(NonMatching, "dolphin/os/OSContext.c"),
+            Object(Matching, "dolphin/os/OSError.c"),
+            Object(Matching, "dolphin/os/OSInterrupt.c"),
+            Object(Matching, "dolphin/os/OSMessage.c"),
+            Object(Matching, "dolphin/os/OSMutex.c"),
+            Object(NonMatching, "dolphin/os/OSReset.c"),
+            Object(Matching, "dolphin/os/OSResetSW.c"),
+            Object(Matching, "dolphin/os/OSSync.c"),
+            Object(Matching, "dolphin/os/OSThread.c"),
+            Object(Matching, "dolphin/os/OSTime.c", extra_cflags=["-inline noauto"]),
+        ],
+    ),
+    DolphinLib(
+        "mtx",
+        [
+            Object(Matching, "dolphin/mtx/mtx.c"),
+            Object(Matching, "dolphin/mtx/mtxvec.c"),
+            Object(Matching, "dolphin/mtx/mtx44.c"),
+            Object(Matching, "dolphin/mtx/vec.c"),
+        ],
+    ),
+    {
+        "lib": "bs2",
+        "mw_version": "GC/1.2.5n",
+        "cflags": cflags_base,
+        "progress_category": "game",
+        "objects": [
+            Object(Matching, "bs2/menu/game.c"),
+            Object(NonMatching, "bs2/menu/calendar.c"),
+            Object(NonMatching, "bs2/menu/menu_icon_game.c"),
+            Object(NonMatching, "bs2/menu/options.c"),
         ],
     },
 ]
@@ -345,5 +399,9 @@ if args.mode == "configure":
 elif args.mode == "progress":
     # Print progress information
     calculate_progress(config)
+    # Treemap, badges and history for the README (progress/)
+    from tools import progress_art
+
+    progress_art.main(str(config.build_dir / config.version / "report.json"), "progress")
 else:
     sys.exit("Unknown mode: " + args.mode)

@@ -117,7 +117,8 @@ def main():
     ):
         struct.pack_into(">I", hdr, o_off + i * 4, off + len(body))
         struct.pack_into(">I", hdr, o_addr + i * 4, addr)
-        struct.pack_into(">I", hdr, o_size + i * 4, len(blob))
+        # Sizes are rounded up to 0x20 like dtk elf2dol, so the build check matches.
+        struct.pack_into(">I", hdr, o_size + i * 4, len(blob) + (-len(blob) % 0x20))
         body += blob
         body += b"\0" * (-len(body) % 0x20)
     struct.pack_into(">III", hdr, 0xD8, bss_start, bss_end - bss_start, BS2_ADDR)
