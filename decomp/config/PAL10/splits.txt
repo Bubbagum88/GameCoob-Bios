@@ -17,7 +17,7 @@ bs2/scene.c:
 	.sdata      start:0x814ACFF0 end:0x814ACFF8
 	.sbss       start:0x814AD3B8 end:0x814AD3D8
 	.sdata2     start:0x814ADC78 end:0x814ADD78
-	.bss        start:0x814AF878 end:0x814AFD58
+	.bss        start:0x814AF980 end:0x814AFD58
 
 bs2/cube.c:
 	.text       start:0x8130EF48 end:0x81310F58

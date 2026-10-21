@@ -73,8 +73,8 @@ static void *sDialogGlh;             /* 0x814AD3C8 */
 static void *sDialogSth;             /* 0x814AD3CC */
 static s16 sPrevSpin;                /* 0x814AD3D0 */
 
-static Scene sSceneDefault;          /* 0x814AF878 */
-static Mtx sWorldMtx;                /* 0x814AF950 */
+extern Scene sSceneDefault;   /* 0x814AF878, outside this unit's .bss */
+extern Mtx sWorldMtx;          /* 0x814AF950 */
 static J3DModel sBgInnerModel;       /* 0x814AF980 res 0x23 */
 static J3DModelInstance sBgInner;    /* 0x814AF9B8 */
 static J3DModel sBigCubeModel;       /* 0x814AFA30 res 0x67 */
@@ -448,33 +448,44 @@ static void Scene_DrawWorld(void) {
     Mtx m;
     Mtx id;
     MtxPtr view;
-    Vec squash = { 0.0f, 0.0f, 0.0f };
-    Vec scale = { 0.0f, 0.0f, 0.0f };
-    Vec logoScale = { 1.0f, 1.0f, 1.0f };
-    Vec outerScale = { 1.01f, 1.01f, 1.01f };
     f32 xz;
 
     Scene_CalcWorldMtx(m);
     PSMTXIdentity(id);
     PSMTXConcat(m, id, sWorldMtx);
-    xz = 1.0f - s->squashXZ;
-    squash.x = 1.0f - xz * s->spinSpeed / s->spinThreshold;
-    squash.y = 1.0f + s->stretchY * s->spinSpeed / s->spinThreshold;
-    squash.z = 1.0f - xz * s->spinSpeed / s->spinThreshold;
-    MtxScaleCols(sWorldMtx, &squash);
+    {
+        Vec squash = { 0.0f, 0.0f, 0.0f };
 
-    scale.x = scale.y = scale.z = s->modelScale;
-    J3D_SetModelMtx(Scene_GetBgInner(), sWorldMtx, scale);
+        xz = 1.0f - s->squashXZ;
+        squash.x = 1.0f - xz * s->spinSpeed / s->spinThreshold;
+        squash.y = 1.0f + s->stretchY * s->spinSpeed / s->spinThreshold;
+        squash.z = 1.0f - xz * s->spinSpeed / s->spinThreshold;
+        MtxScaleCols(sWorldMtx, &squash);
+    }
+    {
+        Vec scale = { 0.0f, 0.0f, 0.0f };
+
+        scale.x = s->modelScale;
+        scale.y = s->modelScale;
+        scale.z = s->modelScale;
+        J3D_SetModelMtx(Scene_GetBgInner(), sWorldMtx, scale);
+    }
     view = Camera_GetView();
     J3D_SetViewMtx(Scene_GetBgInner(), view);
     J3D_CalcJoints(Scene_GetBgInner());
+    {
+        Vec logoScale = { 1.0f, 1.0f, 1.0f };
 
-    J3D_SetModelMtx(Scene_GetLogo(), sWorldMtx, logoScale);
+        J3D_SetModelMtx(Scene_GetLogo(), sWorldMtx, logoScale);
+    }
     view = Camera_GetView();
     J3D_SetViewMtx(Scene_GetLogo(), view);
     J3D_CalcJoints(Scene_GetLogo());
+    {
+        Vec outerScale = { 1.01f, 1.01f, 1.01f };
 
-    J3D_SetModelMtx(Scene_GetBgOuter(), sWorldMtx, outerScale);
+        J3D_SetModelMtx(Scene_GetBgOuter(), sWorldMtx, outerScale);
+    }
     view = Camera_GetView();
     J3D_SetViewMtx(Scene_GetBgOuter(), view);
     J3D_CalcJoints(Scene_GetBgOuter());
