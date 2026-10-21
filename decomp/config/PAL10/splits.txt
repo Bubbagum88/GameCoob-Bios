@@ -59,6 +59,202 @@ bs2/menu/calendar.c:
 	.sdata2     start:0x814AE068 end:0x814AE080
 	.bss        start:0x814DE600 end:0x814DE638
 
+jaudio/dummyprobe.c:
+	.text       start:0x813376A0 end:0x81337740
+
+jaudio/aictrl.c:
+	.text       start:0x81338400 end:0x81338CA0
+	.rodata     start:0x8137F058 end:0x8137F278
+	.sbss       start:0x814AD658 end:0x814AD688
+	.sdata2     start:0x814AE1C8 end:0x814AE1D8
+	.bss        start:0x815615E0 end:0x81561600
+
+jaudio/sample.c:
+	.text       start:0x81338CA0 end:0x81338F40
+
+jaudio/dummyrom.c:
+	.text       start:0x81338F40 end:0x81339220
+	.rodata     start:0x8137F278 end:0x8137F398
+	.sbss       start:0x814AD688 end:0x814AD698
+
+jaudio/audiothread.c:
+	.text       start:0x81339220 end:0x813396C0
+	.rodata     start:0x8137F398 end:0x8137F6C8
+	.sbss       start:0x814AD698 end:0x814AD6A8
+	.sdata2     start:0x814AE1D8 end:0x814AE1E0
+	.bss        start:0x81561600 end:0x81564660
+
+jaudio/streamctrl.c:
+	.text       start:0x81339B60 end:0x81339F00
+	.data       start:0x813F1128 end:0x813F11F8
+	.sdata2     start:0x814AE1E0 end:0x814AE1F0
+	.bss        start:0x8156AA80 end:0x8156AAF0
+
+jaudio/dspbuf.c:
+	.text       start:0x81339F00 end:0x8133A260
+	.rodata     start:0x8137F808 end:0x8137F820
+	.sbss       start:0x814AD6D0 end:0x814AD6E0
+	.bss        start:0x8156AAF0 end:0x8156AB00
+
+jaudio/cpubuf.c:
+	.text       start:0x8133A260 end:0x8133A500
+	.sbss       start:0x814AD6E0 end:0x814AD6F0
+	.bss        start:0x8156AB00 end:0x8156AB10
+
+jaudio/playercall.c:
+	.text       start:0x8133A500 end:0x8133A7C0
+	.bss        start:0x8156AB10 end:0x8156ABD0
+
+jaudio/dvdthread.c:
+	.text       start:0x8133A7C0 end:0x8133B560
+	.rodata     start:0x8137F820 end:0x8137F9E8
+	.data       start:0x813F11F8 end:0x813F1218
+	.sbss       start:0x814AD6F0 end:0x814AD740
+	.bss        start:0x8156ABD0 end:0x81573898
+
+jaudio/audiomesg.c:
+	.text       start:0x8133C240 end:0x8133CB60
+
+jaudio/stackchecker.c:
+	.text       start:0x8133ED60 end:0x8133EDA0
+
+jaudio/memory.c:
+	.text       start:0x8133EE40 end:0x8133EF20
+
+jaudio/dspboot.c:
+	.text       start:0x8134D2C0 end:0x8134D680
+	.rodata     start:0x8137FA10 end:0x8137FA30
+	.data       start:0x813F4BA0 end:0x813F6300
+	.sdata2     start:0x814AE338 end:0x814AE340
+
+jaudio/dspproc.c:
+	.text       start:0x8134D680 end:0x8134DAC0
+	.rodata     start:0x8137FA30 end:0x8137FB38
+	.sdata      start:0x814AD118 end:0x814AD120
+	.sdata2     start:0x814AE340 end:0x814AE348
+
+jaudio/ipldec.c:
+	.text       start:0x8134DAC0 end:0x8134DD00
+	.rodata     start:0x8137FB38 end:0x8137FBB8
+	.sbss       start:0x814AD7A0 end:0x814AD7A8
+
+jaudio/dsp_cardunlock.c:
+	.text       start:0x8134DD00 end:0x8134E520
+	.rodata     start:0x8137FBB8 end:0x8137FBF8
+
+jaudio/driverinterface.c:
+	.text       start:0x8134E520 end:0x81350080
+	.rodata     start:0x8137FBF8 end:0x81380158
+	.data       start:0x813F6300 end:0x813F6398
+	.sdata      start:0x814AD120 end:0x814AD128
+	.sbss       start:0x814AD7A8 end:0x814AD7B8
+	.sdata2     start:0x814AE348 end:0x814AE368
+	.bss        start:0x815738C0 end:0x81587A40
+
+jaudio/dspdriver.c:
+	.text       start:0x81350080 end:0x813508E0
+	.data       start:0x813F6398 end:0x813F63C0
+	.sbss       start:0x814AD7B8 end:0x814AD7C0
+	.sdata2     start:0x814AE368 end:0x814AE378
+	.bss        start:0x81587A40 end:0x81587E40
+
+jaudio/dspinterface.c:
+	.text       start:0x813508E0 end:0x81351040
+	.rodata     start:0x81380158 end:0x813802C0
+	.data       start:0x813F63C0 end:0x813F6820
+	.sdata      start:0x814AD128 end:0x814AD138
+	.bss        start:0x81587E40 end:0x8158DEC0
+
+jaudio/fxinterface.c:
+	.text       start:0x81351040 end:0x81351180
+	.data       start:0x813F6820 end:0x813F6838
+
+jaudio/bankread.c:
+	.text       start:0x81351180 end:0x81351580
+	.bss        start:0x8158DEC0 end:0x8158E2C0
+
+jaudio/waveread.c:
+	.text       start:0x81351580 end:0x81351AA0
+	.bss        start:0x8158E2C0 end:0x8158EAC0
+
+jaudio/connect.c:
+	.text       start:0x81351AA0 end:0x81352160
+	.bss        start:0x8158EAC0 end:0x8158EEC0
+
+jaudio/bankdrv.c:
+	.text       start:0x81352160 end:0x813529E0
+	.rodata     start:0x813802C0 end:0x81380380
+	.data       start:0x813F6A38 end:0x813F6A48
+	.sdata2     start:0x814AE378 end:0x814AE3A0
+
+jaudio/random.c:
+	.text       start:0x813529E0 end:0x81352A80
+	.sdata      start:0x814AD138 end:0x814AD140
+	.sdata2     start:0x814AE3A0 end:0x814AE3B0
+
+jaudio/aramcall.c:
+	.text       start:0x81352AA0 end:0x81352DA0
+	.data       start:0x813F6A48 end:0x813F6A88
+	.sdata      start:0x814AD140 end:0x814AD148
+	.sbss       start:0x814AD7C0 end:0x814AD7C8
+
+jaudio/ja_calc.c:
+	.text       start:0x81352DA0 end:0x81352F20
+	.sdata2     start:0x814AE3B0 end:0x814AE3E0
+	.bss        start:0x8158EEC0 end:0x8158F2C8
+
+jaudio/fat.c:
+	.text       start:0x81352F20 end:0x81353320
+	.sbss       start:0x814AD7C8 end:0x814AD7D0
+	.bss        start:0x8158F2C8 end:0x8158FEC8
+
+jaudio/cmdstack.c:
+	.text       start:0x81353320 end:0x813534C0
+	.sbss       start:0x814AD7D0 end:0x814AD7E0
+
+jaudio/virload.c:
+	.text       start:0x813534C0 end:0x81353580
+	.sbss       start:0x814AD7E0 end:0x814AD7E8
+	.bss        start:0x8158FEC8 end:0x8158FF08
+
+jaudio/heapctrl.c:
+	.text       start:0x81353580 end:0x81353980
+	.sbss       start:0x814AD7E8 end:0x814AD7F0
+
+jaudio/jammain_2.c:
+	.text       start:0x81353980 end:0x81357780
+	.rodata     start:0x81380380 end:0x81380470
+	.data       start:0x813F6A88 end:0x813F7148
+	.sdata      start:0x814AD148 end:0x814AD150
+	.sbss       start:0x814AD7F0 end:0x814AD800
+	.sdata2     start:0x814AE3E0 end:0x814AE438
+	.bss        start:0x8158FF08 end:0x81590028
+
+jaudio/noteon.c:
+	.text       start:0x81357780 end:0x81357CE0
+	.sdata2     start:0x814AE438 end:0x814AE440
+
+jaudio/seqsetup.c:
+	.text       start:0x81357CE0 end:0x81358BC0
+	.rodata     start:0x81380470 end:0x813806F0
+	.sbss       start:0x814AD800 end:0x814AD810
+	.sdata2     start:0x814AE440 end:0x814AE450
+
+jaudio/centcalc.c:
+	.text       start:0x81358BC0 end:0x81358CA0
+	.data       start:0x813F7148 end:0x813F7248
+	.sdata2     start:0x814AE450 end:0x814AE468
+
+jaudio/jamosc.c:
+	.text       start:0x81358CA0 end:0x81359140
+	.data       start:0x813F7248 end:0x813F7330
+	.sdata2     start:0x814AE468 end:0x814AE470
+
+jaudio/oneshot.c:
+	.text       start:0x81359140 end:0x8135A8E0
+	.data       start:0x813F7330 end:0x813F7370
+	.sdata2     start:0x814AE470 end:0x814AE4A0
+
 dolphin/base/PPCArch.c:
 	.text       start:0x8135B57C end:0x8135B5E0
 

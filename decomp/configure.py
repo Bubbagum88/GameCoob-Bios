@@ -142,6 +142,11 @@ if args.mode == "configure" and not _dol.exists():
         sys.exit(f"Put your IPL dump at {_ipl} (see README.md)")
     import subprocess
     subprocess.check_call([sys.executable, "tools/extract_bs2.py", str(_ipl), str(_dol)])
+if args.mode == "configure" and _dol.exists():
+    # Data blobs some sources #include (never committed), see tools/extract_blobs.py
+    import subprocess
+    subprocess.check_call([sys.executable, "tools/extract_blobs.py", str(_dol),
+                           str(args.build_dir / str(args.version) / "include"), str(args.version)])
 
 config = ProjectConfig()
 config.version = str(args.version)
@@ -316,6 +321,39 @@ config.linker_version = "GC/1.1"
 cflags_dolphin = [
     *cflags_base,
     "-fp_contract off",
+]
+
+
+# JAudio (JSystem sound library) flags, from the Pikmin decomp's: JAudio there
+# is the same library, built as C++ with 32-byte function alignment.
+cflags_jaudio = [
+    "-nodefaults",
+    "-proc gekko",
+    '-pragma "scheduling 7400"',
+    "-align powerpc",
+    "-enum int",
+    "-fp hardware",
+    "-Cpp_exceptions off",
+    "-O4,s",
+    "-inline off",
+    '-pragma "cats off"',
+    '-pragma "warn_notinlined off"',
+    "-maxerrors 1",
+    "-nosyspath",
+    "-RTTI off",
+    "-fp_contract on",
+    "-str reuse,readonly",
+    "-multibyte",
+    "-i include",
+    f"-i build/{config.version}/include",
+    f"-DBUILD_VERSION={version_num}",
+    f"-DVERSION_{config.version}",
+    "-common on",
+    "-func_align 32",
+    "-lang c++",
+    "-DNDEBUG=1",
+    "-w off",
+    "-use_lmw_stmw on",
 ]
 
 
@@ -528,6 +566,52 @@ config.libs = [
             Object(NonMatching, "bs2/menu/options.c"),
         ],
     },
+    {
+        "lib": "jaudio",
+        "mw_version": "GC/1.2.5n",
+        "cflags": cflags_jaudio,
+        "progress_category": "jaudio",
+        "objects": [
+            Object(NonMatching, "jaudio/dummyprobe.c"),
+            Object(NonMatching, "jaudio/aictrl.c"),
+            Object(NonMatching, "jaudio/sample.c"),
+            Object(NonMatching, "jaudio/dummyrom.c"),
+            Object(NonMatching, "jaudio/audiothread.c"),
+            Object(NonMatching, "jaudio/streamctrl.c"),
+            Object(NonMatching, "jaudio/dspbuf.c"),
+            Object(NonMatching, "jaudio/cpubuf.c"),
+            Object(NonMatching, "jaudio/playercall.c"),
+            Object(NonMatching, "jaudio/dvdthread.c"),
+            Object(NonMatching, "jaudio/audiomesg.c"),
+            Object(NonMatching, "jaudio/stackchecker.c"),
+            Object(NonMatching, "jaudio/memory.c"),
+            Object(NonMatching, "jaudio/dspboot.c"),
+            Object(NonMatching, "jaudio/dspproc.c"),
+            Object(NonMatching, "jaudio/ipldec.c"),
+            Object(NonMatching, "jaudio/dsp_cardunlock.c"),
+            Object(NonMatching, "jaudio/driverinterface.c"),
+            Object(NonMatching, "jaudio/dspdriver.c"),
+            Object(NonMatching, "jaudio/dspinterface.c"),
+            Object(NonMatching, "jaudio/fxinterface.c"),
+            Object(NonMatching, "jaudio/bankread.c"),
+            Object(NonMatching, "jaudio/waveread.c"),
+            Object(NonMatching, "jaudio/connect.c"),
+            Object(NonMatching, "jaudio/bankdrv.c"),
+            Object(NonMatching, "jaudio/random.c"),
+            Object(NonMatching, "jaudio/aramcall.c"),
+            Object(NonMatching, "jaudio/ja_calc.c"),
+            Object(NonMatching, "jaudio/fat.c"),
+            Object(NonMatching, "jaudio/cmdstack.c"),
+            Object(NonMatching, "jaudio/virload.c"),
+            Object(NonMatching, "jaudio/heapctrl.c"),
+            Object(NonMatching, "jaudio/jammain_2.c"),
+            Object(NonMatching, "jaudio/noteon.c"),
+            Object(NonMatching, "jaudio/seqsetup.c"),
+            Object(NonMatching, "jaudio/centcalc.c"),
+            Object(NonMatching, "jaudio/jamosc.c"),
+            Object(NonMatching, "jaudio/oneshot.c"),
+        ],
+    },
 ]
 
 
@@ -554,6 +638,7 @@ def link_order_callback(module_id: int, objects: List[str]) -> List[str]:
 config.progress_categories = [
     ProgressCategory("game", "Game Code"),
     ProgressCategory("sdk", "SDK Code"),
+    ProgressCategory("jaudio", "JAudio Code"),
 ]
 config.progress_each_module = args.verbose
 # Optional extra arguments to `objdiff-cli report generate`
