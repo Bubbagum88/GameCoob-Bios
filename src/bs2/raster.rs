@@ -86,6 +86,16 @@ pub struct Prim<'a> {
 }
 
 impl Sh<'_> {
+    /// How many texture coordinate sets the shading reads.
+    #[inline]
+    fn texcoords(&self) -> usize {
+        match self {
+            Sh::Mat { .. } => MAX_TC,
+            Sh::Modulate { .. } => 1,
+            Sh::Flat => 0,
+        }
+    }
+
     #[inline]
     fn shade(&self, f: &Frag) -> Option<[f32; 4]> {
         match *self {
@@ -100,6 +110,19 @@ impl Sh<'_> {
             }
             Sh::Flat => Some(f.color),
         }
+    }
+}
+
+/// Work split into pieces that any number of processors can claim at once.
+/// `work` keeps claiming pieces until none are left and returns how many
+/// it did.
+pub trait Work: Sync {
+    fn work(&self) -> usize;
+}
+
+impl Work for Job<'_> {
+    fn work(&self) -> usize {
+        Job::work(self)
     }
 }
 
@@ -163,6 +186,17 @@ impl<'a> Job<'a> {
         if a.y.max(b.y).max(c.y) < band_y0 as f32 || a.y.min(b.y).min(c.y) > band_y1 as f32 + 1.0 {
             return;
         }
+        // Fully transparent vertex colour, blended without a depth write,
+        // changes nothing (common for faded-out 2D panes).
+        if st.blend != BlendMode::None
+            && !st.z_update
+            && matches!(p.sh, Sh::Modulate { .. } | Sh::Flat)
+            && a.color[3] <= 0.0
+            && b.color[3] <= 0.0
+            && c.color[3] <= 0.0
+        {
+            return;
+        }
         let area = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
         if area.abs() < 1e-8 {
             return;
@@ -189,6 +223,8 @@ impl<'a> Job<'a> {
             (ex, ey, ((q.y - p.y) * p.x - (q.x - p.x) * p.y) * inv)
         };
         let (e0, e1) = (e(&b, &c), e(&c, &a));
+        let flat_w = a.rw == b.rw && b.rw == c.rw;
+        let tcs = p.sh.texcoords();
         let mut frag = Frag { color: [0.0; 4], uv: [[0.0; 2]; MAX_TC] };
         for y in miny..=maxy {
             let fy = y as f32 + 0.5;
@@ -229,15 +265,20 @@ impl<'a> Job<'a> {
                 if st.z_compare && z > *dz {
                     continue;
                 }
-                // Perspective-correct weights.
-                let (p0, p1, p2) = (w0 * a.rw, w1 * b.rw, w2 * c.rw);
-                let s = 1.0 / (p0 + p1 + p2);
-                let (p0, p1, p2) = (p0 * s, p1 * s, p2 * s);
+                // Perspective-correct weights (2D and orthographic
+                // triangles share one 1/w and need no divide).
+                let (p0, p1, p2) = if flat_w {
+                    (w0, w1, w2)
+                } else {
+                    let (p0, p1, p2) = (w0 * a.rw, w1 * b.rw, w2 * c.rw);
+                    let s = 1.0 / (p0 + p1 + p2);
+                    (p0 * s, p1 * s, p2 * s)
+                };
                 let f = &mut frag;
                 for k in 0..4 {
                     f.color[k] = p0 * a.color[k] + p1 * b.color[k] + p2 * c.color[k];
                 }
-                for t in 0..MAX_TC {
+                for t in 0..tcs {
                     for k in 0..2 {
                         f.uv[t][k] = p0 * a.uv[t][k] + p1 * b.uv[t][k] + p2 * c.uv[t][k];
                     }

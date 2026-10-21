@@ -3,6 +3,8 @@
 
 use alloc::vec;
 use alloc::vec::Vec;
+use core::sync::atomic::{AtomicUsize, Ordering};
+use crate::bs2::raster::Work;
 use uefi::proto::console::gop::{BltOp, BltPixel, BltRegion, GraphicsOutput};
 
 /// The GameCube's 480-line picture has 448 active lines.
@@ -19,7 +21,7 @@ pub struct Canvas {
     pub pw: usize,
     pub ph: usize,
     px: Vec<BltPixel>,
-    acc: Vec<[f32; 3]>,
+    span: Vec<(usize, usize)>,
     cleared: bool,
 }
 
@@ -40,59 +42,36 @@ impl Canvas {
             pw: pic_w,
             ph,
             px: vec![BltPixel::new(0, 0, 0); pic_w * ph],
-            acc: Vec::new(),
+            span: Vec::new(),
             cleared: false,
         }
     }
 
-    /// Scale a frame (`sw` x `sh`, linear 0..1 RGB) into the picture. A
-    /// smaller frame is enlarged with nearest-neighbour; a larger one is
-    /// box-filtered down, which smooths its edges (supersampling).
-    pub fn blit_frame(&mut self, src: &[[f32; 3]], sw: usize, sh: usize) {
+    /// Scale a frame (`sw` x `sh`, linear 0..1 RGB) into the picture, on
+    /// as many processors as `par` runs the work on. A smaller frame is
+    /// enlarged with nearest-neighbour; a larger one is box-filtered down,
+    /// which smooths its edges (supersampling).
+    pub fn blit_frame(&mut self, src: &[[f32; 3]], sw: usize, sh: usize, par: &dyn Fn(&dyn Work)) {
         let (pw, ph) = (self.pw, self.ph);
-        if sw >= pw && sh >= ph {
-            return self.downsample(src, sw, sh);
-        }
-        let cols: Vec<usize> = (0..pw).map(|x| x * sw / pw).collect();
-        let mut last = usize::MAX;
-        for y in 0..ph {
-            let sy = y * sh / ph;
-            if sy == last {
-                self.px.copy_within((y - 1) * pw..y * pw, y * pw);
-                continue;
-            }
-            last = sy;
-            let row = &src[sy * sw..][..sw];
-            for (d, &c) in self.px[y * pw..][..pw].iter_mut().zip(cols.iter()) {
-                *d = to_px(row[c]);
-            }
-        }
-    }
-
-    fn downsample(&mut self, src: &[[f32; 3]], sw: usize, sh: usize) {
-        let (pw, ph) = (self.pw, self.ph);
-        // Source column span of each picture column.
-        let span: Vec<(usize, usize)> = (0..pw).map(|x| (x * sw / pw, ((x + 1) * sw / pw).max(x * sw / pw + 1))).collect();
-        self.acc.resize(pw, [0.0; 3]);
-        for y in 0..ph {
-            let (y0, y1) = (y * sh / ph, ((y + 1) * sh / ph).max(y * sh / ph + 1));
-            self.acc.fill([0.0; 3]);
-            for sy in y0..y1 {
-                let row = &src[sy * sw..][..sw];
-                for (a, &(x0, x1)) in self.acc.iter_mut().zip(span.iter()) {
-                    for p in &row[x0..x1] {
-                        a[0] += p[0];
-                        a[1] += p[1];
-                        a[2] += p[2];
-                    }
-                }
-            }
-            let rows = (y1 - y0) as f32;
-            for ((d, a), &(x0, x1)) in self.px[y * pw..][..pw].iter_mut().zip(self.acc.iter()).zip(span.iter()) {
-                let k = 1.0 / (rows * (x1 - x0) as f32);
-                *d = to_px([a[0] * k, a[1] * k, a[2] * k]);
-            }
-        }
+        assert!(src.len() >= sw * sh);
+        // Source column span of each picture column (one column when enlarging).
+        self.span.clear();
+        self.span.extend((0..pw).map(|x| {
+            let x0 = x * sw / pw;
+            (x0, ((x + 1) * sw / pw).max(x0 + 1).min(sw))
+        }));
+        let job = Scale {
+            src: src.as_ptr(),
+            sw,
+            sh,
+            dst: self.px.as_mut_ptr(),
+            pw,
+            ph,
+            span: &self.span,
+            down: sw >= pw && sh >= ph,
+            next: AtomicUsize::new(0),
+        };
+        par(&job);
     }
 
     /// Push the picture; the black border around it is drawn only once.
@@ -170,6 +149,66 @@ impl ResScale {
             self.scale = (self.scale * k).max(self.min);
         } else if avg < FAST {
             self.scale = (self.scale * 1.1).min(self.max);
+        }
+    }
+}
+
+/// One frame's scale, split into bands of rows that processors claim.
+struct Scale<'a> {
+    src: *const [f32; 3],
+    sw: usize,
+    sh: usize,
+    dst: *mut BltPixel,
+    pw: usize,
+    ph: usize,
+    span: &'a [(usize, usize)],
+    down: bool,
+    next: AtomicUsize,
+}
+
+// Bands are disjoint picture rows, claimed once each through `next`; the
+// source is only read.
+unsafe impl Sync for Scale<'_> {}
+
+const SCALE_BAND: usize = 8;
+
+impl Work for Scale<'_> {
+    fn work(&self) -> usize {
+        let mut did = 0;
+        loop {
+            let b = self.next.fetch_add(1, Ordering::AcqRel);
+            let y0 = b * SCALE_BAND;
+            if y0 >= self.ph {
+                return did;
+            }
+            did += 1;
+            for y in y0..(y0 + SCALE_BAND).min(self.ph) {
+                // SAFETY: row `y` belongs to this band only; `src` holds
+                // `sw * sh` pixels (checked in `blit_frame`).
+                let dst = unsafe { core::slice::from_raw_parts_mut(self.dst.add(y * self.pw), self.pw) };
+                let (r0, r1) = (y * self.sh / self.ph, ((y + 1) * self.sh / self.ph).max(y * self.sh / self.ph + 1).min(self.sh));
+                if !self.down {
+                    let row = unsafe { core::slice::from_raw_parts(self.src.add(r0 * self.sw), self.sw) };
+                    for (d, &(c, _)) in dst.iter_mut().zip(self.span) {
+                        *d = to_px(row[c]);
+                    }
+                    continue;
+                }
+                let k_rows = 1.0 / (r1 - r0) as f32;
+                for (d, &(c0, c1)) in dst.iter_mut().zip(self.span) {
+                    let mut a = [0.0f32; 3];
+                    for sy in r0..r1 {
+                        let row = unsafe { core::slice::from_raw_parts(self.src.add(sy * self.sw + c0), c1 - c0) };
+                        for p in row {
+                            a[0] += p[0];
+                            a[1] += p[1];
+                            a[2] += p[2];
+                        }
+                    }
+                    let k = k_rows / (c1 - c0) as f32;
+                    *d = to_px([a[0] * k, a[1] * k, a[2] * k]);
+                }
+            }
         }
     }
 }
