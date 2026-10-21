@@ -295,6 +295,14 @@ cflags_runtime = [
     "-inline auto",
 ]
 
+# Runtime/MSL_C/TRK base flags (as in the Pikmin decomp): no fused
+# multiply-add by default, and include/stl searched before include/
+cflags_msl_base = [
+    "-i include/stl",
+    *[f for f in cflags_base if f != "-fp_contract on"],
+    "-fp_contract off",
+]
+
 # REL flags
 cflags_rel = [
     *cflags_base,
@@ -346,14 +354,60 @@ def MatchingFor(*versions):
 config.warn_missing_config = True
 config.warn_missing_source = False
 config.libs = [
+    # Runtime, MSL_C and TRK glue: sources follow the Pikmin decomp
+    # (projectPiki/pikmin, CC0), which links the same library build.
+    # include/stl comes first so their <stdio.h> etc. win over include/.
     {
         "lib": "Runtime.PPCEABI.H",
-        "mw_version": config.linker_version,
-        "cflags": cflags_runtime,
-        "progress_category": "sdk",  # str | List[str]
+        "mw_version": "GC/1.2.5",
+        "cflags": [*cflags_msl_base, "-use_lmw_stmw on", "-str reuse,readonly", "-common off", "-inline auto", "-inline deferred"],
+        "progress_category": "sdk",
         "objects": [
-            Object(NonMatching, "Runtime.PPCEABI.H/global_destructor_chain.c"),
-            Object(NonMatching, "Runtime.PPCEABI.H/__init_cpp_exceptions.cpp"),
+            Object(NonMatching, "Runtime/PPCEABI/H/__va_arg.c"),
+            Object(NonMatching, "Runtime/PPCEABI/H/global_destructor_chain.c"),
+            Object(NonMatching, "Runtime/PPCEABI/H/runtime.c"),
+        ],
+    },
+    {
+        "lib": "MSL_C.PPCEABI.bare.H",
+        "mw_version": "GC/1.2.5",
+        "cflags": [*cflags_msl_base, "-fp_contract on", "-inline auto,deferred", "-str pool,readonly"],
+        "progress_category": "sdk",
+        "objects": [
+            Object(NonMatching, "MSL_C/PPCEABI/bare/H/ansi_files.c"),
+            Object(NonMatching, "MSL_C/PPCEABI/bare/H/abort_exit.c"),
+            Object(NonMatching, "MSL_C/PPCEABI/bare/H/ansi_fp.c"),
+            Object(NonMatching, "MSL_C/PPCEABI/bare/H/buffer_io.c"),
+            Object(NonMatching, "MSL_C/PPCEABI/bare/H/critical_regions.ppc_eabi.c"),
+            Object(NonMatching, "MSL_C/PPCEABI/bare/H/ctype.c"),
+            Object(NonMatching, "MSL_C/PPCEABI/bare/H/direct_io.c"),
+            Object(NonMatching, "MSL_C/PPCEABI/bare/H/mbstring.c"),
+            Object(NonMatching, "MSL_C/PPCEABI/bare/H/mem.c"),
+            Object(NonMatching, "MSL_C/PPCEABI/bare/H/mem_funcs.c"),
+            Object(NonMatching, "MSL_C/PPCEABI/bare/H/misc_io.c"),
+            Object(NonMatching, "MSL_C/PPCEABI/bare/H/printf.c"),
+            Object(NonMatching, "MSL_C/PPCEABI/bare/H/qsort.c"),
+            Object(NonMatching, "MSL_C/PPCEABI/bare/H/rand.c"),
+            Object(NonMatching, "MSL_C/PPCEABI/bare/H/string.c"),
+            Object(NonMatching, "MSL_C/PPCEABI/bare/H/uart_console_io.c"),
+            Object(NonMatching, "MSL_C/PPCEABI/bare/H/wchar_io.c"),
+            Object(NonMatching, "MSL_C/PPCEABI/bare/H/e_asin.c"),
+            Object(NonMatching, "MSL_C/PPCEABI/bare/H/e_atan2.c"),
+            Object(NonMatching, "MSL_C/PPCEABI/bare/H/s_atan.c"),
+            Object(NonMatching, "MSL_C/PPCEABI/bare/H/s_frexp.c"),
+            Object(NonMatching, "MSL_C/PPCEABI/bare/H/w_atan2.c"),
+            Object(NonMatching, "MSL_C/PPCEABI/bare/H/hyperbolicsf.c"),
+            Object(NonMatching, "MSL_C/PPCEABI/bare/H/trigf.c"),
+            Object(NonMatching, "MSL_C/PPCEABI/bare/H/common_float_tables.c"),
+        ],
+    },
+    {
+        "lib": "TRK_MINNOW_DOLPHIN",
+        "mw_version": "GC/1.1p1",
+        "cflags": [*cflags_msl_base, "-use_lmw_stmw on", "-str reuse,readonly", "-common off", "-rostr", "-sdata 0", "-sdata2 0", "-pool off", "-inline on,noauto"],
+        "progress_category": "sdk",
+        "objects": [
+            Object(NonMatching, "TRK_MINNOW_DOLPHIN/dolphin_trk_glue.c"),
         ],
     },
     DolphinLib(
