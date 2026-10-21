@@ -442,50 +442,58 @@ static void Scene_CalcWorldMtx(Mtx m) {
     PSMTXConcat(t, m, m);
 }
 
+/* Squash the world along XZ and stretch it along Y as the spin speeds up */
+static inline void Scene_SquashWorld(Scene *s) {
+    Vec squash = { 0.0f, 0.0f, 0.0f };
+    f32 xz = 1.0f - s->squashXZ;
+
+    squash.x = 1.0f - xz * s->spinSpeed / s->spinThreshold;
+    squash.y = 1.0f + s->stretchY * s->spinSpeed / s->spinThreshold;
+    squash.z = 1.0f - xz * s->spinSpeed / s->spinThreshold;
+    MtxScaleCols(sWorldMtx, &squash);
+}
+
+static inline Vec Scene_VecSplat(f32 v) {
+    Vec r = { 0.0f, 0.0f, 0.0f };
+
+    r.x = v;
+    r.y = v;
+    r.z = v;
+    return r;
+}
+
+static inline Vec Scene_VecOne(void) {
+    Vec r = { 1.0f, 1.0f, 1.0f };
+
+    return r;
+}
+
+static inline Vec Scene_VecOuter(void) {
+    Vec r = { 1.01f, 1.01f, 1.01f };
+
+    return r;
+}
+
 /* 0x8130C90C */
 static void Scene_DrawWorld(void) {
     Scene *s = Scene_Get();
     Mtx m;
     Mtx id;
     MtxPtr view;
-    f32 xz;
 
     Scene_CalcWorldMtx(m);
     PSMTXIdentity(id);
     PSMTXConcat(m, id, sWorldMtx);
-    {
-        Vec squash = { 0.0f, 0.0f, 0.0f };
-
-        xz = 1.0f - s->squashXZ;
-        squash.x = 1.0f - xz * s->spinSpeed / s->spinThreshold;
-        squash.y = 1.0f + s->stretchY * s->spinSpeed / s->spinThreshold;
-        squash.z = 1.0f - xz * s->spinSpeed / s->spinThreshold;
-        MtxScaleCols(sWorldMtx, &squash);
-    }
-    {
-        Vec scale = { 0.0f, 0.0f, 0.0f };
-
-        scale.x = s->modelScale;
-        scale.y = s->modelScale;
-        scale.z = s->modelScale;
-        J3D_SetModelMtx(Scene_GetBgInner(), sWorldMtx, scale);
-    }
+    Scene_SquashWorld(s);
+    J3D_SetModelMtx(Scene_GetBgInner(), sWorldMtx, Scene_VecSplat(s->modelScale));
     view = Camera_GetView();
     J3D_SetViewMtx(Scene_GetBgInner(), view);
     J3D_CalcJoints(Scene_GetBgInner());
-    {
-        Vec logoScale = { 1.0f, 1.0f, 1.0f };
-
-        J3D_SetModelMtx(Scene_GetLogo(), sWorldMtx, logoScale);
-    }
+    J3D_SetModelMtx(Scene_GetLogo(), sWorldMtx, Scene_VecOne());
     view = Camera_GetView();
     J3D_SetViewMtx(Scene_GetLogo(), view);
     J3D_CalcJoints(Scene_GetLogo());
-    {
-        Vec outerScale = { 1.01f, 1.01f, 1.01f };
-
-        J3D_SetModelMtx(Scene_GetBgOuter(), sWorldMtx, outerScale);
-    }
+    J3D_SetModelMtx(Scene_GetBgOuter(), sWorldMtx, Scene_VecOuter());
     view = Camera_GetView();
     J3D_SetViewMtx(Scene_GetBgOuter(), view);
     J3D_CalcJoints(Scene_GetBgOuter());
