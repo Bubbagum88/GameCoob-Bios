@@ -74,19 +74,14 @@ The NINTENDO GAMECUBE wordmark is blanked out of these images.
 
 ## Assets and Nintendo content
 
-Nothing from Nintendo is stored in this repository: no ROM data, binaries,
-disassembly, models, textures, fonts or sounds. The screenshots above are
-renders from a dump, with the NINTENDO GAMECUBE wordmark removed.
-
-- **The app** is original Rust. At boot it reads the
-  intro's models, textures, fonts and sounds from an `ipl.bin` you dumped
-  from your own console. Without one, it does not play the intro.
-- **The decomp** is hand-written C that, compiled with the original
-  toolchain, rebuilds the IPL's BS2 program byte for byte. Building or
-  checking it also needs your own `ipl.bin`; the dump, the extracted
-  `bs2.dol` and the generated assembly stay out of git.
-
-See [docs/ROADMAP.md](docs/ROADMAP.md) for what is planned.
+Everything in this repository was written by this project, plus reference
+material: screenshots rendered from a dump or captured from the real IPL in
+Dolphin (wordmark removed), and specs and symbol maps written from studying
+the IPL. Nintendo's binaries, models, textures, fonts and sounds are
+**never** committed here; the decomp is hand-written C that rebuilds the
+original program when compiled. GameCoob reads the assets at boot from an
+`ipl.bin` dump of your own console, if you provide one; see
+[docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Download
 
