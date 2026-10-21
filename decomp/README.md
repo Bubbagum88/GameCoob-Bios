@@ -19,6 +19,7 @@ original Rust written from the specs in `docs/`.
 
 - `src/bs2/`, `include/bs2/`: decompiled BS2 C, one comment per function with its address
 - `src/dolphin/`, `include/dolphin/`: the Dolphin SDK parts BS2 links (os, base, mtx so far)
+- `src/jaudio/`, `include/jaudio/`: JAudio sound library, from the Pikmin decomp (see `docs/jaudio.md`)
 - `docs/sdk_libs.md`: SDK library map, compiler (GC/1.2.5n) and matched units
 - `docs/intro.md`, `docs/menu.md`: behavior specs (timings, state machines, layouts)
 - `config/PAL10/`: decomp-toolkit config, symbols and splits
