@@ -8,7 +8,7 @@ It runs after your motherboard's firmware and before any operating system, so
 nothing gets flashed and nothing can be bricked. If something goes wrong, your
 normal boot menu is still there.
 
-The repository also holds a matching decompilation of the GameCube IPL's BS2
+The repository also holds a (future) matching decompilation of the GameCube IPL's BS2
 program (the intro and menus), aiming to rebuild every unit byte for byte with
 the original CodeWarrior compiler, starting with PAL 1.0 and later every IPL
 revision. The app is original Rust written from specs drawn from that work.
