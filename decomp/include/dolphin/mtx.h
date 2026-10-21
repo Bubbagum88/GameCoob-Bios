@@ -11,6 +11,8 @@ typedef f32 Mtx[3][4];
 typedef f32 (*MtxPtr)[4];
 typedef f32 Mtx44[4][4];
 typedef f32 (*Mtx44Ptr)[4];
+typedef f32 Mtx23[2][3];
+typedef f32 Mtx33[3][3];
 
 #define MTXDegToRad(a) ((a) * 0.01745329252f)
 

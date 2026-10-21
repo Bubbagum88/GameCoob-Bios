@@ -216,3 +216,67 @@ dolphin/card/CARDDelete.c:
 
 dolphin/card/CARDStatEx.c:
 	.text       start:0x813730DC end:0x81373428
+dolphin/gx/GXInit.c:
+	.text       start:0x81373428 end:0x813744D0
+	.sdata      start:0x814AD1D8 end:0x814AD1E0
+	.sbss       start:0x814ADAA8 end:0x814ADAB8
+	.sdata2     start:0x814AE528 end:0x814AE548
+	.bss        start:0x815D53D0 end:0x815D5948
+
+dolphin/gx/GXFifo.c:
+	.text       start:0x813744D0 end:0x81374BFC
+	.sbss       start:0x814ADAB8 end:0x814ADAD8
+
+dolphin/gx/GXAttr.c:
+	.text       start:0x81374BFC end:0x813762C8
+	.data       start:0x814AC810 end:0x814ACA40
+	.sdata      start:0x814AD1E0 end:0x814AD1F0
+
+dolphin/gx/GXMisc.c:
+	.text       start:0x813762C8 end:0x8137673C
+	.sbss       start:0x814ADAD8 end:0x814ADAF0
+
+dolphin/gx/GXGeometry.c:
+	.text       start:0x8137673C end:0x81376AF4
+
+dolphin/gx/GXFrameBuf.c:
+	.text       start:0x81376AF4 end:0x813771B0
+	.data       start:0x814ACA40 end:0x814ACAF8
+	.sdata2     start:0x814AE548 end:0x814AE558
+
+dolphin/gx/GXLight.c:
+	.text       start:0x813771B0 end:0x81377A9C
+	.data       start:0x814ACAF8 end:0x814ACB18
+	.sdata2     start:0x814AE558 end:0x814AE590
+
+dolphin/gx/GXTexture.c:
+	.text       start:0x81377A9C end:0x81378824
+	.data       start:0x814ACB18 end:0x814ACB58
+	.sdata      start:0x814AD1F0 end:0x814AD230
+	.sdata2     start:0x814AE590 end:0x814AE5B8
+
+dolphin/gx/GXBump.c:
+	.text       start:0x81378824 end:0x81378BF8
+
+dolphin/gx/GXTev.c:
+	.text       start:0x81378BF8 end:0x81379580
+	.data       start:0x814ACB58 end:0x814ACB80
+
+dolphin/gx/GXPixel.c:
+	.text       start:0x81379580 end:0x81379CC8
+	.data       start:0x814ACB80 end:0x814ACBA0
+	.sdata2     start:0x814AE5B8 end:0x814AE5E8
+
+dolphin/gx/GXStubs.c:
+	.text       start:0x81379CC8 end:0x81379CCC
+
+dolphin/gx/GXDisplayList.c:
+	.text       start:0x81379CCC end:0x81379D3C
+
+dolphin/gx/GXTransform.c:
+	.text       start:0x81379D3C end:0x8137A2B8
+	.sdata2     start:0x814AE5E8 end:0x814AE5F8
+
+dolphin/gx/GXPerf.c:
+	.text       start:0x8137A2B8 end:0x8137AB60
+	.data       start:0x814ACBA0 end:0x814ACC90
