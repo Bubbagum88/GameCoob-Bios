@@ -398,6 +398,8 @@ config.libs = [
         "cflags": cflags_base,
         "progress_category": "game",
         "objects": [
+            Object(NonMatching, "bs2/scene.c"),
+            Object(NonMatching, "bs2/cube.c"),
             Object(Matching, "bs2/menu/game.c"),
             Object(NonMatching, "bs2/menu/calendar.c"),
             Object(NonMatching, "bs2/menu/menu_icon_game.c"),
