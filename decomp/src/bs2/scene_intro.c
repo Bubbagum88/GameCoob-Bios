@@ -476,10 +476,9 @@ static void Scene_YesNoInput(Scene *s) {
     }
 }
 
-static inline BOOL Scene_DiscGone(void) {
-    return Disc_GetState() == DISC_COVER_OPEN || Disc_GetState() == DISC_NONE ||
-           Disc_GetState() == DISC_RETRY || Disc_GetState() == DISC_WRONG;
-}
+#define SCENE_DISC_GONE()                                                   \
+    (Disc_GetState() == DISC_COVER_OPEN || Disc_GetState() == DISC_NONE ||  \
+     Disc_GetState() == DISC_RETRY || Disc_GetState() == DISC_WRONG)
 
 /* 0x8130D168: a bootable disc is in. The cube intro runs to its end in
    one frame, then the logo fades and the game boots. */
@@ -572,7 +571,7 @@ s32 Scene_UpdateDisc(void) {
                 }
                 break;
             case 5:
-                if (Scene_DiscGone()) {
+                if (SCENE_DISC_GONE()) {
                     s->discState = 3;
                 } else if (Disc_GetState() == DISC_READY) {
                     fn_8130213C();
@@ -581,7 +580,7 @@ s32 Scene_UpdateDisc(void) {
             }
         }
     } else if (s->discState == 5) {
-        if (Scene_DiscGone()) {
+        if (SCENE_DISC_GONE()) {
             s->discState = 3;
         } else if (Disc_GetState() == DISC_READY) {
             fn_8130213C();
