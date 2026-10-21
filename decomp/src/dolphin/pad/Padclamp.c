@@ -1,3 +1,4 @@
+// Based on the Pikmin decomp (CC0) Padclamp.c
 #include <dolphin/pad.h>
 #include <dolphin/si.h>
 #include <math.h>

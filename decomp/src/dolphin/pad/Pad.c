@@ -1,3 +1,5 @@
+// Based on the Pikmin decomp (CC0) Pad.c. PADSetSamplingRate and its u8 XY
+// tables follow the IPL's own code and data.
 #include <dolphin/pad.h>
 #include <dolphin/hw_regs.h>
 #include <dolphin/os.h>

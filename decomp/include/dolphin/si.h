@@ -1,6 +1,8 @@
 #ifndef _DOLPHIN_SI_H
 #define _DOLPHIN_SI_H
 
+// Based on the Pikmin decomp (CC0) si.h
+
 #include <dolphin/os.h>
 
 ///////////////// SI TYPES /////////////////

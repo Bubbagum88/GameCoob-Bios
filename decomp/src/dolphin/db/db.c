@@ -1,64 +1,43 @@
+// Based on the Pikmin decomp (CC0) db.c
 #include <dolphin/db.h>
-#include <dolphin/os.h>
 #include <dolphin/base/PPCArch.h>
+#include <dolphin/os.h>
+#include <dolphin/os/OSUtil.h>
 
-#define OSPhysicalToCached(paddr) ((void*)((u32)(paddr) + 0x80000000))
-#define OSCachedToPhysical(caddr) ((u32)(caddr) - 0x80000000)
+#define OS_CURRENTCONTEXT_PADDR 0x000000C0
+#define MSR_IR 0x00000020
+#define MSR_DR 0x00000010
 
-DBInterface* __DBInterface;
-BOOL DBVerbose;
+DBInterface* __DBInterface = NULL;
+BOOL DBVerbose = FALSE;
 
 void DBInit(void) {
-    __DBInterface = OSPhysicalToCached(OS_DBINTERFACE_ADDR);
-    __DBInterface->ExceptionDestination = (void*)OSCachedToPhysical(__DBExceptionDestination);
+    __DBInterface = (void*)IsDebuggerPresent;
+    *(u32*)ExceptionHookDestination = OSCachedToPhysical(__DBExceptionDestination);
     DBVerbose = TRUE;
 }
 
-BOOL DBIsDebuggerPresent(void) {
-    if (__DBInterface == NULL) {
-        return FALSE;
-    }
-    return __DBInterface->bPresent;
-}
-
 void __DBExceptionDestinationAux(void) {
-    u32* contextAddr;
-    OSContext* context;
-
-    contextAddr = (void*)0xC0;
-    context = OSPhysicalToCached(*contextAddr);
+    OSContext* ctx = OSPhysicalToCached(*(u32*)OS_CURRENTCONTEXT_PADDR);
+    int pad[2];
     OSReport("DBExceptionDestination\n");
-    OSDumpContext(context);
+    OSDumpContext(ctx);
     PPCHalt();
 }
 
-asm void __DBExceptionDestination(void) {
+ASM void __DBExceptionDestination(void) {
+#ifdef __MWERKS__ // clang-format off
     nofralloc
-    mfmsr r3
-    ori r3, r3, 0x30
-    mtmsr r3
-    b __DBExceptionDestinationAux
+    mfmsr  r3
+    ori    r3, r3, MSR_IR | MSR_DR
+    mtmsr  r3
+    b      __DBExceptionDestinationAux
+#endif // clang-format on
 }
 
-BOOL __DBIsExceptionMarked(__OSException exception) {
-    u32 mask = 1 << exception;
-
-    return __DBInterface->exceptionMask & mask;
+int __DBIsExceptionMarked(u8 a) {
+    return __DBInterface->unk4 & (1 << a);
 }
 
-void __DBMarkException(u8 exception, int value) {
-    u32 mask = 1 << exception;
-
-    if (value != 0) {
-        __DBInterface->exceptionMask = __DBInterface->exceptionMask | mask;
-    } else {
-        __DBInterface->exceptionMask = __DBInterface->exceptionMask & ~mask;
-    }
-}
-
-void __DBSetPresent(u32 value) {
-    __DBInterface->bPresent = value;
-}
-
-void DBPrintf(char* str, ...) {
+void DBPrintf(const char* format, ...) {
 }

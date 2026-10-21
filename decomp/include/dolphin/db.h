@@ -1,27 +1,25 @@
 #ifndef _DOLPHIN_DB_H_
 #define _DOLPHIN_DB_H_
 
-#include <dolphin/types.h>
-#include <dolphin/os/OSException.h>
+// Based on the Pikmin decomp (CC0) db.h
 
-#define OS_DBINTERFACE_ADDR 0x00000040
+#include <dolphin/types.h>
+
+#define ExceptionHookDestination 0x80000048
+#define IsDebuggerPresent 0x80000040
 
 typedef struct DBInterface {
-    u32 bPresent;
-    u32 exceptionMask;
-    void (*ExceptionDestination)(void);
-    void* exceptionReturn;
+    u8 filler0[4];
+    u32 unk4;
 } DBInterface;
 
 extern DBInterface* __DBInterface;
+extern BOOL DBVerbose;
 
 void DBInit(void);
-BOOL DBIsDebuggerPresent(void);
 void __DBExceptionDestination(void);
 void __DBExceptionDestinationAux(void);
-BOOL __DBIsExceptionMarked(__OSException exception);
-void __DBMarkException(u8 exception, int value);
-void __DBSetPresent(u32 value);
-void DBPrintf(char* str, ...);
+int __DBIsExceptionMarked(u8);
+void DBPrintf(const char* format, ...);
 
 #endif

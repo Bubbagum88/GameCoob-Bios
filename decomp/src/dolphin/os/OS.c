@@ -7,6 +7,10 @@
 
 #include "__os.h"
 
+// Based on the Pikmin decomp (CC0) OS.c
+
+#define OS_DBINTERFACE_ADDR 0x40
+
 #define OS_EXCEPTIONTABLE_ADDR 0x3000
 #define OS_DBJUMPPOINT_ADDR 0x60
 #define __OS_EXCEPTION_MAX 15

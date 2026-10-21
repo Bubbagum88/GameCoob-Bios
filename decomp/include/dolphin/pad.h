@@ -1,6 +1,8 @@
 #ifndef _DOLPHIN_PAD_H
 #define _DOLPHIN_PAD_H
 
+// Based on the Pikmin decomp (CC0) pad.h
+
 #include <dolphin/types.h>
 
 typedef struct PADStatus {
