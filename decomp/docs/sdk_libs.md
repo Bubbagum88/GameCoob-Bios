@@ -108,7 +108,8 @@ Not SDK, listed for scale: `BS2Init`, `main`, `BS2Main`, the IPL's own DEMO
 layer (`DEMOInit`, `DEMOPadRead`, `__DEMOInitGX`), the J3D-style model code
 (`J3D_*`), math helpers (`Mtx*`, `SinS`, `CosS`, `Hermite`), the heap, `Yay0Decode`,
 the scene and cube intro, the menus and memory card UI, and `Sound_*`
-(`8135A8E0-8135B180`). `8135ACC0-8135B57C` (`LCEnable`, game boot helpers
+(`8135A8E0-8135B180`). `813376A0-8135A8E0` is JAudio, the JSystem sound
+library: see `jaudio.md`. `8135ACC0-8135B57C` (`LCEnable`, game boot helpers
 called by `Disc_StartGame`) is low-level boot code that may belong to the app
 or to an IPL-only part of os; it needs a closer look.
 

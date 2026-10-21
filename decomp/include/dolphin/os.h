@@ -13,6 +13,7 @@
 #include <dolphin/os/OSError.h>
 #include <dolphin/os/OSInterrupt.h>
 #include <dolphin/os/OSRtc.h>
+#include <dolphin/os/OSReset.h>
 
 void* OSGetArenaHi(void);
 void* OSGetArenaLo(void);
