@@ -8,6 +8,14 @@ It runs after your motherboard's firmware and before any operating system, so
 nothing gets flashed and nothing can be bricked. If something goes wrong, your
 normal boot menu is still there.
 
+## Decomp progress
+
+[![code](decomp/progress/badge-code.svg)](decomp/README.md) [![functions](decomp/progress/badge-functions.svg)](decomp/README.md)
+
+[![BS2 decomp progress](decomp/progress/progress.svg)](decomp/README.md)
+
+The matching decompilation of the IPL's BS2 program lives in [decomp/](decomp/README.md).
+
 ## What works today
 
 - **The real GameCube intro, from your own console.** Put the `ipl.bin` you
@@ -67,7 +75,7 @@ provide one; see [docs/ROADMAP.md](docs/ROADMAP.md).
 ## Download
 
 Every push to `main` is built by GitHub Actions. Open the latest run under
-[Actions → Build](https://github.com/Bubbagum88/GameCoob-Bios/actions/workflows/build.yml)
+[Actions â†’ Build](https://github.com/Bubbagum88/GameCoob-Bios/actions/workflows/build.yml)
 and download **GameCoob-boot-files**. It holds `EFI\BOOT\BOOTX64.EFI`; copy
 the `EFI` folder to a FAT32 USB stick and add your dump as
 `EFI\GameCoob\ipl.bin`.

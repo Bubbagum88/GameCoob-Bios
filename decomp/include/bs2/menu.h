@@ -136,9 +136,9 @@ void Fader_Init(Fader *f);                                   /* 0x8130AAEC */
 /* GLH0 layout file (the fields the menu reads directly). */
 typedef struct GlhAnchor {     /* 0x10 bytes, table at header+0x4 */
     u32 tag;               /* 0x0 FourCC */
-    s32 y;                 /* 0x4 12.4 fixed point */
-    s32 x;                 /* 0x8 */
-    s32 pad;
+    u16 y;                 /* 0x4 12.4 fixed point */
+    u16 x;                 /* 0x6 ? */
+    u8 pad8[8];
 } GlhAnchor;
 
 typedef struct GlhPane {       /* 0x30 bytes, table at header+0xC */
@@ -154,7 +154,8 @@ typedef struct GlhHeader {
     u32 anchorOfs;         /* 0x04 */
     u32 pad8;
     u32 paneOfs;           /* 0x0C */
-    s32 anchorCount;       /* 0x10 */
+    u16 anchorCount;       /* 0x10 */
+    u16 pad12;
     u16 paneCount;         /* 0x14 */
 } GlhHeader;
 
@@ -492,6 +493,7 @@ void CardIcon_UpdateEnter(void);  /* 0x81322EE8 */
 void CardIcon_UpdateHide(void);   /* 0x81322D58 */
 void CardIcon_CalcMtx(void);      /* 0x81322A18 */
 void CardIcon_ResetFiles(void);   /* 0x813207C8 */
+void GameIcon_InitRing(void);     /* 0x813231F8 */
 void GameIcon_UpdateFace(void);   /* 0x813233C8 */
 void GameIcon_UpdateEnter(void);  /* 0x813239E4 */
 void GameIcon_UpdateHide(void);   /* 0x81323868 */
@@ -513,12 +515,12 @@ BOOL ClockIcon_IsSettled(void);
 /* menu_fx*.c */
 void Fx_Init(void *keys, void *curves);
 void Fx_Clear(void);
-BOOL Fx_IsReady(s32 margin);
+u32 Fx_IsReady(s32 margin);
 void Fx_Update(void);
 void Fx_Draw(u8 alpha);
-void FxOption_Update(s16 sub, s16 row, s16 offset, s16 sound);
-void FxClock_Update(s16 sub, s16 row, s16 dateField, s16 timeField, ClockEdit *e);
-void FxGame_Update(s16 starting, s16 discMsg);
+void FxOption_Update(s32 sub, s16 row, s16 offset, s16 sound);
+void FxClock_Update(s32 sub, s32 row, s32 dateField, s32 timeField, ClockEdit *e);
+void FxGame_Update(s32 starting, s32 discMsg);
 
 
 /* ------------------------------------------------------------------ */
@@ -552,7 +554,7 @@ typedef struct TexHeader {
 MtxPtr Camera_GetView(void);                                  /* 0x81302F88 */
 void MtxFromSRT(const SRT *srt, Mtx out);                     /* 0x8130764C */
 void MtxInverse33(Mtx in, Mtx out);                    /* 0x81307820 */
-void GX_Setup2D(s32 a, s32 b, s32 c, s32 d, u8 alpha);        /* 0x8130180C */
+void GX_Setup2D(s32 a, s32 b, s32 c);                         /* 0x8130180C */
 void Screen_Dim(u8 alpha);                                    /* 0x81301BC8 black quad */
 void GX_Setup2DView(void);                                    /* 0x813030B0 */
 void GX_Setup2DTex(void);                                     /* 0x8130963C */
@@ -571,13 +573,13 @@ void Glh_DrawBannerLine(u32 tag, void *glh, GXColor *c, const void *s, s32 max);
 void Glh_DrawBannerBox(u32 tag, void *glh, GXColor *c, const void *s, s32 max);  /* 0x8130A7E4 */
 void Backdrop_Draw(Mtx mv, u8 alpha);                         /* 0x8130B244 */
 u16 Lang_GetCode(void);                                       /* 0x8130B474 language + 4 */
-s32 Lang_Get(void);                                           /* 0x8130B47C 0 En 1 De 2 Fr 3 Es 4 It 5 Nl */
+s16 Lang_Get(void);                                           /* 0x8130B47C 0 En 1 De 2 Fr 3 Es 4 It 5 Nl */
 void Lang_Set(s32 lang);                                      /* 0x8130B488 */
 void *ResGet(s32 id);                                         /* 0x8130BDA0 */
 BOOL Boot_SramWasLost(void);                                  /* 0x813020C0 */
 s32 Disc_GetState(void);                                      /* 0x813020EC DISC_* */
 void Disc_FadeOutStart(void);                                 /* 0x81302100 */
-s32 Disc_GetFadeAlpha(void);                                  /* 0x81302130 */
+u8 Disc_GetFadeAlpha(void);                                   /* 0x81302130 */
 void Disc_StartGame(void);                                    /* 0x81302200 */
 BOOL Disc_HasBanner(void);                                    /* 0x813025E8 */
 u8 *Disc_GetBanner(void);                                     /* 0x8130264C */
