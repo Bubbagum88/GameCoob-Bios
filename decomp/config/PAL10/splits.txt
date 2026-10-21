@@ -48,6 +48,14 @@ bs2/cube_draw.c:
 	.sdata2     start:0x814ADDB0 end:0x814ADDB8
 	.bss        start:0x814B5DF0 end:0x814B5EA0
 
+bs2/menu/menu_icon_card.c:
+	.text       start:0x813218C8 end:0x813230F0
+	.rodata     start:0x8137EE18 end:0x8137EE30
+	.data       start:0x813813C0 end:0x81381450
+	.sbss       start:0x814AD520 end:0x814AD538
+	.sdata2     start:0x814ADFA0 end:0x814ADFC0
+	.bss        start:0x814D9F60 end:0x814DB3E8
+
 bs2/menu/menu_icon_game.c:
 	.text       start:0x813230F0 end:0x81323C30
 	.rodata     start:0x8137EE30 end:0x8137EE40
