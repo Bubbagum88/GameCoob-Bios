@@ -9,45 +9,10 @@
 #include "bs2/scene.h"
 #include "bs2/j3d.h"
 #include "bs2/menu.h"
+#include <dolphin/gx.h>
+#include <dolphin/pad.h>
 
-/* Not yet in the SDK headers */
-typedef struct PADStatus {
-    u16 button;
-    s8 stickX, stickY;
-    s8 substickX, substickY;
-    u8 triggerL, triggerR;
-    u8 analogA, analogB;
-    s8 err;
-} PADStatus;
 
-typedef union {
-    u8 u8;
-    u16 u16;
-    u32 u32;
-    s8 s8;
-    s16 s16;
-    s32 s32;
-    f32 f32;
-} PPCWGPipe;
-
-#define GXWGFifo (*(volatile PPCWGPipe *)0xCC008000)
-
-static inline void GXPosition3s16(s16 x, s16 y, s16 z) {
-    GXWGFifo.s16 = x;
-    GXWGFifo.s16 = y;
-    GXWGFifo.s16 = z;
-}
-
-static inline void GXTexCoord2s16(s16 s, s16 t) {
-    GXWGFifo.s16 = s;
-    GXWGFifo.s16 = t;
-}
-
-u32 PADRead(PADStatus *status);                            /* 0x8136B670 */
-void GXBegin(s32 type, s32 fmt, u16 count);                /* 0x813767C8 */
-void GXSetVtxAttrFmt(s32 fmt, s32 attr, s32 cnt, s32 type, u8 frac); /* 0x813757A0 */
-void GXSetCullMode(s32 mode);                              /* 0x81376A3C */
-void GXSetChanMatColor(s32 chan, GXColor color);           /* 0x81377704 */
 u32 Pad_GetEasterEgg(void);                                /* 0x81302DE8 */
 void J3D_AnimateJoints(void *inst, f32 frame);             /* 0x813043BC */
 void J3D_LoadTexture(s32 map, void *tex);                  /* 0x81305F58 */
