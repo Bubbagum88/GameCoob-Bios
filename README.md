@@ -13,7 +13,7 @@ program (the intro and menus), aiming to rebuild every unit byte for byte with
 the original CodeWarrior compiler, starting with PAL 1.0 and later every IPL
 revision. The app is original Rust written from specs drawn from that work.
 
-No Nintendo code or assets ship here. Both the app and the decomp read
+No Nintendo binaries or assets ship here. Both the app and the decomp read
 everything they need from an `ipl.bin` you dump from your own console.
 
 ## Decomp progress
@@ -74,11 +74,19 @@ The NINTENDO GAMECUBE wordmark is blanked out of these images.
 
 ## Assets and Nintendo content
 
-This repository contains only original code and art. Nintendo's code,
-models, textures, fonts and sounds are **never** committed here (the
-screenshots above are renders, with the wordmark removed). GameCoob
-reads them at boot from an `ipl.bin` dump of your own console, if you
-provide one; see [docs/ROADMAP.md](docs/ROADMAP.md).
+Nothing from Nintendo is stored in this repository: no ROM data, binaries,
+disassembly, models, textures, fonts or sounds. The screenshots above are
+renders from a dump, with the NINTENDO GAMECUBE wordmark removed.
+
+- **The app** is original Rust and original art. At boot it reads the
+  intro's models, textures, fonts and sounds from an `ipl.bin` you dumped
+  from your own console. Without one, it does not play the intro.
+- **The decomp** is hand-written C that, compiled with the original
+  toolchain, rebuilds the IPL's BS2 program byte for byte. Building or
+  checking it also needs your own `ipl.bin`; the dump, the extracted
+  `bs2.dol` and the generated assembly stay out of git.
+
+See [docs/ROADMAP.md](docs/ROADMAP.md) for what is planned.
 
 ## Download
 
