@@ -9,7 +9,6 @@
 #define VI_PAL 1
 #define VI_MPAL 2
 
-#define VI_DTV_STAT 0x37
 
 u16 OSGetFontEncode(void) {
     static u16 fontEncode = 0xFFFF;
