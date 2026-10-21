@@ -616,7 +616,7 @@ config.libs = [
             Object(Matching, "jaudio/dsp_cardunlock.c"),
             Object(NonMatching, "jaudio/driverinterface.c"),
             Object(Matching, "jaudio/dspdriver.c"),
-            Object(NonMatching, "jaudio/dspinterface.c"),
+            Object(Matching, "jaudio/dspinterface.c"),
             Object(Matching, "jaudio/fxinterface.c"),
             Object(Matching, "jaudio/bankread.c"),
             Object(Matching, "jaudio/waveread.c"),

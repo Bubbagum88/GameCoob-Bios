@@ -2,6 +2,7 @@
 
 #include "jaudio/sdk.h"
 #include "jaudio/driverinterface.h"
+#include "jaudio/dummyprobe.h"
 #include "jaudio/dspdriver.h"
 #include "jaudio/dspproc.h"
 #include "jaudio/fxinterface.h"
@@ -88,14 +89,8 @@ void DSP_SetMixerInitDelayMax(u8 idx, u8 initDelayMax)
  */
 void DSP_SetMixerInitVolume(u8 idx, u8 mixer, s16 volume, u8 level)
 {
-	u8* REF_idx;
-	u8* REF_mixer;
-
 	DSPchannel_* buf;
 	DSPMixerChannel* mixChan;
-
-	REF_idx   = &idx;
-	REF_mixer = &mixer;
 
 	buf     = &CH_BUF[idx];
 	mixChan = &buf->mixChannels[mixer];
@@ -103,6 +98,7 @@ void DSP_SetMixerInitVolume(u8 idx, u8 mixer, s16 volume, u8 level)
 	mixChan->currentVolume = volume;
 	mixChan->targetVolume  = volume;
 	mixChan->level         = (level << 8) | (level);
+	Console_printf("Ch%dINIT %d:CUR %x\n", idx, mixer, (s16)mixChan->currentVolume);
 }
 
 /**
@@ -212,7 +208,6 @@ void DSP_AllocInit(u8 idx)
 	buf->done              = DSP_FALSE;
 	buf->endRequested      = DSP_FALSE;
 	buf->enabled           = DSP_FALSE;
-	DSP_InitFilter(idx);
 	DSP_FlushChannel(idx);
 }
 
@@ -445,7 +440,11 @@ static u32 DSPRES_FILTER[] ATTRIBUTE_ALIGN(32) = {
  */
 void DSP_SetupBuffer()
 {
+	// "Setting the DSP communication buffer"
+	OSReport("\n\201\364Jesus/DSP-Interface::\202c\202r\202o\202\306\202\314\222\312\220M\203o\203b\203t\203@\202\360\203Z\203b\203g\202\265\202\334\202\267\n");
 	DsetupTable((u32)CH_BUF_LENGTH, (u32)CH_BUF, (u32)DSPRES_FILTER, (u32)DSPADPCM_FILTER, (u32)FX_BUF);
+	// "Setup done"
+	OSReport("\n\201\364Jesus/DSP-Interface::\203Z\203b\203g\203A\203b\203v\202\265\202\334\202\265\202\275\n");
 }
 
 /**
@@ -454,12 +453,19 @@ void DSP_SetupBuffer()
  */
 void DSP_InitBuffer()
 {
-	STACK_PAD_VAR(1);
+	// "Initialising the DSP tables"
+	OSReport("\201\364Jesus/DspIF:: \202c\202r\202o\202\314\203e\201[\203u\203\213\227\336\202\360\217\211\212\372\211\273\202\265\202\334\202\267\n");
 	for (int i = 0; i < 4; ++i)
 		DFX_SetFxLine(i, NULL, NULL);
 	DSP_ClearBuffer();
 	DSP_SetupBuffer();
+	// "Initialising the DSP channel = client connectors"
+	OSReport("\201\364Jesus/DspIF:: \202c\202r\202o\203`\203\203\203\223\203l\203\213=\203N\203\211\203C\203A\203\223\203g \203R\203l\203N\203^\202\360\217\211\212\372\211\273\202\265\202\334\202\267\n");
 	InitDSPchannel();
+	// "Initialising the logical voices, the standard clients"
+	OSReport("\201\364Jesus/DspIF:: \225W\217\200\203N\203\211\203C\203A\203\223\203g\202\305\202\240\202\351\230_\227\235\203{\203C\203X\202\360\217\211\212\372\211\273\202\265\202\334\202\267\n");
 	InitGlobalChannel();
 	DSP_FlushBuffer();
+	// "DSP channel struct size is %d"
+	OSReport("DSP\203`\203\203\203\223\203l\203\213\202\314\215\\\221\242\221\314\203T\203C\203Y\202\315 %d\n", sizeof(DSPchannel_));
 }
