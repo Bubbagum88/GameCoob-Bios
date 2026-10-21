@@ -346,6 +346,54 @@ config.libs = [
             Object(Matching, "dolphin/mtx/vec.c"),
         ],
     ),
+    DolphinLib(
+        "dvd",
+        [
+            Object(NonMatching, "dolphin/dvd/dvdlow.c"),
+            Object(NonMatching, "dolphin/dvd/dvdfs.c"),
+            Object(NonMatching, "dolphin/dvd/dvd.c"),
+            Object(NonMatching, "dolphin/dvd/dvdqueue.c"),
+            Object(NonMatching, "dolphin/dvd/dvderror.c"),
+            Object(NonMatching, "dolphin/dvd/fstload.c"),
+        ],
+    ),
+    DolphinLib(
+        "ai",
+        [
+            Object(NonMatching, "dolphin/ai/ai.c"),
+        ],
+    ),
+    DolphinLib(
+        "ar",
+        [
+            Object(NonMatching, "dolphin/ar/ar.c"),
+            Object(NonMatching, "dolphin/ar/arq.c"),
+        ],
+    ),
+    DolphinLib(
+        "dsp",
+        [
+            Object(NonMatching, "dolphin/dsp/dsp.c"),
+        ],
+    ),
+    DolphinLib(
+        "card",
+        [
+            Object(NonMatching, "dolphin/card/CARDBios.c"),
+            Object(NonMatching, "dolphin/card/CARDRdwr.c"),
+            Object(NonMatching, "dolphin/card/CARDBlock.c"),
+            Object(NonMatching, "dolphin/card/CARDDir.c"),
+            Object(NonMatching, "dolphin/card/CARDCheck.c"),
+            Object(NonMatching, "dolphin/card/CARDMount.c"),
+            Object(NonMatching, "dolphin/card/CARDFormat.c"),
+            Object(NonMatching, "dolphin/card/CARDOpen.c"),
+            Object(NonMatching, "dolphin/card/CARDCreate.c"),
+            Object(NonMatching, "dolphin/card/CARDRead.c"),
+            Object(NonMatching, "dolphin/card/CARDWrite.c"),
+            Object(NonMatching, "dolphin/card/CARDDelete.c"),
+            Object(NonMatching, "dolphin/card/CARDStatEx.c"),
+        ],
+    ),
     {
         "lib": "bs2",
         "mw_version": "GC/1.2.5n",

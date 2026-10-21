@@ -123,3 +123,96 @@ dolphin/mtx/mtx44.c:
 dolphin/mtx/vec.c:
 	.text       start:0x813648E8 end:0x8136498C
 	.sdata2     start:0x814AE510 end:0x814AE518
+
+dolphin/dvd/dvdlow.c:
+	.text       start:0x8136498C end:0x813658B8
+	.sdata      start:0x814AD180 end:0x814AD188
+	.sbss       start:0x814AD8F0 end:0x814AD938
+	.bss        start:0x815D4DD0 end:0x815D4EA0
+
+dolphin/dvd/dvdfs.c:
+	.text       start:0x813658B8 end:0x813661C0
+	.data       start:0x814AC038 end:0x814AC428
+	.sdata      start:0x814AD188 end:0x814AD190
+	.sbss       start:0x814AD938 end:0x814AD958
+
+dolphin/dvd/dvd.c:
+	.text       start:0x813661C0 end:0x813687C4
+	.data       start:0x814AC428 end:0x814AC540
+	.sdata      start:0x814AD190 end:0x814AD198
+	.sbss       start:0x814AD958 end:0x814AD9A0
+	.bss        start:0x815D4EA0 end:0x815D4F78
+
+dolphin/dvd/dvdqueue.c:
+	.text       start:0x813687C4 end:0x813689BC
+	.bss        start:0x815D4F78 end:0x815D4F98
+
+dolphin/dvd/dvderror.c:
+	.text       start:0x813689BC end:0x81368B14
+	.data       start:0x814AC540 end:0x814AC580
+
+dolphin/dvd/fstload.c:
+	.text       start:0x81368B14 end:0x81368D54
+	.data       start:0x814AC580 end:0x814AC5F0
+	.sdata      start:0x814AD198 end:0x814AD1A8
+	.sbss       start:0x814AD9A0 end:0x814AD9B0
+	.bss        start:0x815D4F98 end:0x815D5008
+
+dolphin/ai/ai.c:
+	.text       start:0x8136C4AC end:0x8136CDB4
+	.sbss       start:0x814ADA20 end:0x814ADA60
+
+dolphin/ar/ar.c:
+	.text       start:0x8136CDB4 end:0x8136DF28
+	.sbss       start:0x814ADA60 end:0x814ADA78
+	.sdata2     start:0x814AE518 end:0x814AE528
+
+dolphin/ar/arq.c:
+	.text       start:0x8136DF28 end:0x8136E2BC
+	.sbss       start:0x814ADA78 end:0x814ADAA0
+
+dolphin/dsp/dsp.c:
+	.text       start:0x8136E2BC end:0x8136E308
+
+dolphin/card/CARDBios.c:
+	.text       start:0x8136E308 end:0x8136F7B8
+	.data       start:0x814AC7C0 end:0x814AC7D0
+	.sbss       start:0x814ADAA0 end:0x814ADAA8
+	.bss        start:0x815D51A0 end:0x815D53D0
+
+dolphin/card/CARDRdwr.c:
+	.text       start:0x8136F7B8 end:0x8136FA38
+
+dolphin/card/CARDBlock.c:
+	.text       start:0x8136FA38 end:0x8136FE3C
+
+dolphin/card/CARDDir.c:
+	.text       start:0x8136FE3C end:0x813700A0
+
+dolphin/card/CARDCheck.c:
+	.text       start:0x813700A0 end:0x81371008
+
+dolphin/card/CARDMount.c:
+	.text       start:0x81371008 end:0x81371830
+	.data       start:0x814AC7D0 end:0x814AC810
+
+dolphin/card/CARDFormat.c:
+	.text       start:0x81371830 end:0x81372014
+
+dolphin/card/CARDOpen.c:
+	.text       start:0x81372014 end:0x81372308
+
+dolphin/card/CARDCreate.c:
+	.text       start:0x81372308 end:0x81372698
+
+dolphin/card/CARDRead.c:
+	.text       start:0x81372698 end:0x81372B98
+
+dolphin/card/CARDWrite.c:
+	.text       start:0x81372B98 end:0x81372EC8
+
+dolphin/card/CARDDelete.c:
+	.text       start:0x81372EC8 end:0x813730DC
+
+dolphin/card/CARDStatEx.c:
+	.text       start:0x813730DC end:0x81373428
