@@ -501,14 +501,6 @@ static void Scene_DrawWorld(void) {
     Cube_Draw();
 }
 
-static inline s32 Scene_CheckSpinOut(Scene *s) {
-    if (s->spinSpeed > s->spinThreshold) {
-        s->spin = s->spinRest;
-        return TRUE;
-    }
-    return FALSE;
-}
-
 /* 0x8130CB74 */
 static s32 Scene_UpdateNoDisc(void) {
     Scene *s = Scene_Get();
@@ -519,23 +511,27 @@ static s32 Scene_UpdateNoDisc(void) {
     }
     Scene_UpdateWobble();
     Cube_Update(TRUE);
-    if (Scene_CheckSpinOut(s)) {
+    if (s->spinSpeed > s->spinThreshold) {
+        s->spin = s->spinRest;
         return SCENE_SPINOUT;
     }
 
     if (s->fatal) {
-        if (++s->fatalFade > s->fatalFadeFrames) {
+        s->fatalFade++;
+        if (s->fatalFade > s->fatalFadeFrames) {
             s->fatalFade = s->fatalFadeFrames;
         }
         return SCENE_NODISC;
     }
 
     if (Disc_GetState() == DISC_WRONG || Disc_GetState() == DISC_RETRY) {
-        if (++s->errFade > s->errFadeFrames) {
+        s->errFade++;
+        if (s->errFade > s->errFadeFrames) {
             s->errFade = s->errFadeFrames;
         }
     } else {
-        if (--s->errFade < 0) {
+        s->errFade--;
+        if (s->errFade < 0) {
             s->errFade = 0;
         }
     }
@@ -546,7 +542,8 @@ static s32 Scene_UpdateNoDisc(void) {
             if (Disc_GetFadeAlpha() == 0) {
                 Scene_UpdateSpin(TRUE);
                 Scene_UpdateWobble();
-                if (Scene_CheckSpinOut(s)) {
+                if (s->spinSpeed > s->spinThreshold) {
+                    s->spin = s->spinRest;
                     return SCENE_SPINOUT;
                 }
             }
@@ -580,13 +577,15 @@ static s32 Scene_UpdateNoDisc(void) {
 /* 0x8130CD68: pick a language with up/down, A to confirm. */
 static void Scene_LanguageInput(Scene *s) {
     if (gMenuPad.dirsNew & DIR_UP) {
-        if (--s->lang < 0) {
+        s->lang--;
+        if (s->lang < 0) {
             s->lang = 5;
         }
         Sound_Play(SE_CURSOR);
     }
     if (gMenuPad.dirsNew & DIR_DOWN) {
-        if (++s->lang >= 6) {
+        s->lang++;
+        if (s->lang >= 6) {
             s->lang = 0;
         }
         Sound_Play(SE_CURSOR);
@@ -611,7 +610,8 @@ static s32 Scene_UpdateMode0(void) {
         s->fatal = 1;
     }
     if (s->fatal) {
-        if (++s->fatalFade > s->fatalFadeFrames) {
+        s->fatalFade++;
+        if (s->fatalFade > s->fatalFadeFrames) {
             s->fatalFade = s->fatalFadeFrames;
         }
         return SCENE_MODE0;
@@ -639,13 +639,15 @@ static s32 Scene_UpdateMode0(void) {
 
     switch (s->m0State) {
     case 0:
-        if (--s->m0LogoFade < 0) {
+        s->m0LogoFade--;
+        if (s->m0LogoFade < 0) {
             s->m0LogoFade = 0;
             s->m0State = 1;
         }
         break;
     case 1:
-        if (++s->m0TextFade > s->m0TextFrames) {
+        s->m0TextFade++;
+        if (s->m0TextFade > s->m0TextFrames) {
             s->m0TextFade = s->m0TextFrames;
             s->m0State = 3;
         }
@@ -657,7 +659,8 @@ static s32 Scene_UpdateMode0(void) {
         }
         break;
     case 4:
-        if (--s->m0TextFade < 0) {
+        s->m0TextFade--;
+        if (s->m0TextFade < 0) {
             s->m0TextFade = 0;
             s->m0State = 6;
         }
@@ -665,7 +668,8 @@ static s32 Scene_UpdateMode0(void) {
     case 6:
         Scene_UpdateSpin(TRUE);
         Scene_UpdateWobble();
-        if (Scene_CheckSpinOut(s)) {
+        if (s->spinSpeed > s->spinThreshold) {
+            s->spin = s->spinRest;
             return SCENE_SPINOUT;
         }
         break;
@@ -739,50 +743,60 @@ static s32 Scene_UpdateDisc(void) {
 
     if (Disc_GetFadeAlpha() == 0) {
         if (s->fatal) {
-            if (--s->askFade < 0) {
+            s->askFade--;
+            if (s->askFade < 0) {
                 s->askFade = 0;
-                if (++s->fatalFade > s->fatalFadeFrames) {
+                s->fatalFade++;
+                if (s->fatalFade > s->fatalFadeFrames) {
                     s->fatalFade = s->fatalFadeFrames;
                 }
             }
             return SCENE_DISC;
         }
-        if (++s->discWait > 20) {
+        s->discWait++;
+        if (s->discWait > 20) {
             s->discWait = 20;
             switch (s->discState) {
             case 0:
-                if (++s->discFade > s->discFadeFrames) {
+                s->discFade++;
+                if (s->discFade > s->discFadeFrames) {
                     s->discFade = s->discFadeFrames;
                     s->discState = 1;
                 }
                 break;
             case 1:
-                if (++s->askFade > s->askFadeFrames) {
+                s->askFade++;
+                if (s->askFade > s->askFadeFrames) {
                     s->askFade = s->askFadeFrames;
                 }
                 Scene_YesNoInput(s);
                 break;
             case 2:
-                if (--s->askFade < 0) {
+                s->askFade--;
+                if (s->askFade < 0) {
                     s->askFade = 0;
-                    if (--s->discFade < 0) {
+                    s->discFade--;
+                    if (s->discFade < 0) {
                         s->discFade = 0;
                         s->discState = 5;
                     }
                 }
                 break;
             case 3:
-                if (--s->askFade < 0) {
+                s->askFade--;
+                if (s->askFade < 0) {
                     s->askFade = 0;
                     s->discState = 4;
                 }
                 break;
             case 4:
-                if (--s->discFade < 0) {
+                s->discFade--;
+                if (s->discFade < 0) {
                     s->discFade = 0;
                     Scene_UpdateSpin(TRUE);
                     Scene_UpdateWobble();
-                    if (Scene_CheckSpinOut(s)) {
+                    if (s->spinSpeed > s->spinThreshold) {
+                        s->spin = s->spinRest;
                         return SCENE_SPINOUT;
                     }
                 }
@@ -819,11 +833,13 @@ static s32 Scene_UpdateMode3(void) {
         fn_813020F4();
     }
     Disc_FadeOutStart();
-    if (--s->m3Wait < 0) {
+    s->m3Wait--;
+    if (s->m3Wait < 0) {
         s->m3Wait = 0;
         Scene_UpdateSpin(TRUE);
         Scene_UpdateWobble();
-        if (Scene_CheckSpinOut(s)) {
+        if (s->spinSpeed > s->spinThreshold) {
+            s->spin = s->spinRest;
             return SCENE_SPINOUT;
         }
     }
