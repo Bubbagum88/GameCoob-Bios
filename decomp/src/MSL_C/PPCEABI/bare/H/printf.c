@@ -35,9 +35,11 @@ typedef struct {
 } print_format;
 
 /**
- * @TODO: Documentation
+ * @note Address: 0x8137D578. Taken from the SMS decomp (doldecomp/sms, CC0),
+ * whose parse_format has the same size as BS2's (0x4D8); Pikmin's is 0x564.
  */
-static const char* parse_format(const char* format_string, va_list* arg, print_format* format)
+static const char* parse_format(const char* format_string, va_list* arg,
+                                print_format* format)
 {
 	print_format f;
 	const char* s = format_string;
@@ -62,39 +64,27 @@ static const char* parse_format(const char* format_string, va_list* arg, print_f
 
 		switch (c) {
 		case '-':
-		{
 			f.justification_options = left_justification;
 			break;
-		}
 		case '+':
-		{
 			f.sign_options = sign_always;
 			break;
-		}
 		case ' ':
-		{
 			if (f.sign_options != sign_always) {
 				f.sign_options = space_holder;
 			}
 			break;
-		}
 		case '#':
-		{
 			f.alternate_form = 1;
 			break;
-		}
 		case '0':
-		{
 			if (f.justification_options != left_justification) {
 				f.justification_options = zero_fill;
 			}
 			break;
-		}
 		default:
-		{
 			flag_found = 0;
 			break;
-		}
 		}
 
 		if (flag_found) {
@@ -145,7 +135,6 @@ static const char* parse_format(const char* format_string, va_list* arg, print_f
 
 	switch (c) {
 	case 'h':
-	{
 		f.argument_options = short_argument;
 
 		if (s[1] == 'h') {
@@ -154,9 +143,8 @@ static const char* parse_format(const char* format_string, va_list* arg, print_f
 		}
 
 		break;
-	}
+
 	case 'l':
-	{
 		f.argument_options = long_argument;
 
 		if (s[1] == 'l') {
@@ -165,17 +153,13 @@ static const char* parse_format(const char* format_string, va_list* arg, print_f
 		}
 
 		break;
-	}
+
 	case 'L':
-	{
 		f.argument_options = long_double_argument;
 		break;
-	}
 	default:
-	{
 		flag_found = 0;
 		break;
-	}
 	}
 
 	if (flag_found) {
@@ -191,7 +175,6 @@ static const char* parse_format(const char* format_string, va_list* arg, print_f
 	case 'o':
 	case 'x':
 	case 'X':
-	{
 		if (f.argument_options == long_double_argument) {
 			f.conversion_char = 0xFF;
 			break;
@@ -203,10 +186,10 @@ static const char* parse_format(const char* format_string, va_list* arg, print_f
 			f.justification_options = right_justification;
 		}
 		break;
-	}
+
 	case 'f':
-	{
-		if (f.argument_options == short_argument || f.argument_options == long_long_argument) {
+		if (f.argument_options == short_argument
+		    || f.argument_options == long_long_argument) {
 			f.conversion_char = 0xFF;
 			break;
 		}
@@ -215,18 +198,18 @@ static const char* parse_format(const char* format_string, va_list* arg, print_f
 			f.precision = 6;
 		}
 		break;
-	}
+
 	case 'g':
 	case 'G':
-	{
 		if (!f.precision) {
 			f.precision = 1;
 		}
-	}
+
 	case 'e':
 	case 'E':
-	{
-		if (f.argument_options == short_argument || f.argument_options == long_long_argument || f.argument_options == char_argument) {
+		if (f.argument_options == short_argument
+		    || f.argument_options == long_long_argument
+		    || f.argument_options == char_argument) {
 			f.conversion_char = 0xFF;
 			break;
 		}
@@ -235,29 +218,27 @@ static const char* parse_format(const char* format_string, va_list* arg, print_f
 			f.precision = 6;
 		}
 		break;
-	}
+
 	case 'p':
-	{
 		f.conversion_char  = 'x';
 		f.alternate_form   = 1;
 		f.argument_options = long_argument;
 		f.precision        = 8;
 		break;
-	}
+
 	case 'c':
-	{
 		if (f.argument_options == long_argument) {
 			f.argument_options = wchar_argument;
 		} else {
-			if (f.precision_specified || f.argument_options != normal_argument) {
+			if (f.precision_specified
+			    || f.argument_options != normal_argument) {
 				f.conversion_char = 0xFF;
 			}
 		}
 
 		break;
-	}
+
 	case 's':
-	{
 		if (f.argument_options == long_argument) {
 			f.argument_options = wchar_argument;
 		} else {
@@ -267,20 +248,17 @@ static const char* parse_format(const char* format_string, va_list* arg, print_f
 		}
 
 		break;
-	}
+
 	case 'n':
-	{
 		if (f.argument_options == long_double_argument) {
 			f.conversion_char = 0xFF;
 		}
 
 		break;
-	}
+
 	default:
-	{
 		f.conversion_char = 0xFF;
 		break;
-	}
 	}
 
 	*format = f;
