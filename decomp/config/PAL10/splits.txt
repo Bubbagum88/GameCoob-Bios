@@ -216,6 +216,7 @@ dolphin/card/CARDDelete.c:
 
 dolphin/card/CARDStatEx.c:
 	.text       start:0x813730DC end:0x81373428
+
 dolphin/gx/GXInit.c:
 	.text       start:0x81373428 end:0x813744D0
 	.sdata      start:0x814AD1D8 end:0x814AD1E0
