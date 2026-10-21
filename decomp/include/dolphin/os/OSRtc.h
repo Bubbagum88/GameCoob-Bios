@@ -35,6 +35,8 @@ BOOL __OSUnlockSram(BOOL commit);
 BOOL __OSUnlockSramEx(BOOL commit);
 BOOL __OSSyncSram(void);
 u32 OSGetSoundMode(void);
+u16 OSGetWirelessID(s32 channel);
+void OSSetWirelessID(s32 channel, u16 id);
 void OSSetSoundMode(u32 mode);
 
 #endif

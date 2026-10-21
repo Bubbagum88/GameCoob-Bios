@@ -502,6 +502,12 @@ config.libs = [
         ],
     ),
     DolphinLib(
+        "si",
+        [
+            Object(Matching, "dolphin/si/SIBios.c"),
+        ],
+    ),
+    DolphinLib(
         "db",
         [
             Object(Matching, "dolphin/db/db.c"),
