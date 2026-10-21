@@ -8,6 +8,14 @@ It runs after your motherboard's firmware and before any operating system, so
 nothing gets flashed and nothing can be bricked. If something goes wrong, your
 normal boot menu is still there.
 
+The repository also holds a matching decompilation of the GameCube IPL's BS2
+program (the intro and menus), aiming to rebuild every unit byte for byte with
+the original CodeWarrior compiler, starting with PAL 1.0 and later every IPL
+revision. The app is original Rust written from specs drawn from that work.
+
+No Nintendo code or assets ship here. Both the app and the decomp read
+everything they need from an `ipl.bin` you dump from your own console.
+
 ## Decomp progress
 
 [![code](decomp/progress/badge-code.svg)](decomp/README.md) [![functions](decomp/progress/badge-functions.svg)](decomp/README.md)
