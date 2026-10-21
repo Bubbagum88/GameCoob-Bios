@@ -21,9 +21,9 @@ static void Cube_DrawTile(s32 x, s32 y, s32 face, u8 alpha);
 /* 0x813108B8 */
 static void Cube_DrawTiles(u8 alpha) {
     CubeState *c = Cube_Get();
-    CubeTile *grid = Cube_GetGrid();
-    Mtx m;
+    CubeTile (*grid)[CUBE_GRID][CUBE_GRID] = (CubeTile (*)[CUBE_GRID][CUBE_GRID])Cube_GetGrid();
     Mtx nrm;
+    Mtx m;
     s32 f, x, y;
     s32 a;
     CubeTile *t;
@@ -38,7 +38,7 @@ static void Cube_DrawTiles(u8 alpha) {
     for (f = 0; f < CUBE_FACES; f++) {
         for (x = 0; x < CUBE_GRID; x++) {
             for (y = 0; y < CUBE_GRID; y++) {
-                t = &grid[(f * CUBE_GRID + x) * CUBE_GRID + y];
+                t = &grid[f][x][y];
                 if (t->group == 0) {
                     continue;
                 }
@@ -62,19 +62,19 @@ static void Cube_DrawTiles(u8 alpha) {
 }
 
 /* face 0: (a, 0, b)  face 1: (b, a, 0)  face 2: (0, b, a) */
-static inline void Cube_TileVtx(s32 face, s16 a, s16 b, s16 s, s16 t) {
+static inline void Cube_TileVtx(s32 face, s32 a, s32 b, s32 s, s32 t) {
     switch (face) {
     case 0:
-        GXPosition3s16(a, 0, b);
+        GXPosition3u16(a, 0, b);
         break;
     case 1:
-        GXPosition3s16(b, a, 0);
+        GXPosition3u16(b, a, 0);
         break;
     case 2:
-        GXPosition3s16(0, b, a);
+        GXPosition3u16(0, b, a);
         break;
     }
-    GXTexCoord2s16(s, t);
+    GXTexCoord2u16(s, t);
 }
 
 /* 0x81310AD0: one textured quad on face plane `face`, in 1/16 units. */
@@ -82,12 +82,16 @@ static void Cube_DrawTile(s32 x, s32 y, s32 face, u8 alpha) {
     CubeState *c = Cube_Get();
     u8 inset = c->tileInset;
     CubeTile *grid = Cube_GetGrid();
-    s32 full = Cube_Get()->size * 16;
-    s32 px = (x - 16) * Cube_Get()->size * 16;
-    s32 py = (y - 16) * Cube_Get()->size * 16;
+    s32 px;
+    s32 full;
+    s32 py;
     GXColor color;
 
-    *(u32 *)&color = grid[(face * CUBE_GRID + x) * CUBE_GRID + y].color;
+    full = Cube_Get()->size * 16;
+    px = (x - 16) * Cube_Get()->size * 16;
+    py = (y - 16) * Cube_Get()->size * 16;
+    /* grid[face][x][y].color, addressed in bytes */
+    color = *(GXColor *)((u8 *)grid + (face << 13) + (x << 8) + (y << 3) + 4);
     color.r = c->tileR;
     color.g = c->tileG;
     color.b = c->tileB;
