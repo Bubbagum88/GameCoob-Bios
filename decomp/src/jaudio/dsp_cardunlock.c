@@ -11,6 +11,12 @@
 #include "jaudio/sdk.h"
 #include "jaudio/ipldec.h"
 
+// The SDK headers compile assertions away; this file keeps them.
+#undef OSAssertMsgLine
+#undef OSAssertLine
+#define OSAssertMsgLine(line, cond, ...) ((void)((cond) || (OSPanic(__FILE__, line, __VA_ARGS__), 0)))
+#define OSAssertLine(line, cond)         OSAssertMsgLine(line, cond, "Failed assertion " #cond)
+
 #define DATA_SCRAMBLE_R(data) (~(data ^ (data >> 7) ^ (data >> 15) ^ (data >> 23)))
 #define DATA_SCRAMBLE_L(data) (~(data ^ (data << 7) ^ (data << 15) ^ (data << 23)))
 
