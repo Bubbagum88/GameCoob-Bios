@@ -361,13 +361,48 @@ static void Cube_CalcRiseMtx(Mtx m) {
     PSMTXConcat(t, m, m);
 }
 
+static inline Vec Cube_VecSplat(f32 v) {
+    Vec r = { 0.0f, 0.0f, 0.0f };
+
+    r.x = v;
+    r.y = v;
+    r.z = v;
+    return r;
+}
+
+static inline void Cube_DrawPath(void) {
+    Scene *s = Scene_Get();
+    Mtx t;
+    MtxPtr view;
+
+    PSMTXIdentity(sCubeMtx);
+    Cube_CalcRollMtx(sCubeMtx);
+    Cube_CalcGridMtx(sCubeMtx);
+    MtxRotTrans(0, 0, 0, t, sCube->size * 3 / 2, sCube->size * 3 / 2, sCube->size * 3 / 2);
+    PSMTXConcat(t, sCubeMtx, sCubeMtx);
+    PSMTXConcat(Scene_GetWorldMtx(), sCubeMtx, sCubeMtx);
+    if (sPhase == CUBE_PHASE_FALL) {
+        PSMTXTrans(t, 0.0f, sCube->fallHeight, 0.0f);
+        PSMTXConcat(t, sCubeMtx, sCubeMtx);
+    }
+    J3D_SetModelMtx(Cube_GetModel(), sCubeMtx, Cube_VecSplat(s->modelScale));
+    view = Camera_GetView();
+    J3D_SetViewMtx(Cube_GetModel(), view);
+    J3D_CalcJoints(Cube_GetModel());
+}
+
+static inline Vec Cube_VecOne(void) {
+    Vec v = { 1.0f, 1.0f, 1.0f };
+
+    return v;
+}
+
 /* 0x8130FDE0: phases 2..4 (rise, drop, logo). */
 static void Cube_DrawRise(void) {
     Scene *s = Scene_Get();
     s32 n = sCube->riseFrames;
     s32 r = n - sCube->riseFrame;
     Mtx t;
-    Vec scale = { 0.0f, 0.0f, 0.0f };
     MtxPtr view;
     f32 h;
     f32 y;
@@ -396,41 +431,24 @@ static void Cube_DrawRise(void) {
         break;
     }
     PSMTXConcat(t, sCubeMtx, sCubeMtx);
-    scale.x = scale.y = scale.z = s->modelScale;
-    J3D_SetModelMtx(Cube_GetModel(), sCubeMtx, scale);
+    {
+        Vec scale = { 0.0f, 0.0f, 0.0f };
+
+        scale.x = s->modelScale;
+        scale.y = s->modelScale;
+        scale.z = s->modelScale;
+        J3D_SetModelMtx(Cube_GetModel(), sCubeMtx, scale);
+    }
     view = Camera_GetView();
     J3D_SetViewMtx(Cube_GetModel(), view);
     J3D_CalcJoints(Cube_GetModel());
 }
 
 /* Phases 0 and 1: fall, then roll along the path. */
-static inline void Cube_DrawPath(void) {
-    Scene *s = Scene_Get();
-    Mtx t;
-    Vec scale = { 0.0f, 0.0f, 0.0f };
-    MtxPtr view;
-
-    PSMTXIdentity(sCubeMtx);
-    Cube_CalcRollMtx(sCubeMtx);
-    Cube_CalcGridMtx(sCubeMtx);
-    MtxRotTrans(0, 0, 0, t, sCube->size * 3 / 2, sCube->size * 3 / 2, sCube->size * 3 / 2);
-    PSMTXConcat(t, sCubeMtx, sCubeMtx);
-    PSMTXConcat(Scene_GetWorldMtx(), sCubeMtx, sCubeMtx);
-    if (sPhase == CUBE_PHASE_FALL) {
-        PSMTXTrans(t, 0.0f, sCube->fallHeight, 0.0f);
-        PSMTXConcat(t, sCubeMtx, sCubeMtx);
-    }
-    scale.x = scale.y = scale.z = s->modelScale;
-    J3D_SetModelMtx(Cube_GetModel(), sCubeMtx, scale);
-    view = Camera_GetView();
-    J3D_SetViewMtx(Cube_GetModel(), view);
-    J3D_CalcJoints(Cube_GetModel());
-}
 
 /* 0x81310060 */
 void Cube_Draw(void) {
     Mtx m;
-    Vec one = { 1.0f, 1.0f, 1.0f };
     MtxPtr view;
     f32 frame;
 
@@ -460,7 +478,7 @@ void Cube_Draw(void) {
         frame = 0.0f;
     }
     PSMTXIdentity(m);
-    J3D_SetModelMtx(Scene_GetLogoText(), m, one);
+    J3D_SetModelMtx(Scene_GetLogoText(), m, Cube_VecOne());
     view = Camera_GetView();
     J3D_SetViewMtx(Scene_GetLogoText(), view);
     J3D_AnimateJoints(Scene_GetLogoText(), frame);
