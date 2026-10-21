@@ -11,22 +11,42 @@ Sections:
 	.bss        type:bss align:32
 
 bs2/scene.c:
-	.text       start:0x8130BDB8 end:0x8130EF48
-	.rodata     start:0x8137EBC0 end:0x8137EC00
-	.data       start:0x813810E8 end:0x81381160
+	.text       start:0x8130BDB8 end:0x8130C250
+	.data       start:0x813810E8 end:0x81381120
 	.sdata      start:0x814ACFF0 end:0x814ACFF8
-	.sbss       start:0x814AD3B8 end:0x814AD3D8
-	.sdata2     start:0x814ADC78 end:0x814ADD78
-	.bss        start:0x814AF980 end:0x814AFD58
+	.sbss       start:0x814AD3B8 end:0x814AD3C8
+	.sdata2     start:0x814ADC78 end:0x814ADCB0
+	.bss        start:0x814AF878 end:0x814AF980
+
+bs2/scene_intro.c:
+	.text       start:0x8130C250 end:0x8130E70C
+	.rodata     start:0x8137EBC0 end:0x8137EBF0
+	.data       start:0x81381120 end:0x81381160
+	.sbss       start:0x814AD3C8 end:0x814AD3D0
+	.sdata2     start:0x814ADCB0 end:0x814ADD40
+	.bss        start:0x814AF980 end:0x814AFD28
+
+bs2/scene_spinout.c:
+	.text       start:0x8130E70C end:0x8130EF48
+	.rodata     start:0x8137EBF0 end:0x8137EC00
+	.sbss       start:0x814AD3D0 end:0x814AD3D8
+	.sdata2     start:0x814ADD40 end:0x814ADD78
+	.bss        start:0x814AFD28 end:0x814AFD58
 
 bs2/cube.c:
-	.text       start:0x8130EF48 end:0x81310F58
+	.text       start:0x8130EF48 end:0x813108B8
 	.rodata     start:0x8137EC00 end:0x8137EC28
 	.data       start:0x81381160 end:0x813811E8
 	.sdata      start:0x814ACFF8 end:0x814AD000
-	.sbss       start:0x814AD3D8 end:0x814AD3F0
-	.sdata2     start:0x814ADD78 end:0x814ADDB8
-	.bss        start:0x814AFD58 end:0x814B5EA0
+	.sbss       start:0x814AD3D8 end:0x814AD3E8
+	.sdata2     start:0x814ADD78 end:0x814ADDB0
+	.bss        start:0x814AFD58 end:0x814B5DF0
+
+bs2/cube_draw.c:
+	.text       start:0x813108B8 end:0x81310F58
+	.sbss       start:0x814AD3E8 end:0x814AD3F0
+	.sdata2     start:0x814ADDB0 end:0x814ADDB8
+	.bss        start:0x814B5DF0 end:0x814B5EA0
 
 bs2/menu/menu_icon_game.c:
 	.text       start:0x813230F0 end:0x81323C30

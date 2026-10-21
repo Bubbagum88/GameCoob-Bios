@@ -579,7 +579,10 @@ config.libs = [
         "progress_category": "game",
         "objects": [
             Object(NonMatching, "bs2/scene.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
+            Object(NonMatching, "bs2/scene_intro.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
+            Object(NonMatching, "bs2/scene_spinout.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
             Object(NonMatching, "bs2/cube.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
+            Object(NonMatching, "bs2/cube_draw.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
             Object(Matching, "bs2/menu/game.c"),
             Object(NonMatching, "bs2/menu/calendar.c"),
             Object(NonMatching, "bs2/menu/menu_icon_game.c"),
