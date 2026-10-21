@@ -78,7 +78,7 @@ Nothing from Nintendo is stored in this repository: no ROM data, binaries,
 disassembly, models, textures, fonts or sounds. The screenshots above are
 renders from a dump, with the NINTENDO GAMECUBE wordmark removed.
 
-- **The app** is original Rust and original art. At boot it reads the
+- **The app** is original Rust. At boot it reads the
   intro's models, textures, fonts and sounds from an `ipl.bin` you dumped
   from your own console. Without one, it does not play the intro.
 - **The decomp** is hand-written C that, compiled with the original
@@ -91,7 +91,7 @@ See [docs/ROADMAP.md](docs/ROADMAP.md) for what is planned.
 ## Download
 
 Every push to `main` is built by GitHub Actions. Open the latest run under
-[Actions â†’ Build](https://github.com/Bubbagum88/GameCoob-Bios/actions/workflows/build.yml)
+[Actions → Build](https://github.com/Bubbagum88/GameCoob-Bios/actions/workflows/build.yml)
 and download **GameCoob-boot-files**. It holds `EFI\BOOT\BOOTX64.EFI`; copy
 the `EFI` folder to a FAT32 USB stick and add your dump as
 `EFI\GameCoob\ipl.bin`.
