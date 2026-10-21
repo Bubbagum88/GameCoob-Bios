@@ -105,33 +105,33 @@ void GameIcon_UpdateFace(void) {
     }
 }
 
-static Vec GameIcon_Scale(f32 s) {
-    Vec v = { 0.0f, 0.0f, 0.0f };
+static void GameIcon_SetScale(Vec* out, f32 s) {
+    Vec tmp = { 0.0f, 0.0f, 0.0f };
 
-    v.x = s;
-    v.y = s;
-    v.z = s;
-    return v;
+    tmp.x = s;
+    tmp.y = s;
+    tmp.z = s;
+    *out = tmp;
 }
 
 /* 0x813235D4 */
 void GameIcon_CalcMtx(void) {
     GameParams* p = Game_GetParams();
-    s16 i = 0;
-    GameIconCube* cube = &sGameCube[i];
-    J3DModelInstance* inst = &sGameIconInst[i];
+    GameIconCube* cube;
+    J3DModelInstance* inst;
     Mtx m;
     Mtx rot;
     Vec scale;
+    s16 i;
 
-    for (i = 0; i < GAMEICON_CUBES; i++) {
+    for (i = 0, cube = &sGameCube[i], inst = &sGameIconInst[i]; i < GAMEICON_CUBES; i++) {
         PSMTXTrans(m, cube->x, cube->y, 0.0f);
         MtxRotTrans(sGameIconRotX, 0, sGameIconRotZ, rot, 0.0f, 0.0f, 0.0f);
         PSMTXConcat(rot, m, m);
         MtxRotTrans(-0x4000, 0, 0, rot, 0.0f, 0.0f, 0.0f);
         PSMTXConcat(rot, m, m);
         PSMTXConcat(Menu_GetCubeMtx(), m, m);
-        scale = GameIcon_Scale(p->cubeScale);
+        GameIcon_SetScale(&scale, p->cubeScale);
         J3D_SetModelMtx(inst, m, scale);
         J3D_SetViewMtx(inst, Camera_GetView());
         J3D_CalcJoints(inst);
@@ -192,28 +192,14 @@ void GameIcon_UpdateHide(void) {
     }
 }
 
-static f32 GameIcon_Shrink(f32 v) {
-    GameParams* p = Game_GetParams();
-
-    if (v > 0.0f) {
-        v -= p->shrinkSpeed;
-        if (v < 0.0f) {
-            v = 0.0f;
-        }
-    } else if (v < 0.0f) {
-        v += p->shrinkSpeed;
-        if (v > 0.0f) {
-            v = 0.0f;
-        }
-    }
-    return v;
-}
-
 /* 0x813239E4: pull every cube back to the centre of the ring. */
 void GameIcon_UpdateEnter(void) {
+    u8 unused[4]; /* never used, but still takes a stack slot */
     s16 settled = 0;
     s16 i;
     s16 alpha;
+    f32 v;
+    GameParams* p;
 
     for (i = 0; i < GAMEICON_CUBES; i++) {
         alpha = sGameIconInst[i].alpha;
@@ -223,14 +209,40 @@ void GameIcon_UpdateEnter(void) {
         }
         sGameIconInst[i].alpha = alpha;
 
-        sGameCube[i].x = GameIcon_Shrink(sGameCube[i].x);
-        settled += (sGameCube[i].x == 0.0f) ? 1 : 0;
-        sGameCube[i].y = GameIcon_Shrink(sGameCube[i].y);
-        settled += (sGameCube[i].y == 0.0f) ? 1 : 0;
+        v = sGameCube[i].x;
+        p = Game_GetParams();
+        if (v > 0.0f) {
+            v -= p->shrinkSpeed;
+            if (v < 0.0f) {
+                v = 0.0f;
+            }
+        } else if (v < 0.0f) {
+            v += p->shrinkSpeed;
+            if (v > 0.0f) {
+                v = 0.0f;
+            }
+        }
+        sGameCube[i].x = v;
+        settled += (v == 0.0f) ? 1 : 0;
+        v = sGameCube[i].y;
+        p = Game_GetParams();
+        if (v > 0.0f) {
+            v -= p->shrinkSpeed;
+            if (v < 0.0f) {
+                v = 0.0f;
+            }
+        } else if (v < 0.0f) {
+            v += p->shrinkSpeed;
+            if (v > 0.0f) {
+                v = 0.0f;
+            }
+        }
+        sGameCube[i].y = v;
+        settled += (v == 0.0f) ? 1 : 0;
     }
     if (settled == GAMEICON_CUBES * 2) {
-        sGameIconRotX = 0;
         sGameIconSettled = TRUE;
+        sGameIconRotX = 0;
         sGameIconRotZ = 0;
         sGameIconSpin = 0;
     } else {
