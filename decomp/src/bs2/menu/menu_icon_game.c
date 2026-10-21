@@ -105,40 +105,34 @@ void GameIcon_UpdateFace(void) {
     }
 }
 
-static void GameIcon_SetScale(Vec* out, f32 s) {
-    Vec tmp = { 0.0f, 0.0f, 0.0f };
-
-    tmp.x = s;
-    tmp.y = s;
-    tmp.z = s;
-    *out = tmp;
-}
-
 /* 0x813235D4 */
 void GameIcon_CalcMtx(void) {
     GameParams* p = Game_GetParams();
-    GameIconCube* cube;
-    J3DModelInstance* inst;
     Mtx m;
     Mtx rot;
-    Vec scale;
+    u8 unused[4]; /* never used, but still takes a stack slot */
     s16 i;
 
-    for (i = 0, cube = &sGameCube[i], inst = &sGameIconInst[i]; i < GAMEICON_CUBES; i++) {
-        PSMTXTrans(m, cube->x, cube->y, 0.0f);
+    for (i = 0; i < GAMEICON_CUBES; i++) {
+        PSMTXTrans(m, sGameCube[i].x, sGameCube[i].y, 0.0f);
         MtxRotTrans(sGameIconRotX, 0, sGameIconRotZ, rot, 0.0f, 0.0f, 0.0f);
         PSMTXConcat(rot, m, m);
         MtxRotTrans(-0x4000, 0, 0, rot, 0.0f, 0.0f, 0.0f);
         PSMTXConcat(rot, m, m);
         PSMTXConcat(Menu_GetCubeMtx(), m, m);
-        GameIcon_SetScale(&scale, p->cubeScale);
-        J3D_SetModelMtx(inst, m, scale);
-        J3D_SetViewMtx(inst, Camera_GetView());
-        J3D_CalcJoints(inst);
-        cube++;
-        inst++;
+        {
+            Vec scale = { 0.0f, 0.0f, 0.0f };
+
+            scale.x = p->cubeScale;
+            scale.y = p->cubeScale;
+            scale.z = p->cubeScale;
+            J3D_SetModelMtx(&sGameIconInst[i], m, scale);
+        }
+        J3D_SetViewMtx(&sGameIconInst[i], Camera_GetView());
+        J3D_CalcJoints(&sGameIconInst[i]);
     }
 }
+
 /* 0x8132373C: the ring is drawn back to front once it stands still. */
 void GameIcon_Draw(void) {
     GameParams* p = Game_GetParams();
