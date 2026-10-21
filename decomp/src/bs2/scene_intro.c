@@ -579,7 +579,8 @@ s32 Scene_UpdateDisc(void) {
                 break;
             }
         }
-    } else if (s->discState == 5) {
+    }
+    if (s->discState == 5) {
         if (SCENE_DISC_GONE()) {
             s->discState = 3;
         } else if (Disc_GetState() == DISC_READY) {
