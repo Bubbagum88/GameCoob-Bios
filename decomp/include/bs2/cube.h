@@ -3,6 +3,7 @@
 
 #include "types.h"
 #include "bs2/mtx.h"
+#include "bs2/j3d.h"
 
 /* Rolling-cube intro ("no disc" boot animation). PAL 1.0 addresses. */
 
@@ -48,8 +49,8 @@ typedef struct CubeTile {
 typedef struct CubeState {
     s32 x;              /* 0x00 grid column, starts at 16 */
     s32 y;              /* 0x04 grid row, starts at 18 */
-    u8 dir;             /* 0x08 current CubeDir */
-    u8 face;            /* 0x09 face plane 0..2 */
+    s8 dir;             /* 0x08 current CubeDir */
+    s8 face;            /* 0x09 face plane 0..2 */
     u8 unkA;
     u8 alpha;           /* 0x0B */
     u32 color;          /* 0x0C RGBA */
@@ -98,10 +99,12 @@ typedef struct CubeState {
 CubeTile *Cube_GetGrid(void);
 CubeState *Cube_Get(void);
 void Cube_Init(BOOL first);
+MtxPtr Cube_GetMtx(void);
+void Cube_Draw(void);
 s32 Cube_Update(BOOL playJingle);
 BOOL Cube_IsRunning(void);
-void Cube_Draw(void);
 void Cube_DrawBig(u8 alpha);
-void *Cube_GetModel(void);
+void Cube_InitModels(void);
+J3DModelInstance *Cube_GetModel(void);
 
 #endif

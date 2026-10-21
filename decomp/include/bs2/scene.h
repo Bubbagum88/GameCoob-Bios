@@ -3,34 +3,48 @@
 
 #include "types.h"
 #include "bs2/mtx.h"
+#include "bs2/j3d.h"
 
 typedef enum SceneState {
-    SCENE_MODE0 = 0,    /* fn_813020C0 != 0 */
+    SCENE_MODE0 = 0,    /* SRAM was lost: language select, then the logo */
     SCENE_NODISC = 1,   /* default boot: no disc inserted */
     SCENE_DISC = 2,     /* disc present, boot after the logo */
-    SCENE_MODE3 = 3,    /* disc state 0x13 or error */
+    SCENE_MODE3 = 3,    /* cover open or drive error */
     SCENE_SPINOUT = 4,  /* cube spun fast enough: transition to the menu */
     SCENE_MENU = 5
 } SceneState;
 
-/* 0x814AF878 */
+/* 0x814AF878, 0xD8 bytes. Defaults from Scene_SetDefaults in (). */
 typedef struct Scene {
-    s16 unk0, unk2;
+    s16 unk0;            /* 0x00 (0) */
+    s16 unk2;            /* 0x02 (100) */
     f32 modelScale;      /* 0x04 */
     s16 spin;            /* 0x08 Y rotation of the whole scene */
     s16 spinRest;        /* 0x0A */
-    s16 spinThreshold;   /* 0x0C (5000): spin speed that starts the menu */
+    s32 spinThreshold;   /* 0x0C (5000): spin speed that starts the menu */
     f32 spinSpeed;       /* 0x10 */
     f32 spinAccel;       /* 0x14 */
     f32 spinAccelStep;   /* 0x18 (1.5) */
-    f32 unk1C;
+    f32 unk1C;           /* 0x1C (100) */
     s16 wobblePhase;     /* 0x20 */
     s16 wobbleAmp;       /* 0x22 */
     f32 spinTilt;        /* 0x24 (0.7) */
-    u8 pad28[0x48 - 0x28];
+    s16 outFadeFrames;   /* 0x28 (30) spin-out: frames the intro models fade */
+    s16 outTurns;        /* 0x2A (3) spin-out: extra full turns */
+    s16 outSettle;       /* 0x2C (5000) spin-out: angle reached after the turns */
+    s16 outStart;        /* 0x2E spin when the spin-out began */
+    s32 outCoastFrames;  /* 0x30 (15) */
+    s32 outTurnFrames;   /* 0x34 (80) */
+    s32 outSettleFrames; /* 0x38 (50) */
+    s32 outFrame;        /* 0x3C */
+    s32 outFaceFrames;   /* 0x40 (100) menu face fades in over the last N frames */
+    f32 outSpeed;        /* 0x44 (= spinThreshold) */
     f32 squashXZ;        /* 0x48 (0.5) */
     f32 stretchY;        /* 0x4C (1.0) */
-    u8 pad50[0x5A - 0x50];
+    f32 unk50;           /* 0x50 (0.1) */
+    f32 unk54;           /* 0x54 (= squashXZ) */
+    u8 unk58;            /* 0x58 (255) */
+    u8 shakeAlpha;       /* 0x59 (255) inner background alpha at full shake */
     u8 bgAlpha;          /* 0x5A */
     u8 logoAlpha;        /* 0x5B */
     s16 landImpulse;     /* 0x5C */
@@ -38,7 +52,25 @@ typedef struct Scene {
     s16 landImpulse0;    /* 0x60 (4000) */
     s16 dropImpulse0;    /* 0x62 (12000) */
     s16 shakePhase;      /* 0x64 */
-    u8 pad66[0x8C - 0x66];
+    s16 m0LogoFade;      /* 0x66 mode 0: logo fade, from m0LogoFrames down */
+    s16 m0LogoFrames;    /* 0x68 (30) */
+    s16 m0TextFade;      /* 0x6A mode 0: "settings lost" text fade */
+    s16 unk6C;           /* 0x6C */
+    s16 m0TextFrames;    /* 0x6E (30) */
+    s16 unk70;           /* 0x70 (30) */
+    s16 m0State;         /* 0x72 */
+    s16 discFade;        /* 0x74 disc boot: logo fade-out */
+    s16 discFadeFrames;  /* 0x76 (30) */
+    s16 discLogoDim;     /* 0x78 (150) logo alpha removed at full discFade */
+    s16 askFade;         /* 0x7A disc boot: yes/no prompt fade */
+    s16 askFadeFrames;   /* 0x7C (30) */
+    s16 discState;       /* 0x7E */
+    s16 askChoice;       /* 0x80 0 yes, 1 no */
+    s16 askGap;          /* 0x82 (8) */
+    s16 errFade;         /* 0x84 "disc could not be read" fade */
+    s16 errFadeFrames;   /* 0x86 (30) */
+    s16 fatalFade;       /* 0x88 "an error has occurred" fade */
+    s16 fatalFadeFrames; /* 0x8A (30) */
     f32 landDecay;       /* 0x8C (0.93) */
     f32 dropDecay;       /* 0x90 (0.925) */
     f32 landLift;        /* 0x94 (0.015) */
@@ -49,16 +81,32 @@ typedef struct Scene {
     s16 easeFrame;       /* 0xA8 */
     s16 lastSpin;        /* 0xAA */
     s16 easeFrom;        /* 0xAC */
-    u8 padAE[0xB8 - 0xAE];
+    s16 outFirst;        /* 0xAE set until the spin-out has started */
+    s16 fatal;           /* 0xB0 disc reported DISC_FATAL */
+    s16 coverOpened;     /* 0xB2 */
+    s16 discWait;        /* 0xB4 */
+    s16 m3Wait;          /* 0xB6 (120) */
     f32 whooshMin;       /* 0xB8 (0.4) */
-    f32 unkBC;           /* 0xBC (0.5) */
+    f32 outWhooshMin;    /* 0xBC (0.5) */
+    s16 unkC0, unkC2, unkC4, unkC6, unkC8, unkCA, unkCC, unkCE;
+    s16 langSelect;      /* 0xD0 mode 0: the language list is up */
+    s16 lang;            /* 0xD2 language under the cursor */
+    s16 langFade;        /* 0xD4 */
 } Scene;
 
-Scene *Scene_Get(void);
-void Scene_Init(BOOL first);
-s32 Scene_Update(void);
+/* scene.c */
+void Scene_Update(void);
 void Scene_Draw2D(void);
+s32 Scene_GetState(void);
+void Scene_Init(BOOL first);
+Scene *Scene_Get(void);
 MtxPtr Scene_GetWorldMtx(void);
+void Scene_LoadLangRes(void);
+J3DModelInstance *Scene_GetBgInner(void);
+J3DModelInstance *Scene_GetBigCube(void);
+J3DModelInstance *Scene_GetLogo(void);
 void *Scene_GetLogoText(void);
+J3DModelInstance *Scene_GetBgOuter(void);
+MtxPtr Scene_GetSpinOutMtx(void);
 
 #endif

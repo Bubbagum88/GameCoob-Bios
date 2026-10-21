@@ -497,7 +497,7 @@ static void Menu_CalcCubeMtx(void) {
     s = sZeroVec;
     s.x = s.y = s.z = 1.1f * scene->modelScale;
     scale = s;
-    J3D_SetModelMtx(Scene_GetBigCube(), gMenuWork.cubeMtx, &scale);
+    J3D_SetModelMtx(Scene_GetBigCube(), gMenuWork.cubeMtx, scale);
     view = Camera_GetView();
     J3D_SetViewMtx(Scene_GetBigCube(), view);
 }

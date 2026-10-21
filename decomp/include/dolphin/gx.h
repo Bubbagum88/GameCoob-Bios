@@ -1,25 +1,22 @@
-#ifndef _DOLPHIN_GX_H_
-#define _DOLPHIN_GX_H_
+#ifndef _DOLPHIN_GX_H
+#define _DOLPHIN_GX_H
 
-#include <dolphin/types.h>
+#include <dolphin/gx/GXAttr.h>
+#include <dolphin/gx/GXBump.h>
+#include <dolphin/gx/GXData.h>
+#include <dolphin/gx/GXEnum.h>
+#include <dolphin/gx/GXFrameBuffer.h>
+#include <dolphin/gx/GXGeometry.h>
+#include <dolphin/gx/GXHardware.h>
+#include <dolphin/gx/GXLight.h>
+#include <dolphin/gx/GXMisc.h>
+#include <dolphin/gx/GXPerf.h>
+#include <dolphin/gx/GXPixel.h>
+#include <dolphin/gx/GXStubs.h>
+#include <dolphin/gx/GXTev.h>
+#include <dolphin/gx/GXTexture.h>
+#include <dolphin/gx/GXTransform.h>
+#include <dolphin/gx/GXTypes.h>
 #include <dolphin/mtx.h>
-
-typedef struct GXColor {
-    u8 r, g, b, a;
-} GXColor;
-
-typedef struct GXColorS10 {
-    s16 r, g, b, a;
-} GXColorS10;
-
-#define GX_PNMTX0 0
-
-#define GX_TF_RGB5A3 5
-#define GX_CLAMP 0
-#define GX_LINEAR 1
-
-void GXLoadPosMtxImm(Mtx mtx, u32 id);
-void GXLoadNrmMtxImm(Mtx mtx, u32 id);
-void GXSetCurrentMtx(u32 id);
 
 #endif
