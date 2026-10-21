@@ -1,54 +1,311 @@
-// Non-matching: functionally equivalent decompilation of the intro scene
-// director (PAL 1.0 BS2, 0x8130BDB8..0x8130D738): spin input, wobble,
-// impact shake, the world matrix and the per-state update loop.
+// Intro scene director (PAL 1.0 BS2, 0x8130BDB8..0x8130EF48): spin input,
+// wobble, impact shake, the world matrix, the per-state update and 2D
+// drawing for every boot path, and the spin-out into the main menu.
+//
+// Draft for matching (m2c first pass, cleaned up against the asm); not yet
+// compiled with CodeWarrior.
 
 #include "bs2/scene.h"
 #include "bs2/cube.h"
 #include "bs2/j3d.h"
-#include "bs2/sound.h"
-#include "bs2/pad.h"
-#include "bs2/disc.h"
+#include "bs2/menu.h"
+#include "bs2/res.h"
 
-static Scene sceneDefault;     /* 0x814AF878 */
-static Scene *scene;           /* 0x814AD3C0 */
-static s32 sceneState;         /* 0x814AD3B8 */
-static s32 sceneInitialState;  /* 0x814AD3BC */
-static Mtx sceneWorld;         /* 0x814AF950 */
+/* STH0 string table entry; the string is at (u8 *)entry + ofs. */
+typedef struct SthEntry {
+    u16 box;               /* GLH0 text box index */
+    u16 pad;
+    s32 ofs;
+} SthEntry;
 
-/* Per-model scale vectors (rodata 0x8137EBC0) */
-static const Vec bgInnerScale0 = { 0.0f, 0.0f, 0.0f }; /* replaced by modelScale */
-static const Vec logoScale = { 1.0f, 1.0f, 1.0f };
-static const Vec bgOuterScale = { 1.01f, 1.01f, 1.01f };
+/* GLH0 text box (0x24 bytes, table at header + 0x8) */
+typedef struct GlhTextBox {
+    u32 tag;
+    u16 x;                 /* 0x04 12.4 */
+    u16 y;                 /* 0x06 12.4 */
+    u8 pad8[0x18 - 0x8];
+    s16 spacing;           /* 0x18 line spacing in pixels */
+    u16 pad1A;
+    u16 pane;              /* 0x1C GLH0 pane index of the frame */
+    u8 pad1E[0x24 - 0x1E];
+} GlhTextBox;
+
+/* J3D animation slots (BS2 model loader) */
+typedef struct J3DAnmJoint {
+    u8 pad0[0x14];
+    void *data;            /* 0x14 */
+} J3DAnmJoint;
+
+typedef struct J3DAnmColor {
+    u8 pad0[0x1C];
+    void *data;            /* 0x1C */
+} J3DAnmColor;
+
+/* A model resource and the instance that draws it */
+typedef struct SceneModel {
+    J3DModel model;            /* 0x00 */
+    J3DModelInstance inst;     /* 0x38 */
+} SceneModel;
+
+typedef struct SceneModels {
+    SceneModel bgInner;        /* 0x000 res 0x23 */
+    SceneModel bigCube;        /* 0x0B0 res 0x67 */
+    SceneModel logo;           /* 0x160 res 0x66 */
+    SceneModel bgOuter;        /* 0x210 res 0x24 */
+    J3DModelInstance text;     /* 0x2C0 "GAMECUBE" wordmark */
+    J3DModel textModel;        /* 0x338 res 0x6B */
+    J3DAnmJoint textBck;       /* 0x370 res 0x69 */
+    J3DAnmColor textBrk;       /* 0x388 res 0x6A */
+} SceneModels;
+
+/* Not yet decompiled */
+void InitDVDLoader(void);                                   /* 0x813020C8 */
+BOOL fn_813020B8(void);                                     /* 0x813020B8 disc is bootable */
+void fn_813020F4(void);                                     /* 0x813020F4 */
+void fn_8130213C(void);                                     /* 0x8130213C boot the disc */
+BOOL fn_81302688(void);                                     /* 0x81302688 drive error */
+void fn_81303B00(J3DAnmJoint *anm, s32 flags);              /* 0x81303B00 */
+void fn_81303B9C(J3DModelInstance *inst, J3DAnmJoint *anm); /* 0x81303B9C */
+void fn_81303BA4(J3DModelInstance *inst, J3DAnmColor *anm, s32 flags); /* 0x81303BA4 */
+void fn_81304CE8(void);                                     /* 0x81304CE8 */
+void J3D_DrawPacket(J3DModelInstance *inst, void *packet);  /* 0x81305248 */
+void MtxScaleCols(Mtx m, Vec *s);                           /* 0x81307754 */
+f32 Hermite(f32 t, f32 t0, f32 p0, f32 v0, f32 t1, f32 p1, f32 v1); /* 0x81307D08 */
+void fn_81308DB8(GlhTextBox *box, const char *s);           /* 0x81308DB8 */
+void fn_813090A4(GlhTextBox *box, const char *s);           /* 0x813090A4 */
+void Glh_MeasureString(GlhTextBox *box, const char *s, u16 *w, u16 *h); /* 0x813092D8 */
+void fn_81309554(GXColor *in, GXColor *out);                /* 0x81309554 */
+void fn_813095A0(GXColor *in, GXColor *out);                /* 0x813095A0 */
+s32 Res_DialogLayout(void);                                 /* 0x8130B8AC */
+s32 Res_DialogStrings(void);                                /* 0x8130B920 */
+void Sound_UpdateSpin(s32 id, f32 level);                   /* 0x8135A8E0 */
+void GXSetFog_(s32 type, GXColor color);                    /* 0x8137759C */
+
+static s32 sAmbientPending = 1;      /* 0x814ACFF0 */
+
+static s32 sState;                   /* 0x814AD3B8 */
+static s32 sNextState;               /* 0x814AD3BC */
+static Scene *sScene;                /* 0x814AD3C0 */
+static void *sDialogGlh;             /* 0x814AD3C8 */
+static void *sDialogSth;             /* 0x814AD3CC */
+static s16 sPrevSpin;                /* 0x814AD3D0 */
+
+static Scene sSceneDefault;          /* 0x814AF878 */
+static Mtx sWorldMtx;                /* 0x814AF950 */
+static SceneModels gScene;           /* 0x814AF980 */
+static Mtx sSpinOutMtx;              /* 0x814AFD28 */
+
+static void Scene_SetDefaults(Scene *s);
+static void Scene_Reset(Scene *s);
+static void Scene_DrawWorld(void);
+static s32 Scene_UpdateNoDisc(void);
+static s32 Scene_UpdateMode0(void);
+static s32 Scene_UpdateDisc(void);
+static s32 Scene_UpdateMode3(void);
+static void Scene_InitModels(void);
+static void Scene_Draw2DNoDisc(void);
+static void Scene_Draw2DMode0(void);
+static void Scene_Draw2DDisc(void);
+static void Scene_Draw2DSpinOut(void);
+static void Scene_Draw2DMenu(void);
+static s32 Scene_SpinOut(void);
+
+/* 0x8130BDB8 */
+void Scene_Update(void) {
+    sState = sNextState;
+    switch (sState) {
+    case SCENE_DISC:
+        sNextState = Scene_UpdateDisc();
+        Scene_DrawWorld();
+        break;
+    case SCENE_MODE0:
+        sNextState = Scene_UpdateMode0();
+        Scene_DrawWorld();
+        break;
+    case SCENE_NODISC:
+        sNextState = Scene_UpdateNoDisc();
+        Scene_DrawWorld();
+        break;
+    case SCENE_MODE3:
+        sNextState = Scene_UpdateMode3();
+        Scene_DrawWorld();
+        break;
+    case SCENE_SPINOUT:
+        sNextState = Scene_SpinOut();
+        sAmbientPending = TRUE;
+        break;
+    case SCENE_MENU:
+        if (sAmbientPending) {
+            Sound_StartAmbient(0);
+            sAmbientPending = FALSE;
+        }
+        sNextState = Menu_Update();
+        break;
+    }
+}
+
+/* 0x8130BE78 */
+void Scene_Draw2D(void) {
+    switch (sState) {
+    case SCENE_NODISC:
+    case SCENE_MODE3:
+        Scene_Draw2DNoDisc();
+        break;
+    case SCENE_MODE0:
+        Scene_Draw2DMode0();
+        break;
+    case SCENE_DISC:
+        Scene_Draw2DDisc();
+        break;
+    case SCENE_SPINOUT:
+        Scene_Draw2DSpinOut();
+        break;
+    case SCENE_MENU:
+        Scene_Draw2DMenu();
+        break;
+    }
+}
+
+/* 0x8130BEDC */
+void fn_8130BEDC(void) {
+}
+
+/* 0x8130BEE0 */
+s32 Scene_GetState(void) {
+    return sState;
+}
 
 /* 0x8130BEE8 */
 void Scene_Init(BOOL first) {
-    ScreenParams *screen = Screen_Get();
-    Disc_Poll();
-    if (Disc_IsBootable())
-        sceneState = SCENE_DISC;
-    else if (Disc_IsMode0())
-        sceneState = SCENE_MODE0;
-    else if (Disc_GetState() == 0x13 || Disc_HasError())
-        sceneState = SCENE_MODE3;
-    else
-        sceneState = SCENE_NODISC;
-    sceneInitialState = sceneState;
-    screen->ortho = TRUE;   /* the whole cube intro is orthographic */
-    if (first) {
-        scene = &sceneDefault;
-        Scene_SetDefaults(scene);
+    DispSettings *disp = Disp_GetSettings();
+
+    InitDVDLoader();
+    if (fn_813020B8()) {
+        sState = SCENE_DISC;
+    } else if (Boot_SramWasLost()) {
+        sState = SCENE_MODE0;
+    } else if (Disc_GetState() == DISC_COVER_OPEN || fn_81302688()) {
+        sState = SCENE_MODE3;
+    } else {
+        sState = SCENE_NODISC;
     }
-    Scene_Reset(scene);
-    if (first)
+    sNextState = sState;
+    disp->menuFlag = TRUE;
+    if (first) {
+        sScene = &sSceneDefault;
+        Scene_SetDefaults(sScene);
+    }
+    Scene_Reset(sScene);
+    if (first) {
         Scene_InitModels();
+    }
     Cube_Init(first);
-    Menu_InitAll(first);
+    Menu_Init(first);
+    Game_InitParams(first);
+    Card_InitParams(first);
+    Option_InitParams(first);
+    Clock_InitParams(first);
+}
+
+/* 0x8130BFF0 */
+static void Scene_SetDefaults(Scene *s) {
+    s->unk0 = 0;
+    s->unk2 = 100;
+    s->spinThreshold = 5000;
+    s->spinTilt = 0.7f;
+    s->outFadeFrames = 30;
+    s->squashXZ = 0.5f;
+    s->stretchY = 1.0f;
+    s->spinAccelStep = 1.5f;
+    s->unk1C = 100.0f;
+    s->shakeAlpha = 255;
+    s->unk58 = 255;
+    s->landDecay = 0.93f;
+    s->landLift = 0.015f;
+    s->landImpulse0 = 4000;
+    s->dropDecay = 0.925f;
+    s->dropLift = 0.005f;
+    s->dropImpulse0 = 12000;
+    s->shakeStep = 1000;
+    s->m0LogoFrames = 30;
+    s->m0TextFrames = 30;
+    s->unk70 = 30;
+    s->discFadeFrames = 30;
+    s->askFadeFrames = 30;
+    s->askGap = 8;
+    s->discLogoDim = 150;
+    s->errFadeFrames = 30;
+    s->fatalFadeFrames = 30;
+    s->outCoastFrames = 15;
+    s->outTurnFrames = 80;
+    s->outSettleFrames = 50;
+    s->outSettle = 5000;
+    s->outTurns = 3;
+    s->outSpeed = s->spinThreshold;
+    s->outFaceFrames = 100;
+    s->isoX = 0x2000;
+    s->isoY = -0x1914;
+    s->isoZ = -0x1555;
+    s->fatal = 0;
+    s->whooshMin = 0.4f;
+    s->outWhooshMin = 0.5f;
+}
+
+/* 0x8130C130 */
+static void Scene_Reset(Scene *s) {
+    s->coverOpened = 0;
+    s->modelScale = 1.0f;
+    s->spin = 0;
+    s->spinSpeed = 0.0f;
+    s->spinAccel = 0.0f;
+    s->easeSpeed = 0.0f;
+    s->easeFrom = 0;
+    s->lastSpin = 0;
+    sScene->outFrame = 1;
+    sScene->outFirst = 1;
+    s->spinRest = 0;
+    s->easeFrame = 60;
+    s->wobblePhase = 2000;
+    s->wobbleAmp = 0;
+    s->spinTilt = 0.0f;
+    s->unk50 = 0.1f;
+    s->unk54 = s->squashXZ;
+    s->bgAlpha = 255;
+    s->logoAlpha = 0;
+    s->landImpulse = 0;
+    s->dropImpulse = 0;
+    s->shakePhase = 0;
+    s->m0LogoFade = s->m0LogoFrames;
+    s->m0TextFade = 0;
+    s->unk6C = 0;
+    s->m0State = 0;
+    s->discFade = 0;
+    s->discState = 0;
+    s->askFade = 0;
+    s->askChoice = 1;
+    s->errFade = 0;
+    s->fatalFade = 0;
+    s->m3Wait = 120;
+    s->unkC0 = 0;
+    s->unkC2 = 1;
+    s->unkC4 = 0;
+    s->unkC6 = 0;
+    s->unkC8 = 0;
+    s->unkCA = 1;
+    s->unkCC = 0;
+    s->unkCE = 0;
+    s->langSelect = 1;
+    s->lang = Lang_Get();
+    s->langFade = 0;
 }
 
 /* 0x8130C248 */
-Scene *Scene_Get(void) { return scene; }
+Scene *Scene_Get(void) {
+    return sScene;
+}
 
-/* 0x8130C250: hold A while the cube runs to spin the scene. */
+/* 0x8130C250: hold A while the cube runs to spin the scene; released, the
+   spin eases back to rest over 50 frames. */
 static void Scene_UpdateSpin(BOOL force) {
     Scene *s = Scene_Get();
     s16 easeFrom = s->easeFrom;
@@ -56,33 +313,46 @@ static void Scene_UpdateSpin(BOOL force) {
     s16 prev = s->spin;
     f32 level;
 
-    if (force || ((Pad_Held() & PAD_BUTTON_A) && Cube_IsRunning())) {
+    if (force) {
         s->spinAccel += s->spinAccelStep;
         s->spinSpeed += s->spinAccel;
-        s->spin = (s16)((f32)s->spin + s->spinSpeed);
-        if (!force) {
-            easeFrom = s->spin;
-            easeSpeed = s->spinSpeed;
-            s->easeFrame = 0;
-        }
+        s->spin = s->spin + s->spinSpeed;
+    } else if ((gMenuPad.button & PAD_A) && Cube_IsRunning()) {
+        s->spinAccel += s->spinAccelStep;
+        s->spinSpeed += s->spinAccel;
+        s->spin = s->spin + s->spinSpeed;
+        easeFrom = s->spin;
+        easeSpeed = s->spinSpeed;
+        s->easeFrame = 0;
     } else {
         s->spinAccel *= 0.76f;
         s->spinSpeed *= 0.95f;
-        if (s->spinAccel < 0.1f) s->spinAccel = 0.0f;
-        if (s->spinSpeed < 0.01f) s->spinSpeed = 0.0f;
-        /* Ease back to rest over 50 frames. */
-        s->spin = (s16)Hermite((f32)s->easeFrame, 0.0f, (f32)easeFrom, easeSpeed, 50.0f, 0.0f, 0.0f);
-        if (++s->easeFrame > 50)
+        if (s->spinAccel < 0.1) {
+            s->spinAccel = 0.0f;
+        }
+        if (s->spinSpeed < 0.01) {
+            s->spinSpeed = 0.0f;
+        }
+        s->spin = Hermite(s->easeFrame, 0.0f, easeFrom, easeSpeed, 50.0f, 0.0f, 0.0f);
+        s->easeFrame++;
+        if (s->easeFrame > 50) {
             s->easeFrame = 50;
+        }
     }
 
     level = s->spinSpeed / 5000.0f;
-    if (level > 1.0f) level = 1.0f;
-    if (level < 0.01f) level = 0.0f;
+    if (level > 1.0f) {
+        level = 1.0f;
+    }
+    if (level < 0.01f) {
+        level = 0.0f;
+    }
     if (Cube_IsRunning() || force) {
-        /* whoosh each time the spin wraps through zero */
-        if (((prev < 0 && s->spin >= 0) || (prev > 0 && s->spin < 0)) && level > s->whooshMin)
-            Sound_PlayWhoosh(0, level);
+        if (prev < 0 && s->spin >= 0 && level > s->whooshMin) {
+            Sound_UpdateSpin(0, level);
+        } else if (prev > 0 && s->spin < 0 && level > s->whooshMin) {
+            Sound_UpdateSpin(0, level);
+        }
     }
     s->lastSpin = prev;
     s->easeFrom = easeFrom;
@@ -95,12 +365,18 @@ static void Scene_DecayShake(void) {
     s16 phase = s->shakePhase;
     f32 land = s->landImpulse * s->landDecay;
     f32 drop = s->dropImpulse * s->dropDecay;
-    if (land < 10.0f) land = 0.0f;
-    if (drop < 80.0f) drop = 0.0f;
-    if (land > 0.0f || drop > 0.0f)
+
+    if (land < 10.0f) {
+        land = 0.0f;
+    }
+    if (drop < 80.0f) {
+        drop = 0.0f;
+    }
+    if (land > 0.0f || drop > 0.0f) {
         phase += s->shakeStep;
-    s->landImpulse = (s16)land;
-    s->dropImpulse = (s16)drop;
+    }
+    s->landImpulse = land;
+    s->dropImpulse = drop;
     s->shakePhase = phase;
 }
 
@@ -109,108 +385,973 @@ static void Scene_UpdateWobble(void) {
     Scene *s = Scene_Get();
     s16 phase = s->wobblePhase;
     f32 amp = s->wobbleAmp;
-    amp = s->spinAccel > 0.0f ? amp + 36.0f : amp * 0.945f;
-    if (amp < 1.0f) amp = 0.0f;
-    if (amp > 0.0f) phase += 7;
-    if (amp > 5000.0f) amp = 5000.0f;
-    s->wobbleAmp = (s16)amp;
+
+    if (s->spinAccel > 0.0f) {
+        amp = 36.0f + amp;
+    } else {
+        amp = amp * 0.945f;
+    }
+    if (amp < 1.0f) {
+        amp = 0.0f;
+    }
+    if (amp > 0.0f) {
+        phase += 7;
+    }
+    if (amp > 5000.0f) {
+        amp = 5000.0f;
+    }
+    s->wobbleAmp = amp;
     s->wobblePhase = phase;
     Scene_DecayShake();
 }
 
-/* 0x8130C694: out = RotY(spin) * Shake * Wobble * Iso * T(15,15,15) */
-static void Scene_CalcWorldMtx(Mtx out) {
+/* Impact shake: rolls about X (drop) and Z (landing) and lifts the scene. */
+static inline void Scene_CalcShakeMtx(Mtx m) {
     Scene *s = Scene_Get();
-    Mtx t, shake;
-    f32 f = (s->spinTilt * s->spinSpeed) / s->spinThreshold;
+    s16 phase = s->shakePhase;
+    f32 land = s->landImpulse;
+    f32 drop = s->dropImpulse;
+    f32 ty;
+
+    ty = s->dropLift * drop * SinS(phase);
+    ty = s->landLift * land * SinS(phase) + ty;
+    MtxRotTrans(-1.0f * drop * SinS(phase), 0, land * SinS(phase), m, 0.0f, ty, 0.0f);
+}
+
+/* 0x8130C694: RotY(spin) * Shake * Wobble * Iso * T(15, 15, 15) */
+static void Scene_CalcWorldMtx(Mtx m) {
+    Scene *s = Scene_Get();
+    s16 phase = s->wobblePhase;
+    f32 k = s->spinTilt * s->spinSpeed / s->spinThreshold;
     f32 amp = s->wobbleAmp;
-    s16 ph = s->wobblePhase;
-    f32 base = 1000.0f * f;
-    f32 land, drop, sn;
+    Mtx shake;
+    Mtx t;
+    f32 rest;
 
     PSMTXIdentity(t);
     t[0][3] = t[1][3] = t[2][3] = 15.0f;
-    MtxRotTrans(s->isoX, s->isoY, s->isoZ, out, 0.0f, 0.0f, 0.0f);
-    PSMTXConcat(out, t, t);
-    MtxRotTrans((s16)(base + (1.0f - f) * amp * SinS(ph * 0x5A)),
-                (s16)(base + (1.0f - f) * amp * SinS(ph * 0x3C)),
-                (s16)(base + (1.0f - f) * amp * SinS(ph * 0x46)),
-                out, 0.0f, 0.0f, 0.0f);
-    PSMTXConcat(out, t, out);
-
-    land = s->landImpulse;
-    drop = s->dropImpulse;
-    sn = SinS(s->shakePhase);
-    MtxRotTrans((s16)(-drop * sn), 0, (s16)(land * sn), shake,
-                0.0f, s->landLift * land * sn + s->dropLift * drop * sn, 0.0f);
-    PSMTXConcat(shake, out, out);
+    MtxRotTrans(s->isoX, s->isoY, s->isoZ, m, 0.0f, 0.0f, 0.0f);
+    PSMTXConcat(m, t, t);
+    rest = 1.0f - k;
+    k = 1000.0f * k;
+    MtxRotTrans(k + rest * (amp * SinS(phase * 0x5A)),
+                k + rest * (amp * SinS(phase * 0x3C)),
+                k + rest * (amp * SinS(phase * 0x46)), m, 0.0f, 0.0f, 0.0f);
+    PSMTXConcat(m, t, m);
+    Scene_CalcShakeMtx(shake);
+    PSMTXConcat(shake, m, m);
     MtxRotTrans(0, s->spin, 0, t, 0.0f, 0.0f, 0.0f);
-    PSMTXConcat(t, out, out);
+    PSMTXConcat(t, m, m);
 }
 
-/* 0x8130C90C: matrices only, drawing happens in Scene_Draw2D*. */
+/* 0x8130C90C */
 static void Scene_DrawWorld(void) {
     Scene *s = Scene_Get();
-    Mtx w, id;
-    Vec sq, sc;
-    f32 k = s->spinSpeed / s->spinThreshold;
+    Mtx m;
+    Mtx id;
+    MtxPtr view;
+    Vec squash = { 0.0f, 0.0f, 0.0f };
+    Vec scale = { 0.0f, 0.0f, 0.0f };
+    Vec logoScale = { 1.0f, 1.0f, 1.0f };
+    Vec outerScale = { 1.01f, 1.01f, 1.01f };
+    f32 xz;
 
-    Scene_CalcWorldMtx(w);
+    Scene_CalcWorldMtx(m);
     PSMTXIdentity(id);
-    PSMTXConcat(w, id, sceneWorld);
-    /* squash and stretch while spinning */
-    sq.x = 1.0f - (1.0f - s->squashXZ) * k;
-    sq.y = 1.0f + s->stretchY * k;
-    sq.z = 1.0f - (1.0f - s->squashXZ) * k;
-    MtxScaleCols(sceneWorld, &sq);
+    PSMTXConcat(m, id, sWorldMtx);
+    xz = 1.0f - s->squashXZ;
+    squash.x = 1.0f - xz * s->spinSpeed / s->spinThreshold;
+    squash.y = 1.0f + s->stretchY * s->spinSpeed / s->spinThreshold;
+    squash.z = 1.0f - xz * s->spinSpeed / s->spinThreshold;
+    MtxScaleCols(sWorldMtx, &squash);
 
-    sc.x = sc.y = sc.z = s->modelScale;
-    J3D_SetModelMtx(Scene_GetBgInner(), sceneWorld, &sc);
-    J3D_SetViewMtx(Scene_GetBgInner(), Camera_GetView());
+    scale.x = scale.y = scale.z = s->modelScale;
+    J3D_SetModelMtx(Scene_GetBgInner(), sWorldMtx, scale);
+    view = Camera_GetView();
+    J3D_SetViewMtx(Scene_GetBgInner(), view);
     J3D_CalcJoints(Scene_GetBgInner());
 
-    J3D_SetModelMtx(Scene_GetLogo(), sceneWorld, &logoScale);
-    J3D_SetViewMtx(Scene_GetLogo(), Camera_GetView());
+    J3D_SetModelMtx(Scene_GetLogo(), sWorldMtx, logoScale);
+    view = Camera_GetView();
+    J3D_SetViewMtx(Scene_GetLogo(), view);
     J3D_CalcJoints(Scene_GetLogo());
 
-    J3D_SetModelMtx(Scene_GetBgOuter(), sceneWorld, &bgOuterScale);
-    J3D_SetViewMtx(Scene_GetBgOuter(), Camera_GetView());
+    J3D_SetModelMtx(Scene_GetBgOuter(), sWorldMtx, outerScale);
+    view = Camera_GetView();
+    J3D_SetViewMtx(Scene_GetBgOuter(), view);
     J3D_CalcJoints(Scene_GetBgOuter());
 
     Cube_Draw();
 }
 
-/* 0x8130CB74: no disc. The cube plays, A spins, fast spin opens the menu. */
-static s32 Scene_UpdateNoDisc(void) {
-    Scene *s = Scene_Get();
-    CubeState *c = Cube_Get();
-
-    if (!c->done)
-        Scene_UpdateSpin(FALSE);
-    Scene_UpdateWobble();
-    Cube_Update(TRUE);
+static inline s32 Scene_CheckSpinOut(Scene *s) {
     if (s->spinSpeed > s->spinThreshold) {
         s->spin = s->spinRest;
+        return TRUE;
+    }
+    return FALSE;
+}
+
+/* 0x8130CB74 */
+static s32 Scene_UpdateNoDisc(void) {
+    Scene *s = Scene_Get();
+    CubeState *cube = Cube_Get();
+
+    if (!cube->done) {
+        Scene_UpdateSpin(FALSE);
+    }
+    Scene_UpdateWobble();
+    Cube_Update(TRUE);
+    if (Scene_CheckSpinOut(s)) {
         return SCENE_SPINOUT;
     }
-    /* ... disc-state banners (fields 0x84/0x88/0xB0/0xB2) omitted here,
-       see docs/intro.md */
+
+    if (s->fatal) {
+        if (++s->fatalFade > s->fatalFadeFrames) {
+            s->fatalFade = s->fatalFadeFrames;
+        }
+        return SCENE_NODISC;
+    }
+
+    if (Disc_GetState() == DISC_WRONG || Disc_GetState() == DISC_RETRY) {
+        if (++s->errFade > s->errFadeFrames) {
+            s->errFade = s->errFadeFrames;
+        }
+    } else {
+        if (--s->errFade < 0) {
+            s->errFade = 0;
+        }
+    }
+
+    if (s->coverOpened) {
+        if (cube->done) {
+            Disc_FadeOutStart();
+            if (Disc_GetFadeAlpha() == 0) {
+                Scene_UpdateSpin(TRUE);
+                Scene_UpdateWobble();
+                if (Scene_CheckSpinOut(s)) {
+                    return SCENE_SPINOUT;
+                }
+            }
+        }
+        return SCENE_NODISC;
+    }
+
+    switch (Disc_GetState()) {
+    case DISC_READY:
+        if (cube->done) {
+            fn_8130213C();
+        }
+        break;
+    case DISC_FATAL:
+        s->fatal = 1;
+        break;
+    case DISC_NONE:
+    case DISC_COVER_OPEN:
+        s->coverOpened = 1;
+        break;
+    case DISC_READING:
+    case 0x14:
+    case 0x15:
+    case DISC_WRONG:
+    case DISC_RETRY:
+        break;
+    }
     return SCENE_NODISC;
 }
 
-/* 0x8130BDB8 */
-s32 Scene_Update(void) {
-    switch (sceneState) {
-    case SCENE_DISC:   sceneState = Scene_UpdateDisc(); break;
-    case SCENE_MODE0:  sceneState = Scene_UpdateMode0(); break;
-    case SCENE_NODISC: sceneState = Scene_UpdateNoDisc(); break;
-    case SCENE_MODE3:  sceneState = Scene_UpdateMode3(); break;
-    case SCENE_SPINOUT: sceneState = Scene_SpinOut(); return sceneState;
-    case SCENE_MENU:   sceneState = Menu_Update(); return sceneState;
+/* 0x8130CD68: pick a language with up/down, A to confirm. */
+static void Scene_LanguageInput(Scene *s) {
+    if (gMenuPad.dirsNew & DIR_UP) {
+        if (--s->lang < 0) {
+            s->lang = 5;
+        }
+        Sound_Play(SE_CURSOR);
     }
-    Scene_DrawWorld();
-    return sceneState;
+    if (gMenuPad.dirsNew & DIR_DOWN) {
+        if (++s->lang >= 6) {
+            s->lang = 0;
+        }
+        Sound_Play(SE_CURSOR);
+    }
+    if (gMenuPad.buttonDown & PAD_A) {
+        Sound_Play(SE_DECIDE);
+        Lang_Set(s->lang);
+        s->langSelect = 0;
+    }
+    if (gMenuPad.buttonDown & PAD_B) {
+        Sound_Play(SE_BUZZER);
+    }
+}
+
+/* 0x8130CE50: SRAM was lost. Language select, then a notice, then any
+   button spins out to the menu. */
+static s32 Scene_UpdateMode0(void) {
+    Scene *s = Scene_Get();
+    CubeState *cube = Cube_Get();
+
+    if (Disc_GetState() == DISC_FATAL) {
+        s->fatal = 1;
+    }
+    if (s->fatal) {
+        if (++s->fatalFade > s->fatalFadeFrames) {
+            s->fatalFade = s->fatalFadeFrames;
+        }
+        return SCENE_MODE0;
+    }
+    if (s->langSelect) {
+        s->langFade += 10;
+        if (s->langFade > 255) {
+            s->langFade = 255;
+            Scene_LanguageInput(s);
+        }
+        return SCENE_MODE0;
+    }
+    if (s->langFade > 0) {
+        s->langFade -= 10;
+        if (s->langFade <= 0) {
+            s->langFade = 0;
+        }
+        return SCENE_MODE0;
+    }
+    if (!cube->done) {
+        Scene_UpdateWobble();
+        Cube_Update(TRUE);
+        return SCENE_MODE0;
+    }
+
+    switch (s->m0State) {
+    case 0:
+        if (--s->m0LogoFade < 0) {
+            s->m0LogoFade = 0;
+            s->m0State = 1;
+        }
+        break;
+    case 1:
+        if (++s->m0TextFade > s->m0TextFrames) {
+            s->m0TextFade = s->m0TextFrames;
+            s->m0State = 3;
+        }
+        break;
+    case 3:
+        if (gMenuPad.buttonDown & 0x1F70) {
+            Sound_Play(SE_DECIDE);
+            s->m0State = 4;
+        }
+        break;
+    case 4:
+        if (--s->m0TextFade < 0) {
+            s->m0TextFade = 0;
+            s->m0State = 6;
+        }
+        break;
+    case 6:
+        Scene_UpdateSpin(TRUE);
+        Scene_UpdateWobble();
+        if (Scene_CheckSpinOut(s)) {
+            return SCENE_SPINOUT;
+        }
+        break;
+    }
+    return SCENE_MODE0;
+}
+
+/* 0x8130D078 */
+static void Scene_YesNoInput(Scene *s) {
+    if (gMenuPad.dirsNew & DIR_UP) {
+        if (s->askChoice != 0) {
+            Sound_Play(SE_CURSOR);
+        }
+        s->askChoice = 0;
+    }
+    if (gMenuPad.dirsNew & DIR_DOWN) {
+        if (s->askChoice != 1) {
+            Sound_Play(SE_CURSOR);
+        }
+        s->askChoice = 1;
+    }
+    if (gMenuPad.buttonDown & PAD_A) {
+        if (s->askChoice == 0) {
+            Sound_Play(SE_DECIDE);
+            s->discState = 3;
+        } else {
+            Sound_Play(SE_CANCEL);
+            s->discState = 2;
+        }
+    }
+    if (gMenuPad.buttonDown & PAD_B) {
+        Sound_Play(SE_CANCEL);
+        s->discState = 2;
+    }
+}
+
+static inline BOOL Scene_DiscGone(void) {
+    return Disc_GetState() == DISC_COVER_OPEN || Disc_GetState() == DISC_NONE ||
+           Disc_GetState() == DISC_RETRY || Disc_GetState() == DISC_WRONG;
+}
+
+/* 0x8130D168: a bootable disc is in. The cube intro runs to its end in
+   one frame, then the logo fades and the game boots. */
+static s32 Scene_UpdateDisc(void) {
+    CubeState *cube = Cube_Get();
+    Scene *s = Scene_Get();
+
+    while (!cube->done) {
+        Cube_Update(FALSE);
+        Scene_UpdateWobble();
+    }
+    if (Disc_GetState() == DISC_FATAL) {
+        s->fatal = 1;
+    }
+    if (s->langSelect) {
+        s->langFade += 10;
+        if (s->langFade > 255) {
+            s->langFade = 255;
+            Scene_LanguageInput(s);
+        }
+        return SCENE_DISC;
+    }
+    if (s->langFade > 0) {
+        s->langFade -= 10;
+        if (s->langFade <= 0) {
+            s->langFade = 0;
+            fn_813020F4();
+        }
+        return SCENE_DISC;
+    }
+
+    if (Disc_GetFadeAlpha() == 0) {
+        if (s->fatal) {
+            if (--s->askFade < 0) {
+                s->askFade = 0;
+                if (++s->fatalFade > s->fatalFadeFrames) {
+                    s->fatalFade = s->fatalFadeFrames;
+                }
+            }
+            return SCENE_DISC;
+        }
+        if (++s->discWait > 20) {
+            s->discWait = 20;
+            switch (s->discState) {
+            case 0:
+                if (++s->discFade > s->discFadeFrames) {
+                    s->discFade = s->discFadeFrames;
+                    s->discState = 1;
+                }
+                break;
+            case 1:
+                if (++s->askFade > s->askFadeFrames) {
+                    s->askFade = s->askFadeFrames;
+                }
+                Scene_YesNoInput(s);
+                break;
+            case 2:
+                if (--s->askFade < 0) {
+                    s->askFade = 0;
+                    if (--s->discFade < 0) {
+                        s->discFade = 0;
+                        s->discState = 5;
+                    }
+                }
+                break;
+            case 3:
+                if (--s->askFade < 0) {
+                    s->askFade = 0;
+                    s->discState = 4;
+                }
+                break;
+            case 4:
+                if (--s->discFade < 0) {
+                    s->discFade = 0;
+                    Scene_UpdateSpin(TRUE);
+                    Scene_UpdateWobble();
+                    if (Scene_CheckSpinOut(s)) {
+                        return SCENE_SPINOUT;
+                    }
+                }
+                break;
+            case 5:
+                if (Scene_DiscGone()) {
+                    s->discState = 3;
+                } else if (Disc_GetState() == DISC_READY) {
+                    fn_8130213C();
+                }
+                break;
+            }
+        }
+    } else if (s->discState == 5) {
+        if (Scene_DiscGone()) {
+            s->discState = 3;
+        } else if (Disc_GetState() == DISC_READY) {
+            fn_8130213C();
+        }
+    } else {
+        Disc_FadeOutStart();
+    }
+    return SCENE_DISC;
+}
+
+/* 0x8130D4E0: cover open or drive error. */
+static s32 Scene_UpdateMode3(void) {
+    CubeState *cube = Cube_Get();
+    Scene *s = Scene_Get();
+
+    while (!cube->done) {
+        Cube_Update(FALSE);
+        Scene_UpdateWobble();
+        fn_813020F4();
+    }
+    Disc_FadeOutStart();
+    if (--s->m3Wait < 0) {
+        s->m3Wait = 0;
+        Scene_UpdateSpin(TRUE);
+        Scene_UpdateWobble();
+        if (Scene_CheckSpinOut(s)) {
+            return SCENE_SPINOUT;
+        }
+    }
+    return SCENE_MODE3;
 }
 
 /* 0x8130D5AC */
-MtxPtr Scene_GetWorldMtx(void) { return sceneWorld; }
+MtxPtr Scene_GetWorldMtx(void) {
+    return sWorldMtx;
+}
+
+/* 0x8130D5B8 */
+void Scene_LoadLangRes(void) {
+    sDialogSth = ResGet(Res_DialogStrings());
+}
+
+/* 0x8130D5E0 */
+static void Scene_InitModels(void) {
+    gScene.bgInner.model.data = ResGet(0x23);
+    gScene.bgInner.inst.model = &gScene.bgInner.model;
+    J3D_InitModel(&gScene.bgInner.inst, 1);
+    gScene.bigCube.model.data = ResGet(0x67);
+    gScene.bigCube.inst.model = &gScene.bigCube.model;
+    J3D_InitModel(&gScene.bigCube.inst, 1);
+    gScene.logo.model.data = ResGet(0x66);
+    gScene.logo.inst.model = &gScene.logo.model;
+    J3D_InitModel(&gScene.logo.inst, 1);
+    gScene.bgOuter.model.data = ResGet(0x24);
+    gScene.bgOuter.inst.model = &gScene.bgOuter.model;
+    J3D_InitModel(&gScene.bgOuter.inst, 1);
+    gScene.textModel.data = ResGet(0x6B);
+    gScene.text.model = &gScene.textModel;
+    J3D_InitModel(&gScene.text, 1);
+    gScene.textBck.data = ResGet(0x69);
+    fn_81303B00(&gScene.textBck, 1);
+    gScene.textBrk.data = ResGet(0x6A);
+    fn_81303BA4(&gScene.text, &gScene.textBrk, 1);
+    fn_81303B9C(&gScene.text, &gScene.textBck);
+    sDialogGlh = ResGet(Res_DialogLayout());
+    sDialogSth = ResGet(Res_DialogStrings());
+}
+
+/* 0x8130D700 */
+J3DModelInstance *Scene_GetBgInner(void) {
+    return &gScene.bgInner.inst;
+}
+
+/* 0x8130D70C */
+J3DModelInstance *Scene_GetBigCube(void) {
+    return &gScene.bigCube.inst;
+}
+
+/* 0x8130D718 */
+J3DModelInstance *Scene_GetLogo(void) {
+    return &gScene.logo.inst;
+}
+
+/* 0x8130D724 */
+void *Scene_GetLogoText(void) {
+    return &gScene.text;
+}
+
+/* 0x8130D730 */
+J3DModelInstance *Scene_GetBgOuter(void) {
+    return &gScene.bgOuter.inst;
+}
+
+#define SCENE_SHAKE_MAX 3000
+
+/* Inner background alpha follows the impact shake. */
+static inline u8 Scene_ShakeAlpha(Scene *s, s32 shake) {
+    return s->shakeAlpha * shake / SCENE_SHAKE_MAX;
+}
+
+static inline void Scene_DrawDialogText(s32 idx, GXColor *c) {
+    Glh_DrawText(idx, sDialogSth, sDialogGlh, c);
+}
+
+/* 0x8130D73C: no disc / cover open: the cube intro and the disc errors. */
+static void Scene_Draw2DNoDisc(void) {
+    Scene *s = Scene_Get();
+    GXColor c = { 255, 255, 255, 255 };
+    u8 fade0 = 255 - s->unkC4 * 150 / 30;
+    u8 fade1 = 255 - s->unkCE * 150 / 30;
+    u8 fade = fade0 > fade1 ? fade1 : fade0;
+    s32 shake;
+    s16 wobble;
+
+    shake = s->landImpulse + s->dropImpulse;
+    if (shake > SCENE_SHAKE_MAX) {
+        shake = SCENE_SHAKE_MAX;
+    }
+    gScene.text.alpha = (u8)(fade * 255 / 255);
+    J3D_Draw(&gScene.text);
+    fn_81304CE8();
+    gScene.bgInner.inst.alpha = (u8)(fade * Scene_ShakeAlpha(s, shake) / 255);
+    if (gScene.bgInner.inst.alpha > 0) {
+        J3D_Draw(&gScene.bgInner.inst);
+    }
+    wobble = s->wobbleAmp;
+    if (wobble > SCENE_SHAKE_MAX) {
+        wobble = SCENE_SHAKE_MAX;
+    }
+    gScene.bgOuter.inst.alpha = (u8)(fade * Scene_ShakeAlpha(s, wobble) / 255);
+    if (gScene.bgOuter.inst.alpha > 0) {
+        J3D_DrawPacket(&gScene.bgOuter.inst, (u8 *)gScene.bgOuter.inst.model->packets + 0x30);
+    }
+    Cube_DrawBig((255 - s->logoAlpha) * fade / 255);
+    gScene.logo.inst.alpha = (u8)(s->logoAlpha * fade / 255);
+    if (gScene.logo.inst.alpha > 0) {
+        J3D_Draw(&gScene.logo.inst);
+    }
+    if (gScene.bgOuter.inst.alpha > 0) {
+        J3D_DrawPacket(&gScene.bgOuter.inst, (u8 *)gScene.bgOuter.inst.model->packets + 0x78);
+    }
+
+    c.a = s->fatalFade * 255 / s->fatalFadeFrames;
+    if (c.a != 0) {
+        GX_Setup2DView();
+        GX_Setup2DText();
+        Scene_DrawDialogText(4, &c);
+    }
+    c.a = s->errFade * 255 / s->errFadeFrames;
+    if (c.a != 0) {
+        GX_Setup2DView();
+        GX_Setup2DText();
+        Scene_DrawDialogText(5, &c);
+    }
+}
+
+/* 0x8130D9FC: a vertical list of `count` strings starting at entry `first`,
+   with `sel` highlighted. */
+static void Scene_DrawList(GlhTextBox *boxes, SthEntry *entries, u16 first, u16 count, u16 y,
+                           u16 h, s16 sel, u8 alpha) {
+    DispSettings *disp = Disp_GetSettings();
+    GXColor hi = { 255, 255, 255, 255 };
+    GXColor lo = { 0xF0, 0xE6, 0x00, 0xFF };
+    GlhTextBox box;
+    s32 i;
+    u32 ofs = first * 8;
+
+    hi.a = alpha;
+    lo.a = alpha;
+    box = boxes[*(u16 *)((u8 *)entries + ofs)];
+    box.y = y + disp->textPad * 16 + (s32)h / 2;
+    GX_Setup2DText();
+    for (i = 0; i < count; i++) {
+        fn_813095A0(&lo, &lo);
+        fn_81309554(&hi, &hi);
+        if (sel == i) {
+            SthEntry *e = (SthEntry *)((u8 *)entries + ofs);
+            fn_813090A4(&box, (char *)e + e->ofs);
+        } else {
+            SthEntry *e = (SthEntry *)((u8 *)entries + ofs);
+            fn_81308DB8(&box, (char *)e + e->ofs);
+        }
+        ofs += 8;
+        box.y += box.spacing * 16;
+    }
+}
+
+/* 0x8130DB58: the language list (strings 12..17) in a frame. */
+static void Scene_DrawLanguageList(Scene *s) {
+    DispSettings *disp = Disp_GetSettings();
+    u16 maxW = 0;
+    u16 h = 0;
+    u16 i;
+    SthEntry *entries = (SthEntry *)((u8 *)sDialogSth + 8);
+    GlhTextBox *boxes = (GlhTextBox *)((u8 *)sDialogGlh + ((u32 *)sDialogGlh)[2]);
+    GlhPane *panes = (GlhPane *)((u8 *)sDialogGlh + ((u32 *)sDialogGlh)[3]);
+    GXColor c = { 255, 255, 255, 255 };
+    u16 w;
+    GlhTextBox *box;
+    GlhPane *pane;
+    u16 y;
+
+    c.a = s->langFade;
+    for (i = 0; i < 6; i++) {
+        Glh_MeasureString(&boxes[entries[12 + i].box], (char *)&entries[12 + i] + entries[12 + i].ofs,
+                          &w, &h);
+        if (maxW < w) {
+            maxW = w;
+        }
+    }
+    box = &boxes[entries[12].box];
+    pane = &panes[box->pane];
+    w = maxW + (disp->textPad << 5);
+    h = h + box->spacing * 80 + (disp->textPad << 5);
+    y = pane->y - h / 2;
+    Glh_DrawPaneRect(boxes[entries[12].box].pane, sDialogGlh, &c, (u16)(pane->x - w / 2), y, w, h);
+    Scene_DrawList(boxes, entries, 12, 6, y, h, s->lang, s->langFade);
+}
+
+static inline void Scene_DrawLanguageScreen(Scene *s, GXColor *c) {
+    c->a = s->langFade;
+    GX_Setup2DView();
+    GX_Setup2DText();
+    Scene_DrawDialogText(6, c);
+    Scene_DrawDialogText(7, c);
+    Scene_DrawDialogText(8, c);
+    Scene_DrawDialogText(9, c);
+    Scene_DrawDialogText(10, c);
+    Scene_DrawDialogText(11, c);
+    Scene_DrawLanguageList(s);
+}
+
+/* 0x8130DCDC */
+static void Scene_Draw2DMode0(void) {
+    Scene *s = Scene_Get();
+    GXColor c = { 255, 255, 255, 255 };
+    s32 shake;
+    s16 wobble;
+
+    if (s->langSelect || s->langFade > 0) {
+        Scene_DrawLanguageScreen(s, &c);
+        return;
+    }
+
+    gScene.text.alpha = (u8)(s->m0LogoFade * 255 / s->m0LogoFrames);
+    J3D_Draw(&gScene.text);
+    shake = s->landImpulse + s->dropImpulse;
+    if (shake > SCENE_SHAKE_MAX) {
+        shake = SCENE_SHAKE_MAX;
+    }
+    gScene.bgInner.inst.alpha = Scene_ShakeAlpha(s, shake);
+    fn_81304CE8();
+    if (gScene.bgInner.inst.alpha > 0) {
+        J3D_Draw(&gScene.bgInner.inst);
+    }
+    wobble = s->wobbleAmp;
+    if (wobble > SCENE_SHAKE_MAX) {
+        wobble = SCENE_SHAKE_MAX;
+    }
+    gScene.bgOuter.inst.alpha = Scene_ShakeAlpha(s, wobble);
+    if (gScene.bgOuter.inst.alpha > 0) {
+        J3D_DrawPacket(&gScene.bgOuter.inst, (u8 *)gScene.bgOuter.inst.model->packets + 0x30);
+    }
+    Cube_DrawBig(255 - s->logoAlpha);
+    gScene.logo.inst.alpha = s->logoAlpha;
+    if (gScene.logo.inst.alpha > 0) {
+        J3D_Draw(&gScene.logo.inst);
+    }
+    if (gScene.bgOuter.inst.alpha > 0) {
+        J3D_DrawPacket(&gScene.bgOuter.inst, (u8 *)gScene.bgOuter.inst.model->packets + 0x78);
+    }
+
+    GX_Setup2DView();
+    GX_Setup2DText();
+    c.a = s->m0TextFade * 255 / s->m0TextFrames;
+    if (c.a != 0) {
+        Scene_DrawDialogText(3, &c);
+    }
+    c.a = s->fatalFade * 255 / s->fatalFadeFrames;
+    if (c.a != 0) {
+        Scene_DrawDialogText(4, &c);
+    }
+}
+
+/* 0x8130DF64: string `idx` with a yes/no choice under it, in a frame. */
+static void Scene_DrawAsk(Scene *s, u16 idx, s16 sel, u8 alpha) {
+    DispSettings *disp = Disp_GetSettings();
+    u16 maxW = 0;
+    u16 textW = 0;
+    u16 textH = 0;
+    u16 listH = 0;
+    SthEntry *entries = (SthEntry *)((u8 *)sDialogSth + 8);
+    GlhTextBox *boxes = (GlhTextBox *)((u8 *)sDialogGlh + ((u32 *)sDialogGlh)[2]);
+    GXColor c = { 255, 255, 255, 255 };
+    SthEntry *e;
+    SthEntry *opt;
+    GlhTextBox *box;
+    u16 w;
+    u16 i;
+    u16 frameH;
+    u16 totalH;
+    u16 y;
+
+    c.a = alpha;
+    GX_Setup2DView();
+    GX_Setup2DText();
+    e = &entries[idx];
+    Glh_MeasureString(&boxes[e->box], (char *)e + e->ofs, &textW, &textH);
+    w = 0;
+    for (i = 0, opt = entries; i < 2; i++, opt++) {
+        Glh_MeasureString(&boxes[opt[1].box], (char *)&entries[i + 1] + opt[1].ofs, &w, &listH);
+        if (maxW < w) {
+            maxW = w;
+        }
+    }
+    textH += disp->textPad << 5;
+    frameH = listH + boxes[entries[1].box].spacing * 16 + (disp->textPad << 5);
+    totalH = textH + (frameH + s->askGap * 16);
+    Glh_DrawStringOfs(idx, sDialogSth, sDialogGlh, &c, 0, (u16)(-totalH / 2 + textH / 2));
+    box = &boxes[e->box];
+    y = totalH / 2 + box->y - frameH;
+    Glh_DrawPaneRect(box->pane, sDialogGlh, &c, (u16)(box->x - (maxW / 2 + disp->textPad * 16)), y,
+                     maxW + (disp->textPad << 5), frameH);
+    Scene_DrawList(boxes, entries, 1, 2, y, listH, sel, alpha);
+}
+
+/* 0x8130E17C */
+static void Scene_Draw2DDisc(void) {
+    Scene *s = Scene_Get();
+    GXColor c = { 255, 255, 255, 255 };
+    s16 wobble;
+
+    if (s->langSelect || s->langFade > 0) {
+        Scene_DrawLanguageScreen(s, &c);
+        return;
+    }
+
+    wobble = s->wobbleAmp;
+    if (wobble > SCENE_SHAKE_MAX) {
+        wobble = SCENE_SHAKE_MAX;
+    }
+    gScene.bgOuter.inst.alpha = Scene_ShakeAlpha(s, wobble);
+    if (gScene.bgOuter.inst.alpha > 0) {
+        J3D_DrawPacket(&gScene.bgOuter.inst, (u8 *)gScene.bgOuter.inst.model->packets + 0x30);
+    }
+    gScene.logo.inst.alpha = s->logoAlpha - s->discLogoDim * s->discFade / s->discFadeFrames;
+    gScene.text.alpha = gScene.logo.inst.alpha;
+    if (gScene.logo.inst.alpha > 0) {
+        J3D_Draw(&gScene.logo.inst);
+        J3D_Draw(&gScene.text);
+    }
+    wobble = s->wobbleAmp;
+    if (wobble > SCENE_SHAKE_MAX) {
+        wobble = SCENE_SHAKE_MAX;
+    }
+    gScene.bgOuter.inst.alpha = Scene_ShakeAlpha(s, wobble);
+    if (gScene.bgOuter.inst.alpha > 0) {
+        J3D_DrawPacket(&gScene.bgOuter.inst, (u8 *)gScene.bgOuter.inst.model->packets + 0x78);
+    }
+    Scene_DrawAsk(s, 0, s->askChoice, s->askFade * 255 / s->askFadeFrames);
+    c.a = s->fatalFade * 255 / s->fatalFadeFrames;
+    if (c.a != 0) {
+        GX_Setup2DView();
+        GX_Setup2DText();
+        Scene_DrawDialogText(4, &c);
+    }
+}
+
+/* 0x8130E3C8 */
+static void Scene_Draw2DSpinOut(void) {
+    Scene *s = Scene_Get();
+    s32 shake;
+    s32 end;
+    s32 start;
+
+    if (s->outFrame <= s->outFadeFrames) {
+        shake = s->landImpulse + s->dropImpulse + s->wobbleAmp;
+        if (shake > SCENE_SHAKE_MAX) {
+            shake = SCENE_SHAKE_MAX;
+        }
+        gScene.bgInner.inst.alpha = Scene_ShakeAlpha(s, shake);
+        gScene.bigCube.inst.alpha = (u8)(s->bgAlpha * s->outFrame / s->outFadeFrames);
+        gScene.text.alpha = (u8)(s->bgAlpha * s->outFrame / s->outFadeFrames);
+        gScene.bgInner.inst.alpha = (u8)((s->outFadeFrames - s->outFrame) * (s->shakeAlpha * shake) /
+                                         (s->outFadeFrames * SCENE_SHAKE_MAX));
+        gScene.text.alpha = gScene.bgInner.inst.alpha * s->m0LogoFade / s->m0LogoFrames;
+        if (gScene.text.alpha < 0) {
+            gScene.text.alpha = 0;
+        }
+        J3D_Draw(&gScene.bgInner.inst);
+        J3D_Draw(&gScene.text);
+    } else {
+        gScene.bigCube.inst.alpha = s->bgAlpha;
+    }
+    if (gScene.bigCube.inst.alpha > 0) {
+        GXColor fog = { 0x28, 0x28, 0x28, 0xFF };
+        GXColor nofog = { 0xFF, 0xFF, 0xFF, 0xFF };
+        GXSetFog_(4, fog);
+        J3D_Draw(&gScene.bigCube.inst);
+        GXSetFog_(4, nofog);
+    }
+    end = s->outTurnFrames + s->outSettleFrames + s->outCoastFrames;
+    start = end - s->outFaceFrames;
+    if (s->outFrame >= start && s->outFrame <= end) {
+        Menu_DrawSpinOutFace(Scene_GetSpinOutMtx(), (s16)((s->outFrame - start) * 255 / (end - start)));
+    } else if (s->outFrame > end) {
+        Menu_DrawSpinOutFace(Scene_GetSpinOutMtx(), 255);
+    }
+}
+
+/* 0x8130E5C0 */
+static void Scene_Draw2DMenu(void) {
+    MenuWork *menu;
+    u8 alpha;
+
+    Scene_Get();
+    menu = Menu_Get();
+    alpha = menu->bgMinAlpha + (255 - menu->bgMinAlpha) * (0x7FFF - menu->zoom) / 0x7FFF;
+    gScene.bigCube.inst.alpha = alpha;
+    if (gScene.bigCube.inst.alpha > 0) {
+        GXColor fog = { 0x28, 0x28, 0x28, 0xFF };
+        GXColor nofog = { 0xFF, 0xFF, 0xFF, 0xFF };
+        GXSetFog_(4, fog);
+        J3D_DrawPacket(&gScene.bigCube.inst, (u8 *)gScene.bigCube.inst.model->packets + 0x78);
+        GXSetFog_(4, nofog);
+    }
+    CardIcon_Draw();
+    GameIcon_Draw();
+    OptionIcon_Draw();
+    ClockIcon_Draw();
+    if (gScene.bigCube.inst.alpha > 0) {
+        GXColor fog = { 0x28, 0x28, 0x28, 0xFF };
+        GXColor nofog = { 0xFF, 0xFF, 0xFF, 0xFF };
+        GXSetFog_(4, fog);
+        J3D_DrawPacket(&gScene.bigCube.inst, (u8 *)gScene.bigCube.inst.model->packets + 0x168);
+        GXSetFog_(4, nofog);
+    }
+    Menu_Draw2D(alpha);
+}
+
+/* 0x8130E70C: coast, then 3 full turns plus outSettle (Hermite), then
+   settle back to 0. Returns FALSE while faster than the threshold. */
+static s32 Scene_UpdateSpinOut(void) {
+    Scene *s = Scene_Get();
+    s32 ok;
+    f32 level;
+
+    sPrevSpin = s->spin;
+    if (s->outFrame >= 0 && s->outFrame < s->outCoastFrames) {
+        s->spin = s->spin + s->spinSpeed;
+        s->outStart = s->spin;
+    } else if (s->outFrame >= s->outCoastFrames &&
+               s->outFrame < s->outCoastFrames + s->outTurnFrames) {
+        s->spin = Hermite(s->outFrame, s->outCoastFrames, -(s->outStart + (s->outTurns << 16)),
+                          s->outSpeed, s->outCoastFrames + s->outTurnFrames, s->outSettle, 0.0f);
+        if (s->outFrame > s->outCoastFrames) {
+            s->spinSpeed = (s16)(s->spin - sPrevSpin);
+        }
+    } else if (s->outFrame >= s->outCoastFrames + s->outTurnFrames &&
+               s->outFrame < s->outCoastFrames + s->outTurnFrames + s->outSettleFrames) {
+        s->spin = Hermite(s->outFrame, s->outCoastFrames + s->outTurnFrames, s->outSettle, 0.0f,
+                          s->outCoastFrames + s->outTurnFrames + s->outSettleFrames, 0.0f, 0.0f);
+        s->spinSpeed = (s16)(s->spin - sPrevSpin);
+    } else if (s->outFrame == s->outCoastFrames + s->outTurnFrames + s->outSettleFrames) {
+        s->spin = 0;
+        s->spinSpeed = 0.0f;
+    }
+
+    if (s->spinSpeed > 5000.0f) {
+        ok = FALSE;
+    } else {
+        ok = TRUE;
+    }
+    level = s->spinSpeed / 5000.0f;
+    if (level > 1.0f) {
+        level = 1.0f;
+    }
+    if (level < 0.01f) {
+        level = 0.0f;
+    }
+    if (sPrevSpin < 0 && s->spin >= 0 && level > s->outWhooshMin) {
+        Sound_UpdateSpin(SE_SPIN_CYCLE, level);
+    } else if (sPrevSpin > 0 && s->spin < 0 && level > s->outWhooshMin) {
+        Sound_UpdateSpin(SE_SPIN_CYCLE, level);
+    }
+    return ok;
+}
+
+/* 0x8130EA34: the spin-out cube matrix: the intro wobble blended into the
+   menu cube's idle wobble as the spin slows down. */
+static void Scene_CalcSpinOutMtx(Mtx m, u8 advance) {
+    Scene *s = Scene_Get();
+    MenuWork *menu = Menu_Get();
+    f32 amp = s->wobbleAmp;
+    f32 k = s->spinSpeed / s->spinThreshold;
+    s16 frame = menu->wobbleFrame;
+    s16 phase = s->wobblePhase;
+    f32 tilt = 1.0f - s->spinTilt;
+    f32 tx, ty;
+    f32 a, b;
+    Mtx t;
+
+    if (s->outFrame == 1) {
+        frame = 0;
+    }
+    PSMTXIdentity(t);
+    a = tilt * k;
+    b = 1.0f - a;
+    ty = menu->wobbleAmpTY * SinS(menu->wobbleSpeedTY * frame);
+    tx = menu->wobbleAmpTX * SinS(menu->wobblePhaseTX + menu->wobbleSpeedTX * frame);
+    MtxRotTrans(a * (8191.0f + amp * SinS(90.0f * phase)) +
+                    b * (menu->wobbleAmp[0] * CosS(menu->wobbleSpeed[0] * frame)),
+                a * (-6371.0f + amp * SinS(60.0f * phase)) +
+                    b * (menu->wobbleAmp[1] * CosS(menu->wobblePhaseRY + menu->wobbleSpeed[1] * frame)),
+                a * (-5461.0f + amp * SinS(70.0f * phase)) +
+                    b * (menu->wobbleAmp[2] * CosS(menu->wobbleSpeed[2] * frame)),
+                m, tx, ty, 0.0f);
+    PSMTXConcat(m, t, m);
+    if (advance) {
+        frame += 7;
+    }
+    menu->wobbleFrame = frame;
+}
+
+/* 0x8130ED30: state 4. Returns SCENE_MENU once the spin has settled. */
+static s32 Scene_SpinOut(void) {
+    Scene *s = Scene_Get();
+    DispSettings *disp = Disp_GetSettings();
+    Scene *t = Scene_Get();
+    Mtx rot;
+    Mtx wobble;
+    Vec scale = { 0.0f, 0.0f, 0.0f };
+    MtxPtr view;
+    f32 k;
+    f32 rest;
+    f32 xz;
+
+    if (t->outFirst) {
+        t->outStart = t->spin;
+        t->outFirst = 0;
+    }
+    Scene_UpdateSpinOut();
+    t->outFrame++;
+    if (t->spinSpeed <= 0.0f && t->spin == 0) {
+        t->outFirst = 1;
+    }
+    disp->menuFlag = FALSE;
+    MtxRotTrans(0, Scene_Get()->spin, 0, rot, 0.0f, 0.0f, 0.0f);
+    Scene_CalcSpinOutMtx(wobble, TRUE);
+    PSMTXConcat(rot, wobble, sSpinOutMtx);
+
+    k = s->spinSpeed / s->spinThreshold;
+    rest = 1.1f * (1.0f - k);
+    xz = s->modelScale * (rest + (1.0f - (1.0f - s->squashXZ)) * k);
+    scale.x = xz;
+    scale.y = s->modelScale * (rest + (1.0f + s->stretchY) * k);
+    scale.z = xz;
+    J3D_SetModelMtx(Scene_GetBigCube(), sSpinOutMtx, scale);
+    view = Camera_GetView();
+    J3D_SetViewMtx(Scene_GetBigCube(), view);
+    J3D_CalcJoints(Scene_GetBigCube());
+    if (s->outFrame <= s->outFadeFrames) {
+        Scene_DrawWorld();
+    }
+    if (s->spinSpeed <= 0.0f && s->spin == 0) {
+        return SCENE_MENU;
+    }
+    return SCENE_SPINOUT;
+}
+
+/* 0x8130EF3C */
+MtxPtr Scene_GetSpinOutMtx(void) {
+    return sSpinOutMtx;
+}

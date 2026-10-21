@@ -195,6 +195,52 @@ if args.map:
 # Use for any additional files that should cause a re-configure when modified
 config.reconfig_deps = []
 
+# BS1, the boot stub in front of BS2, is hand-written assembly. It is built on
+# its own with GNU as and checked against config/<version>/bs1.sha1.
+_bs1_sha = Path("config") / config.version / "bs1.sha1"
+if _bs1_sha.exists():
+    _bs1_dir = Path(config.build_dir) / config.version / "bs1"
+    _binutils = Path(config.binutils_path or Path(config.build_dir) / "binutils")
+    _dtk = config.dtk_path or Path(config.build_dir) / "tools" / "dtk"
+    config.custom_build_rules = [
+        {
+            "name": "bs1_as",
+            "command": f"{_binutils / 'powerpc-eabi-as'} -mgekko -mregnames -o $out $in",
+            "description": "AS $in",
+        },
+        {
+            "name": "bs1_bin",
+            "command": f"{_binutils / 'powerpc-eabi-objcopy'} -O binary -j .text $in $out",
+            "description": "OBJCOPY $out",
+        },
+        {
+            "name": "bs1_check",
+            "command": f"{_dtk} shasum -q -c $in -o $out",
+            "description": "CHECK $in",
+        },
+    ]
+    config.custom_build_steps = {
+        "post-build": [
+            {
+                "outputs": _bs1_dir / "bs1.o",
+                "rule": "bs1_as",
+                "inputs": Path("src") / "bs1" / "bs1.s",
+                "implicit": [_binutils],
+            },
+            {
+                "outputs": _bs1_dir / "bs1.bin",
+                "rule": "bs1_bin",
+                "inputs": _bs1_dir / "bs1.o",
+            },
+            {
+                "outputs": _bs1_dir / "bs1.ok",
+                "rule": "bs1_check",
+                "inputs": _bs1_sha,
+                "implicit": [_bs1_dir / "bs1.bin", _dtk],
+            },
+        ]
+    }
+
 # Optional numeric ID for decomp.me preset
 # Can be overridden in libraries or objects
 config.scratch_preset_id = None
@@ -420,6 +466,8 @@ config.libs = [
         "cflags": cflags_base,
         "progress_category": "game",
         "objects": [
+            Object(NonMatching, "bs2/scene.c"),
+            Object(NonMatching, "bs2/cube.c"),
             Object(Matching, "bs2/menu/game.c"),
             Object(NonMatching, "bs2/menu/calendar.c"),
             Object(NonMatching, "bs2/menu/menu_icon_game.c"),

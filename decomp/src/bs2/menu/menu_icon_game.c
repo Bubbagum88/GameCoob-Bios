@@ -132,7 +132,7 @@ void GameIcon_CalcMtx(void) {
         PSMTXConcat(rot, m, m);
         PSMTXConcat(Menu_GetCubeMtx(), m, m);
         scale = GameIcon_Scale(p->cubeScale);
-        J3D_SetModelMtx(inst, m, &scale);
+        J3D_SetModelMtx(inst, m, scale);
         J3D_SetViewMtx(inst, Camera_GetView());
         J3D_CalcJoints(inst);
         cube++;

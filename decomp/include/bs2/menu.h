@@ -14,6 +14,8 @@ typedef struct DispSettings {
     f32 fovy;              /* 0x08 vertical field of view in degrees */
     u8 padC[0x1E - 0xC];
     u8 menuFlag;           /* 0x1E cleared every menu frame */
+    u8 pad1F[0x2B - 0x1F];
+    u8 textPad;            /* 0x2B frame padding around dialog text, pixels */
 } DispSettings;
 DispSettings *Disp_GetSettings(void);
 
