@@ -22,8 +22,9 @@ u32 __DVDLongFileNameFlag = FALSE;
 
 static void cbForReadAsync(s32 result, DVDCommandBlock* block);
 static void cbForReadSync(s32 result, DVDCommandBlock* block);
-static void cbForSeekSync(s32 result, DVDCommandBlock* block);
+static void cbForSeekAsync(s32 result, DVDCommandBlock* block);
 static void cbForPrepareStreamAsync(s32 result, DVDCommandBlock* block);
+static void cbForPrepareStreamSync(s32 result, DVDCommandBlock* block);
 
 /**
  * @TODO: Documentation
@@ -436,6 +437,34 @@ static void cbForReadSync(s32 result, DVDCommandBlock* block)
 
 /**
  * @TODO: Documentation
+ * @note UNUSED in BS2 (dead-stripped, string kept)
+ */
+BOOL DVDSeekAsyncPrio(DVDFileInfo* fileInfo, s32 offset, DVDCallback callback, s32 prio)
+{
+	if (!((0 <= offset) && (offset < fileInfo->length))) {
+		OSErrorLine(881, "DVDSeek(): offset is out of the file  ");
+	}
+
+	fileInfo->callback = callback;
+	DVDSeekAbsAsyncPrio(&fileInfo->cBlock, (char*)fileInfo->startAddr + offset, cbForSeekAsync, prio);
+	return TRUE;
+}
+
+/**
+ * @TODO: Documentation
+ */
+static void cbForSeekAsync(s32 result, DVDCommandBlock* block)
+{
+	struct DVDFileInfo* fileInfo;
+
+	fileInfo = (struct DVDFileInfo*)&block->next;
+	if (fileInfo->callback) {
+		(fileInfo->callback)(result, fileInfo);
+	}
+}
+
+/**
+ * @TODO: Documentation
  * @note UNUSED Size: 000084 (OS_BUILD_VERSION <  20011002L) (Matching by size)
  * @note UNUSED Size: 0000c0 (OS_BUILD_VERSION >= 20011002L) (Matching by size)
  */
@@ -534,3 +563,76 @@ static void cbForPrepareStreamAsync(s32 result, DVDCommandBlock* block)
 	}
 }
 
+/**
+ * @TODO: Documentation
+ * @note UNUSED in BS2 (dead-stripped, strings kept)
+ */
+s32 DVDPrepareStream(DVDFileInfo* fileInfo, u32 length, u32 offset)
+{
+	BOOL result;
+	DVDCommandBlock* block;
+	s32 state;
+	BOOL enabled;
+	s32 retVal;
+	u32 start;
+
+	start = fileInfo->startAddr + offset;
+
+	if (!Is32KBAligned(start)) {
+		OSErrorLine(1231,
+		            "DVDPrepareStream(): Specified start address (filestart(0x%x) + offset(0x%x)) is not 32KB "
+		            "aligned",
+		            fileInfo->startAddr, offset);
+	}
+
+	if (length == 0)
+		length = fileInfo->length - offset;
+
+	if (!Is32KBAligned(length)) {
+		OSErrorLine(1241, "DVDPrepareStream(): Specified length (0x%x) is not a multiple of 32768(32*1024)", length);
+	}
+
+	if (!((offset < fileInfo->length) && (offset + length <= fileInfo->length))) {
+		OSErrorLine(1249, "DVDPrepareStream(): The area specified (offset(0x%x), length(0x%x)) is out of the file",
+		            offset, length);
+	}
+
+	block  = &(fileInfo->cBlock);
+	result = DVDPrepareStreamAbsAsync(block, length, start, cbForPrepareStreamSync);
+
+	if (result == FALSE) {
+		return -1;
+	}
+
+	enabled = OSDisableInterrupts();
+
+	while (TRUE) {
+		state = ((volatile DVDCommandBlock*)block)->state;
+
+		if (state == DVD_STATE_END) {
+			retVal = 0;
+			break;
+		}
+		if (state == DVD_STATE_FATAL_ERROR) {
+			retVal = DVD_RESULT_FATAL_ERROR;
+			break;
+		}
+		if (state == DVD_STATE_CANCELED) {
+			retVal = DVD_RESULT_CANCELED;
+			break;
+		}
+
+		OSSleepThread(&__DVDThreadQueue);
+	}
+
+	OSRestoreInterrupts(enabled);
+	return retVal;
+}
+
+/**
+ * @TODO: Documentation
+ */
+static void cbForPrepareStreamSync(s32 result, DVDCommandBlock* block)
+{
+	OSWakeupThread(&__DVDThreadQueue);
+}

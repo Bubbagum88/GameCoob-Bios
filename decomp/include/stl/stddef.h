@@ -7,10 +7,12 @@ BEGIN_SCOPE_EXTERN_C
 
 typedef unsigned long size_t;
 
+#ifndef NULL /* dolphin/types.h may already define it */
 #if defined(__cplusplus)
 #define NULL (0)
 #else
 #define NULL ((void*)0)
+#endif
 #endif
 
 #define offsetof(type, memb) ((size_t)&((type*)0)->memb)

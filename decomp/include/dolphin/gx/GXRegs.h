@@ -84,9 +84,7 @@
 #define PI_FIFO_RESET  (6)
 #define PI_07          (7)
 #define PI_08          (8)
-#ifndef PI_RESETCODE
-#define PI_RESETCODE   9 // reset code, used by OSReset (also in hw_regs.h)
-#endif
+// PI_RESETCODE (9) lives in dolphin/hw_regs.h
 #define PI_10          (10)
 #define PI_FLIPPER_REV (11)
 #define PI_12          (12)
