@@ -2,6 +2,8 @@
 #include <dolphin/db.h>
 
 #define OS_CURRENT_CONTEXT (*(OSContext**)0x800000D4)
+
+extern volatile OSContext* __OSCurrentContext : 0x800000D4;
 #define OS_CURRENT_CONTEXT_PHYS (*(OSContext**)0x800000C0)
 #define __OSFPUContext (*(OSContext**)0x800000D8)
 
@@ -214,7 +216,7 @@ _disableFPU:
 }
 
 OSContext* OSGetCurrentContext(void) {
-    return OS_CURRENT_CONTEXT;
+    return (OSContext*)__OSCurrentContext;
 }
 
 asm u32 OSSaveContext(register OSContext* context) {

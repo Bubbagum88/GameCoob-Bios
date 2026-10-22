@@ -4,7 +4,7 @@
 #include <dolphin/hw_regs.h>
 #include <string.h>
 
-#include "__os.h"
+#include <dolphin/os/__os.h>
 
 // Later SDKs made these static and renamed them __EXIProbe and __EXIAttach
 #define __EXIProbe EXIProbe

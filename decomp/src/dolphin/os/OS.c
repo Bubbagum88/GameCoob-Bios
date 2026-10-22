@@ -5,7 +5,7 @@
 #include <dolphin/base/PPCArch.h>
 #include <string.h>
 
-#include "__os.h"
+#include <dolphin/os/__os.h>
 
 // Based on the Pikmin decomp (CC0) OS.c
 
