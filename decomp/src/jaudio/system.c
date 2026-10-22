@@ -330,14 +330,18 @@ void Nas_WriteIDwaveOnly(s32 id, s32 status) {
     }
 }
 
-void Nas_BankHeaderInit(ArcHeader* header, u8* data, u16 medium) {
+void Nas_BankHeaderInit(ArcHeader* header, u8* data, s16 medium) {
     s32 i;
+    s16* REF_medium = &medium;
+    u8** REF_data = &data;
+    s32* REF_i = &i;
+    STACK_PAD_VAR(1);
 
     header->medium = medium;
     header->pData = data;
 
     for (i = 0; i < header->numEntries; i++) {
-        if (header->entries[i].size != 0 && header->entries[i].medium == MEDIUM_CART) {
+        if (header->entries[i].size != 0 && (u8)header->entries[i].medium == MEDIUM_CART) {
             header->entries[i].addr += (u32)data;
         }
     }

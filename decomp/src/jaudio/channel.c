@@ -15,6 +15,7 @@
 #include <dolphin/os.h>
 
 static void Nas_smzSetPitch(channel* chan, f32 pitch);
+extern s32 Nas_SetSynthWave(channel* chan, note* n, s32 waveId);
 static void Nas_AddListHead(link* list, link* l);
 
 static void Nas_smzSetParam(channel* chan, drvparam* param) {
@@ -378,7 +379,6 @@ extern wtstr* NoteToVoice(voicetable* vtbl, s32 note) {
 extern voicetable* ProgToVp(s32 prog, s32 inst) {
     s32* REF_prog = &prog;
     s32* REF_inst = &inst;
-    STACK_PAD_VAR(6);
     voicetable* vtbl;
 
     if (prog == 0xFF) {
@@ -633,6 +633,67 @@ extern void Nas_Release_Channel_Force(note* n) {
     __Nas_Release_Channel_Main(n, ADSR_STATUS_RELEASE);
 }
 
+// IPL-only: synthetic wave harmonics (not in AC).
+extern s16* Nas_WaveSamples[];
+
+extern s32 Nas_SetSynthWave(channel* chan, note* n, s32 waveId) {
+    u8 pad[16]; // stack pad
+    f32 freqScale;
+    f32 ratio;
+    STACK_PAD_VAR(1);
+    s32 harmonicIndex;
+    s32* REF_waveId = &waveId;
+    f32* REF_freqScale = &freqScale;
+
+    if (waveId < 0x80) {
+        waveId = 0x80;
+    }
+
+    freqScale = n->frequency_scale;
+    if (n->portamento_sweep.mode != 0 && n->portamento_sweep.extent > 0.0f) {
+        freqScale *= (n->portamento_sweep.extent + 1.0f);
+    }
+
+    if (freqScale < 0.99999f) {
+        harmonicIndex = 0;
+        ratio = 1.0465f;
+    } else if (freqScale < 1.99999f) {
+        harmonicIndex = 1;
+        ratio = 0.52325f;
+    } else if (freqScale < 3.99999f) {
+        harmonicIndex = 2;
+        ratio = 0.26263f;
+    } else {
+        harmonicIndex = 3;
+        ratio = 0.13081f;
+    }
+
+    n->frequency_scale *= ratio;
+    chan->playback_ch.wave_id = waveId;
+    chan->playback_ch.harmonic_index = harmonicIndex;
+    chan->common_ch.wave_sample_addr = &Nas_WaveSamples[waveId - 0x80][harmonicIndex * 64];
+    return harmonicIndex;
+}
+
+extern void Nas_InitSynthWave(channel* chan, note* n) {
+    s32 prevHarmonicIndex;
+    s32 curHarmonicIndex;
+    u8 pad[4]; // stack pad
+    s32 waveId = n->inst_or_wave;
+    s32* REF_prev = &prevHarmonicIndex;
+    s32* REF_cur = &curHarmonicIndex;
+
+    if (waveId == 0xFF) {
+        waveId = n->sub_track->inst_or_wave;
+    }
+
+    prevHarmonicIndex = chan->playback_ch.harmonic_index;
+    curHarmonicIndex = Nas_SetSynthWave(chan, n, waveId);
+    if (curHarmonicIndex != prevHarmonicIndex) {
+        chan->common_ch.harmonic_idx_cur_and_prev = (curHarmonicIndex << 2) + prevHarmonicIndex;
+    }
+}
+
 static void __Nas_InitList(link* l) {
     l->prev = l;
     l->next = l;
@@ -795,8 +856,7 @@ extern void Nas_EntryTrack(channel* chan, note* n) {
     sub* subtrack = n->sub_track;
     playbackch* playback = &chan->playback_ch;
     commonch* common = &chan->common_ch;
-    STACK_PAD_VAR(1);
-    commonch** REF_common = &common;
+    STACK_PAD_VAR(4);
 
     playback->previous_parent_note = NA_NO_NOTE;
     playback->current_parent_note = n;
@@ -821,18 +881,16 @@ extern void Nas_EntryTrack(channel* chan, note* n) {
         common->is_synth_wave = FALSE;
     }
 
-    if (subtrack->sample_start_pos == 1) {
+    // IPL: synth waves pick a harmonic table instead of a start position.
+    if (common->is_synth_wave) {
+        Nas_SetSynthWave(chan, n, instId);
+    } else if (subtrack->sample_start_pos == 1) {
         playback->start_sample_pos = common->tuned_sample->wavetable->loop->loop_start;
     } else {
         playback->start_sample_pos = subtrack->sample_start_pos;
         if (playback->start_sample_pos >= common->tuned_sample->wavetable->loop->loop_end) {
             playback->start_sample_pos = 0;
         }
-    }
-
-    playback->vel_conv_table_idx = (int)(n->velocity_square2 * 11.5f);
-    if (playback->vel_conv_table_idx > 15) {
-        playback->vel_conv_table_idx = 15;
     }
 
     playback->bank_id = subtrack->bank_id;

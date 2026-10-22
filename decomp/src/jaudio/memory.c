@@ -22,6 +22,7 @@ void Emem_KillSwMember();
 void Dirty_AllWave();
 void Nas_SetDelayLine(s32 a, fxconfig* b, s32 c);
 int Nas_Init_Single(s32, s32);
+void Nas_SetEcho(s32 mode, u8 numTaps, echotap* tapsL, echotap* tapsR);
 /*
  * --INFO--
  * Address:	........
@@ -389,12 +390,12 @@ void Nas_SzDataDivide(DataHeapstrc* param_1) {
  */
 void Nas_SzStayDivide(StayHeapstrc* param_1) {
     AG.data_heap.current = AG.data_heap.base;
-    Nas_HeapInit(&AG.seq_heap.stay_heap.heap, (u8*)Nas_HeapAlloc(&AG.data_heap, param_1->seq_heap_size),
-                 param_1->seq_heap_size);
-    Nas_HeapInit(&AG.bank_heap.stay_heap.heap, (u8*)Nas_HeapAlloc(&AG.data_heap, param_1->bank_heap_size),
-                 param_1->bank_heap_size);
-    Nas_HeapInit(&AG.wave_heap.stay_heap.heap, (u8*)Nas_HeapAlloc(&AG.data_heap, param_1->wave_heap_size),
+    Nas_HeapInit(&AG.wave_heap.stay_heap.heap, (u8*)Nas_HeapAlloc(&AG.misc_heap, param_1->wave_heap_size),
                  param_1->wave_heap_size);
+    Nas_HeapInit(&AG.bank_heap.stay_heap.heap, (u8*)Nas_HeapAlloc(&AG.misc_heap, param_1->bank_heap_size),
+                 param_1->bank_heap_size);
+    Nas_HeapInit(&AG.seq_heap.stay_heap.heap, (u8*)Nas_HeapAlloc(&AG.misc_heap, param_1->seq_heap_size),
+                 param_1->seq_heap_size);
     Nas_SzStayClear(&AG.seq_heap.stay_heap);
     Nas_SzStayClear(&AG.bank_heap.stay_heap);
     Nas_SzStayClear(&AG.wave_heap.stay_heap);
@@ -407,11 +408,11 @@ void Nas_SzStayDivide(StayHeapstrc* param_1) {
  */
 void Nas_SzAutoDivide(AutoHeapstrc* param_1) {
     AG.sz_auto_heap.current = AG.sz_auto_heap.base;
-    Nas_HeapInit(&AG.seq_heap.auto_heap.heap, (u8*)Nas_HeapAlloc(&AG.sz_auto_heap, param_1->seqLen), param_1->seqLen);
-    Nas_HeapInit(&AG.bank_heap.auto_heap.heap, (u8*)Nas_HeapAlloc(&AG.sz_auto_heap, param_1->bankLen),
-                 param_1->bankLen);
-    Nas_HeapInit(&AG.wave_heap.auto_heap.heap, (u8*)Nas_HeapAlloc(&AG.sz_auto_heap, param_1->waveLen),
+    Nas_HeapInit(&AG.wave_heap.auto_heap.heap, (u8*)Nas_HeapAlloc(&AG.misc_heap, param_1->waveLen),
                  param_1->waveLen);
+    Nas_HeapInit(&AG.bank_heap.auto_heap.heap, (u8*)Nas_HeapAlloc(&AG.misc_heap, param_1->bankLen),
+                 param_1->bankLen);
+    Nas_HeapInit(&AG.seq_heap.auto_heap.heap, (u8*)Nas_HeapAlloc(&AG.misc_heap, param_1->seqLen), param_1->seqLen);
     Nas_SzAutoClear(&AG.seq_heap.auto_heap);
     Nas_SzAutoClear(&AG.bank_heap.auto_heap);
     Nas_SzAutoClear(&AG.wave_heap.auto_heap);
@@ -1059,6 +1060,18 @@ void __Nas_MemoryReconfig() {
     }
     AG.adsr_decay_table = (f32*)Nas_HeapAlloc(&AG.misc_heap, sizeof(f32) * 0x100);
     MakeReleaseTable();
+    // IPL-only: echo line.
+    if (spec->_08 >= 1) {
+        AG.echo.length = 0x4000;
+        AG.echo.buf_l = (s16*)Nas_2ndHeapAlloc_CL(&AG.misc_heap, AG.echo.length * sizeof(s16));
+        AG.echo.buf_r = (s16*)Nas_2ndHeapAlloc_CL(&AG.misc_heap, AG.echo.length * sizeof(s16));
+        AG.echo.pos = 0;
+    }
+    if (spec->_08 > 1) {
+        Nas_SetEcho(spec->_08, 0, NULL, NULL);
+    } else {
+        Nas_SetEcho(0, 0, NULL, NULL);
+    }
     for (i = 0; i < ARRAY_COUNT(AG.synth_delay); i++) {
         AG.synth_delay[i].use_reverb = FALSE;
     }
@@ -1149,16 +1162,16 @@ void* Nas_Alloc_Single(s32 a, s32 sampleBankID, u8* sampleAddr, s8 originalMediu
  * Size:	0000C4
  */
 int Nas_Init_Single(s32 a, s32 b) {
+    u8* alloc;
     s32* REF_a = &a;
     s32* REF_b = &b;
-    STACK_PAD_VAR(3);
-    u8* alloc = (u8*)Nas_2ndHeapAlloc(&AG.misc_heap, a);
+    STACK_PAD_VAR(1);
+    alloc = (u8*)Nas_2ndHeapAlloc(&AG.misc_heap, a);
     if (alloc == NULL) {
         AG.emem_persistent_wave_heap.heap.length = 0;
     } else {
         Nas_HeapInit(&AG.emem_persistent_wave_heap.heap, alloc, a);
     }
-    STACK_PAD_VAR(3);
     u8** REF_alloc = &alloc;
 
     alloc = (u8*)Nas_2ndHeapAlloc(&AG.misc_heap, b);

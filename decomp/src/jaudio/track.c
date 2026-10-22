@@ -153,6 +153,7 @@ static s32 __SetNote(note* n, s32 cmd);
 static s32 __Command_Seq(note* n);
 static s32 __SetVoice(note* n, s32 cmd);
 static s32 __SetChannel(note* n, s32 cmd);
+extern void Nas_InitSynthWave(channel* chan, note* n);
 static u8 Nas_ProgramChanger(sub* subtrack, u8 prog_id, voicetable** inst_pp, env* adsr_env);
 
 static u16 Convert_Com(macro* macro, u8 cmd) {
@@ -466,19 +467,17 @@ extern void Nas_ReleaseGroup(group* grp) {
 }
 
 extern void Nas_AddList(link* root, link* list) {
+    link** REF_root = &root;
+    link** REF_list = &list;
+    STACK_PAD_VAR(4);
+
     if (list->prev != nullptr) {
+        // IPL: the debug reports are compiled out.
         static BOOL first = TRUE;
 
         if (first) {
-            OSReport("GLOBAL USE %x\n", &AG.channel_node.useList);
-            OSReport("GLOBAL FREE %x\n", &AG.channel_node.freeList);
-            OSReport("GLOBAL RELEASE %x\n", &AG.channel_node.releaseList);
-            OSReport("GLOBAL RELWAIT %x\n", &AG.channel_node.relwaitList);
             first = FALSE;
         }
-
-        OSReport("List %x\n", list);
-        OSReport("Root %x\n", root);
     } else {
         root->prev->next = list;
         list->prev = root->prev;
@@ -608,8 +607,13 @@ static s32 __SetChannel(note* n, s32 same_sample) {
     }
     STACK_PAD_VAR(1);
 
-    if (n->continuous != TRUE || n->channel == nullptr || n->channel_attached == FALSE || same_sample != TRUE ||
-        n->channel->playback_ch.current_parent_note != n) {
+    if (n->continuous == TRUE && n->channel != nullptr && n->channel_attached != FALSE && same_sample == TRUE &&
+        n->channel->playback_ch.current_parent_note == n) {
+        // IPL: refresh the synth wave harmonic for a continued note.
+        if (n->tuned_sample == nullptr) {
+            Nas_InitSynthWave(n->channel, n);
+        }
+    } else {
         if (same_sample == FALSE) {
             Nas_Release_Channel(n);
         }
@@ -2235,7 +2239,7 @@ extern void Nas_InitPlayer(void) {
         AG.notes[i].enabled = FALSE;
     }
 
-    for (i = 0; i < AUDIO_GROUP_MAX; i++) {
+    for (i = 0; i < AUDIO_GROUP_NUM; i++) {
         AG.groups_p[i] = &AG.groups[i];
         __InitGroup(&AG.groups[i]);
     }
