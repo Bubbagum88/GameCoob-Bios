@@ -17,6 +17,18 @@ block_relocations:
 - source: .data:0x8145EF74
 # word in the app's .data asset blob that only looks like a pointer into JAudio's CHANNEL
 - source: .data:0x81411434
+# Shift-JIS text and asset bytes that only look like pointers into seqsetup's seq array
+- source: .data:0x8149217C
+- source: .rodata:0x8137F724
+- source: .data:0x813B827C
+- source: .data:0x813C94B0
+- source: .rodata:0x8137F5F4
+- source: .rodata:0x8137F0A4
+- source: .rodata:0x8137F14C
+- source: .rodata:0x8137FDB4
+- source: .rodata:0x8137FFD4
+- source: .rodata:0x81380004
+- source: .rodata:0x813800C0
 
 # Data extracted at build time into build/PAL10/include (never committed)
 extract:

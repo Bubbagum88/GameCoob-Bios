@@ -632,7 +632,7 @@ config.libs = [
             Object(Matching, "jaudio/heapctrl.c"),
             Object(NonMatching, "jaudio/jammain_2.c"),
             Object(Matching, "jaudio/noteon.c"),
-            Object(NonMatching, "jaudio/seqsetup.c"),
+            Object(Matching, "jaudio/seqsetup.c"),
             Object(Matching, "jaudio/centcalc.c"),
             Object(Matching, "jaudio/jamosc.c"),
             Object(Matching, "jaudio/oneshot.c"),
