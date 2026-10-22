@@ -502,7 +502,7 @@ typedef struct sub_ {
     /* 0x48 */ note* note;
     /* 0x4C */ voicetable* voicetable;
     /* 0x50 */ group* group;
-    /* 0x54 */ struct note_* note_layers[8]; /* IPL: 8 (AC 4) */
+    /* 0x54 */ struct note_* note_layers[AUDIO_SUBTRACK_NOTE_NUM]; /* IPL: 8 (AC 4) */
     /* 0x74 */ macro macro_player;
     /* 0x90 */ env adsr_env;
     /* 0x98 */ chnode channel_node;

@@ -2235,7 +2235,7 @@ extern void Nas_InitPlayer(void) {
         AG.notes[i].enabled = FALSE;
     }
 
-    for (i = 0; i < AUDIO_GROUP_MAX; i++) {
+    for (i = 0; i < AUDIO_GROUP_NUM; i++) {
         AG.groups_p[i] = &AG.groups[i];
         __InitGroup(&AG.groups[i]);
     }

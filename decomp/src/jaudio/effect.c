@@ -304,7 +304,7 @@ extern f32 Nas_EnvProcess(envp* process) {
                     process->envelope_idx++;
                     goto retry;
                 default:
-                    process->delay = process->delay * AG.audio_params.updates_per_frame_scaled;
+                    process->delay = (s32)(process->delay * AG.audio_params.updates_per_frame_scaled);
                     if (process->delay == 0) {
                         process->delay = 1;
                     }
