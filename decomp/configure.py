@@ -600,7 +600,7 @@ config.libs = [
             Object(NonMatching, "jaudio/aictrl.c"),
             Object(Matching, "jaudio/sample.c"),
             Object(Matching, "jaudio/dummyrom.c"),
-            Object(NonMatching, "jaudio/audiothread.c"),
+            Object(Matching, "jaudio/audiothread.c"),
             Object(Matching, "jaudio/neosthread.c"),
             Object(Matching, "jaudio/streamctrl.c"),
             Object(Matching, "jaudio/dspbuf.c"),
