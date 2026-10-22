@@ -76,13 +76,30 @@ void fn_8132DEFC(void);
 void fn_8132EC54(void);
 void fn_8132F010(void);
 void fn_8132FFF0(void);
-void fn_81330374(FxCube* out, u32* count);
-void fn_813306C8(s32 lang);
+void fn_81330374(FxCube* c, u32* n, f32 t);
+void fn_813306C8(s32 row);
 void fn_813306FC(s32 from, s32 to);
 void fn_813307B4(void);
+void fn_81330B7C(void);
 void fn_81330518(GXColor* a, GXColor* b, GXColor* c, GXColor* out, f32 t, f32 u);
 
 void Fx_EmitSparks(FxCube* cubes);
+u16* fn_81330F88(s32 lang);
+u16 fn_81330FAC(s32 lang);
+u16* fn_81330FC8(s32 lang);
+u16 fn_81330FEC(s32 lang);
+u16* fn_813310AC(void);
+u16 fn_81331114(void);
+u16* fn_81331150(void);
+u16 fn_813311B8(void);
+u16* fn_813329A4(void);
+u16 fn_81332A0C(void);
+u16* fn_81332A48(void);
+u16 fn_81332AB0(void);
+u16* fn_81332AEC(void);
+u16 fn_81332B54(void);
+u16* fn_81332B90(void);
+u16 fn_81332BF8(void);
 u16* fn_81332008(void);
 u16 fn_81332070(void);
 FxCube* fn_8133491C(void);
@@ -180,6 +197,70 @@ static GXColor sFxDarkCol[FX_MAX];
 static FxCursor sFxCursor;
 static FxSlide sFxSlide;
 static u8 sFxPad[0x1C];
+
+/* Per-cell fly-out delay (0xFF = first to go). */
+static u8 sFxFlyDelay[0x2C8] = {
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFD, 0xFA, 0xF7, 0xF4, 0xF1,
+    0xED, 0xE9, 0xE6, 0xE1, 0xDD, 0xD9, 0xD4, 0xCF, 0xCB, 0xC5, 0xC1, 0xBC,
+    0xB6, 0xB0, 0xAB, 0xA6, 0xA0, 0x9A, 0x95, 0x8A, 0x84, 0x7E, 0x79, 0x73,
+    0x68, 0x63, 0x53, 0x48, 0x44, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFC, 0xFA, 0xF7, 0xF4, 0xF1, 0xED, 0xE9, 0xE5, 0xE1, 0xDD, 0xD9,
+    0xD4, 0xCF, 0xCA, 0xC5, 0xC0, 0xBB, 0xB5, 0xB0, 0xAB, 0xA6, 0xA0, 0x9A,
+    0x95, 0x8F, 0x89, 0x84, 0x7E, 0x79, 0x62, 0x5D, 0x4E, 0x43, 0x3F, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFD, 0xFA, 0xF7, 0xF4, 0xF0, 0xED,
+    0xEA, 0xE5, 0xE1, 0xDD, 0xD9, 0xD4, 0xCF, 0xCA, 0xC5, 0xC1, 0xBB, 0xB6,
+    0xB0, 0xAB, 0xA6, 0xA0, 0x9A, 0x95, 0x8F, 0x89, 0x84, 0x7F, 0x79, 0x73,
+    0x5D, 0x58, 0x49, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFC, 0xFA, 0xF7,
+    0xF4, 0xF0, 0xED, 0xEA, 0xE5, 0xE2, 0xDE, 0xD8, 0xD4, 0xCF, 0xCB, 0xC6,
+    0xC1, 0xBB, 0xB6, 0xB0, 0xAB, 0xA6, 0xA0, 0x9B, 0x95, 0x8F, 0x8A, 0x84,
+    0x7E, 0x78, 0x73, 0x6D, 0x68, 0x62, 0x58, 0x52, 0x44, 0x3A, 0x36, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFC, 0xFA, 0xF7, 0xF4, 0xF1, 0xED, 0xE9,
+    0xE6, 0xE1, 0xDD, 0xD9, 0xD4, 0xCF, 0xCA, 0xC5, 0xC1, 0xBB, 0xB6, 0xB0,
+    0xAB, 0xA5, 0xA0, 0x9B, 0x95, 0x8F, 0x8A, 0x84, 0x7E, 0x79, 0x73, 0x6E,
+    0x68, 0x53, 0x4E, 0x44, 0x3F, 0x36, 0x32, 0xFF, 0xFF, 0xFF, 0xFF, 0xFC,
+    0xFA, 0xF7, 0xF4, 0xF0, 0xED, 0xEA, 0xE5, 0xE1, 0xDD, 0xD9, 0xD4, 0xCF,
+    0xCA, 0xC5, 0xC1, 0xBC, 0xB6, 0xB0, 0xAB, 0xA6, 0xA0, 0x9A, 0x95, 0x8F,
+    0x8A, 0x84, 0x7E, 0x79, 0x73, 0x6D, 0x68, 0x62, 0x4E, 0x49, 0x44, 0x3B,
+    0x32, 0x2E, 0xFF, 0xFF, 0xFF, 0xFF, 0xFD, 0xFA, 0xF7, 0xF4, 0xF1, 0xED,
+    0xEA, 0xE6, 0xE1, 0xDD, 0xD8, 0xD4, 0xCF, 0xCB, 0xC6, 0xC1, 0xBB, 0xB5,
+    0xB0, 0xAB, 0xA5, 0xA0, 0x9A, 0x95, 0x8F, 0x89, 0x84, 0x7E, 0x78, 0x73,
+    0x6E, 0x68, 0x62, 0x5E, 0x58, 0x53, 0x49, 0x44, 0x36, 0x2E, 0x2A, 0xD9,
+    0xD4, 0xCF, 0xCB, 0xC5, 0xB0, 0xAB, 0xA5, 0xA0, 0x9A, 0x95, 0x8F, 0x8A,
+    0x84, 0x7F, 0xCA, 0xC6, 0xC0, 0xBB, 0xA6, 0xA0, 0x9A, 0x95, 0x90, 0x8A,
+    0x84, 0x7E, 0x78, 0x73, 0x6E, 0x58, 0x52, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFC, 0xFA, 0xF7, 0xF4, 0xED, 0xE9, 0xE5, 0xE1, 0xDD, 0xD9, 0xD4, 0xCF,
+    0xCA, 0xC6, 0xC0, 0xBB, 0xB6, 0xB0, 0xAB, 0xA5, 0xA0, 0x9B, 0x95, 0x8F,
+    0x8A, 0x84, 0x7E, 0x79, 0x73, 0x6E, 0x68, 0x62, 0x5D, 0x58, 0x52, 0x4E,
+    0x48, 0x44, 0x3F, 0x3A, 0x36, 0x32, 0x2E, 0x29, 0x26, 0x22, 0x1F, 0x1C,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFC, 0xFA, 0xF7, 0xF4, 0xF1, 0xEA, 0xE5, 0xE1,
+    0xDD, 0xD8, 0xD4, 0xCF, 0xCA, 0xC5, 0xC1, 0xBB, 0xB6, 0xB0, 0xAB, 0xA6,
+    0xA0, 0x9A, 0x95, 0x8F, 0x8A, 0x84, 0x7E, 0x78, 0x73, 0x6D, 0x68, 0x62,
+    0x5D, 0x58, 0x53, 0x4E, 0x48, 0x44, 0x3F, 0x3B, 0x36, 0x32, 0x2E, 0x2A,
+    0x26, 0x23, 0x1F, 0x1C, 0xFF, 0xFF, 0xFF, 0xFC, 0xFA, 0xF7, 0xF4, 0xF0,
+    0xED, 0xE5, 0xE1, 0xDD, 0xD8, 0xD4, 0xCF, 0xCA, 0xC6, 0xC0, 0xBB, 0xB6,
+    0xB0, 0xAB, 0xA5, 0xA0, 0x9A, 0x95, 0x8F, 0x8A, 0x84, 0x7F, 0x79, 0x73,
+    0x6D, 0x68, 0x62, 0x5D, 0x58, 0x53, 0x4E, 0x49, 0x43, 0x3F, 0x3A, 0x36,
+    0x32, 0x2E, 0x29, 0x26, 0x22, 0x1F, 0x1C, 0x19, 0xFF, 0xFF, 0xFC, 0xFA,
+    0xF7, 0xF4, 0xF0, 0xED, 0xE9, 0xE5, 0xE1, 0xDD, 0xD9, 0xD4, 0xCF, 0xCA,
+    0xC5, 0xC1, 0xBB, 0xB6, 0xB1, 0xAB, 0xA6, 0xA0, 0x9A, 0x95, 0x8F, 0x8A,
+    0x84, 0x7E, 0x79, 0x73, 0x6E, 0x67, 0x63, 0x5D, 0x58, 0x52, 0x4D, 0x49,
+    0x43, 0x3F, 0x3B, 0x36, 0x32, 0x2E, 0x2A, 0x26, 0x22, 0x1F, 0x1C, 0x19,
+    0x16, 0x14, 0xFF, 0xFF, 0xFF, 0xFD, 0xFA, 0xF7, 0xF4, 0xF0, 0xED, 0xE6,
+    0xE1, 0xDD, 0xD9, 0xD4, 0xD0, 0xCA, 0xC5, 0xC0, 0xBB, 0xB5, 0xB0, 0xAB,
+    0xA5, 0xA0, 0x9B, 0x95, 0x8F, 0x8A, 0x84, 0x7E, 0x79, 0x73, 0x6D, 0x68,
+    0x63, 0x5D, 0x58, 0x52, 0x4D, 0x49, 0x44, 0x3F, 0x3B, 0x36, 0x32, 0x2E,
+    0x2A, 0x26, 0x23, 0x1F, 0x1C, 0x19, 0xFF, 0xFF, 0xFF, 0xFF, 0xFD, 0xFA,
+    0xF7, 0xF4, 0xF1, 0xEA, 0xE6, 0xE2, 0xDD, 0xD9, 0xD4, 0xCF, 0xCA, 0xC5,
+    0xC0, 0xBB, 0xB6, 0xB0, 0xAB, 0xA6, 0xA0, 0x9B, 0x94, 0x8F, 0x8A, 0x84,
+    0x7E, 0x78, 0x73, 0x6D, 0x68, 0x63, 0x5D, 0x58, 0x53, 0x4D, 0x49, 0x44,
+    0x3F, 0x3B, 0x36, 0x32, 0x2D, 0x29, 0x26, 0x22, 0x1F, 0x1C, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFC, 0xFA, 0xF8, 0xF4, 0xF1, 0xED, 0xE9, 0xE5, 0xE1,
+    0xDD, 0xD9, 0xD4, 0xD0, 0xCA, 0xC6, 0xC0, 0xBB, 0xB6, 0xB0, 0xAB, 0xA5,
+    0xA0, 0x9A, 0x95, 0x8F, 0x89, 0x84, 0x7F, 0x79, 0x73, 0x6D, 0x68, 0x62,
+    0x5D, 0x58, 0x52, 0x4D, 0x49, 0x44, 0x3F, 0x3A, 0x36, 0x32, 0x2D, 0x2A,
+    0x26, 0x22, 0x1F, 0x1C, 0xED, 0xE9, 0xE5, 0xE1, 0xA0, 0x9B, 0xED, 0xE2,
+    0x00, 0x00, 0x00, 0x00,
+};
 
 static u16 sFxBlink;
 static s32 sFxRand;
@@ -409,8 +490,7 @@ void FxGame_Update(s32 starting, s32 discMsg) {
             sFxPool.ready = Menu_Get()->fxReadyCount;
             sFxRand = Rand() % 5;
         }
-        fn_8132CCF4();
-        fn_81330374(sFxCube, &sFxCount);
+        fn_81330374(sFxCube, &sFxCount, fn_8132CCF4());
         fn_8132EC54();
     }
     fn_8132FFF0();
@@ -921,7 +1001,26 @@ void fn_8132C660(s16* digits, s32 value) {
     digits[0] = value;
 }
 
-/* 0x8132C750: rotate a cube about (cx, cy, cz); out gets the offset. */
+/* Rotate a cube about (cx, cy, cz); out gets the offset. */
+static inline void Fx_RotAbout(s16 rx, s16 ry, s16 rz, FxCube* in, FxCube* out, f32 cx, f32 cy, f32 cz) {
+    Mtx m;
+    Vec v;
+    Vec r;
+
+    MtxRot(rx, ry, rz, m);
+    v.x = in->pos.x - cx;
+    v.y = in->pos.y - cy;
+    v.z = in->pos.z - cz;
+    PSMTXMultVec(m, &v, &r);
+    out->pos.x = (r.x + cx) - in->pos.x;
+    out->pos.y = (r.y + cy) - in->pos.y;
+    out->pos.z = (r.z + cz) - in->pos.z;
+    out->rot[0] = rx;
+    out->rot[1] = ry;
+    out->rot[2] = rz;
+}
+
+/* 0x8132C750: out-of-line copy of Fx_RotAbout. */
 void fn_8132C750(s16 rx, s16 ry, s16 rz, FxCube* in, FxCube* out, f32 cx, f32 cy, f32 cz) {
     Mtx m;
     Vec v;
@@ -1310,5 +1409,372 @@ void fn_8132DEFC(void) {
             break;
         }
         break;
+    }
+}
+
+/* 0x8132EC54: place the cursor glyph, per-language offset and scale. */
+void fn_8132EC54(void) {
+    f32 x;
+    f32 y;
+    f32 s;
+    u32 i;
+    FxCube* c;
+    f32 oz;
+    f32 oy;
+    f32 ox;
+    Vec o;
+    u8 unused[12];
+
+    y = Menu_Get()->fxCursorY;
+    switch (Option_GetLang()) {
+    case 0:
+    case 3:
+    case 4:
+    case 5:
+        x = Menu_Get()->fxCursorX;
+        s = Menu_Get()->fxCursorScale;
+        break;
+    case 1:
+        x = -36.0f;
+        s = 0.65f;
+        break;
+    case 2:
+        x = -36.0f;
+        s = 0.6f;
+        break;
+    }
+    c = sFxCube;
+    fn_8132C830(&o, sFxCube, NULL, sFxCount);
+    oz = o.z;
+    oy = o.y;
+    ox = o.x;
+    for (i = 0; i < sFxCount; i++) {
+        c->pos.x += x;
+        c->pos.y += y;
+        c->pos.x = ox + s * (c->pos.x - ox);
+        c->pos.y = oy + s * (c->pos.y - oy);
+        c->pos.z = oz + s * (c->pos.z - oz);
+        c->scale.x *= s;
+        c->scale.y *= s;
+        c->scale.z *= s;
+        c++;
+    }
+}
+
+/* 0x8132EEB0: start fading a screen's cells in (on) or out. */
+void fn_8132EEB0(s32 screen, s32 on) {
+    u16* lists[6];
+    u16 counts[6];
+    u16* list;
+    u16 n;
+    u16 i;
+    u16 idx;
+
+    lists[0] = fn_813329A4();
+    counts[0] = fn_81332A0C();
+    lists[1] = fn_81332A48();
+    counts[1] = fn_81332AB0();
+    lists[2] = fn_81332AEC();
+    counts[2] = fn_81332B54();
+    lists[3] = fn_81332B90();
+    counts[3] = fn_81332BF8();
+    lists[4] = fn_813310AC();
+    counts[4] = fn_81331114();
+    lists[5] = fn_81331150();
+    counts[5] = fn_813311B8();
+    list = lists[screen];
+    n = counts[screen];
+    for (i = 0; i < n; i++) {
+        idx = *list;
+        if (on) {
+            sFxPool.v[5][idx] = Menu_Get()->fxFadeIn;
+        } else {
+            sFxPool.v[5][idx] = 0;
+        }
+        idx = *list;
+        if (on) {
+            sFxPool.v[3][idx] = Menu_Get()->fxFadeIn;
+        } else {
+            sFxPool.v[3][idx] = 0;
+        }
+        idx = *list;
+        sFxPool.v[7][idx] = Menu_Get()->fxFadeIn;
+        idx = *list;
+        sFxPool.v[1][idx] = Menu_Get()->fxFadeOut;
+        list++;
+    }
+}
+
+f32 fn_8132FF6C(void);
+
+/* Selection bar: slide a line's cells by the title offset and scale them about o. */
+#define FX_SEL_PLACE(listFn, countFn, o, line)                                        \
+    list = listFn();                                                                \
+    for (i = 0; i < countFn(); i++) {                                               \
+        sFxCube[list[i]].pos.x += Menu_Get()->fxTitle[line].x;                      \
+        sFxCube[list[i]].pos.y += Menu_Get()->fxTitle[line].y;                      \
+        Fx_ScaleAbout(&o, Menu_Get()->fxTitle[line].scale, Menu_Get()->fxTitle[line].scale, \
+                      Menu_Get()->fxTitle[line].scale, &sFxCube[list[i]]);          \
+    }
+
+/* Selection bar: grow the cells, swing them by the blink and move them to an end. */
+#define FX_SEL_GROW(countFn, o, line, OP, X, Y)                                       \
+    for (i = 0; i < countFn(); i++) {                                               \
+        Fx_ScaleAbout(&o, 1.0f + Menu_Get()->fxTitle[line].spacing,                 \
+                      1.0f + Menu_Get()->fxTitle[line].spacing,                     \
+                      1.0f + Menu_Get()->fxTitle[line].spacing, &sFxCube[list[i]]); \
+        sFxCube[list[i]].pos.x OP Menu_Get()->fxF0 * Hermite(fn_8132FF6C(), 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f); \
+        X                                                                           \
+        sFxCube[list[i]].pos.y += Y;                                                \
+    }
+
+/* 0x8132F010: lay out the selection bars of the three title lines. */
+void fn_8132F010(void) {
+    s32 i;
+    u16* list;
+    Vec o0;
+    Vec o1;
+    Vec o2;
+
+    list = fn_81332C34();
+    fn_8132C830(&o0, sFxCube, list, fn_81332C9C());
+    o0.x += Menu_Get()->fxTitle[0].x;
+    o0.y += Menu_Get()->fxTitle[0].y;
+    list = fn_813327B8();
+    fn_8132C830(&o1, sFxCube, list, fn_81332820());
+    o1.x += Menu_Get()->fxTitle[1].x;
+    o1.y += Menu_Get()->fxTitle[1].y;
+    list = fn_81331008();
+    fn_8132C830(&o2, sFxCube, list, fn_81331070());
+    o2.x += Menu_Get()->fxTitle[2].x;
+    o2.y += Menu_Get()->fxTitle[2].y;
+
+    FX_SEL_PLACE(fn_813329A4, fn_81332A0C, o0, 0)
+    FX_SEL_GROW(fn_81332A0C, o0, 0, -=,
+                sFxCube[list[i]].pos.x += Menu_Get()->fxSel[0];, Menu_Get()->fxSel[1])
+    FX_SEL_PLACE(fn_81332A48, fn_81332AB0, o0, 0)
+    FX_SEL_GROW(fn_81332AB0, o0, 0, +=,
+                if (Option_GetLang() == 4) {
+                    sFxCube[list[i]].pos.x += -40.0f;
+                } else {
+                    sFxCube[list[i]].pos.x += Menu_Get()->fxSel[2];
+                }, Menu_Get()->fxSel[3])
+    FX_SEL_PLACE(fn_81332AEC, fn_81332B54, o1, 1)
+    FX_SEL_GROW(fn_81332B54, o1, 1, -=,
+                sFxCube[list[i]].pos.x += Menu_Get()->fxSel[4];, Menu_Get()->fxSel[5])
+    FX_SEL_PLACE(fn_81332B90, fn_81332BF8, o1, 1)
+    FX_SEL_GROW(fn_81332BF8, o1, 1, +=,
+                sFxCube[list[i]].pos.x += Menu_Get()->fxSel[6];, Menu_Get()->fxSel[7])
+    FX_SEL_PLACE(fn_813310AC, fn_81331114, o2, 2)
+    FX_SEL_GROW(fn_81331114, o2, 2, -=,
+                sFxCube[list[i]].pos.x += Menu_Get()->fxSel2[0];, Menu_Get()->fxSel2[1])
+    FX_SEL_PLACE(fn_81331150, fn_813311B8, o2, 2)
+    FX_SEL_GROW(fn_813311B8, o2, 2, +=,
+                sFxCube[list[i]].pos.x += Menu_Get()->fxSel2[2];, Menu_Get()->fxSel2[3])
+}
+
+/* 0x8132FF6C: blink triangle wave, 0..1..0 over fxBlinkPeriod frames. */
+f32 fn_8132FF6C(void) {
+    f32 t = (f32)sFxBlink / (f32)Menu_Get()->fxBlinkPeriod;
+
+    if (t < 0.5) {
+        return 2.0f * t;
+    }
+    return 2.0f * (1.0f - t);
+}
+
+/* 0x8132FFF0: give every cell the base colours and stop its fades. */
+void fn_8132FFF0(void) {
+    s32 i;
+
+    for (i = 0; i < FX_MAX; i++) {
+        sFxLightCol[i].r = sFxLight0.r;
+        sFxLightCol[i].g = sFxLight0.g;
+        sFxLightCol[i].b = sFxLight0.b;
+        sFxLightCol[i].a = sFxLight0.a;
+        sFxDarkCol[i].r = sFxDark0.r;
+        sFxDarkCol[i].g = sFxDark0.g;
+        sFxDarkCol[i].b = sFxDark0.b;
+        sFxDarkCol[i].a = sFxDark0.a;
+        sFxPool.v[7][i] = 0;
+        sFxPool.v[5][i] = 0;
+    }
+}
+
+/* Squash factor of the fade-out's first tenth. */
+static inline f32 Fx_Squash(f32 t) {
+    if (t < 0.1f) {
+        return 1.0f - 0.05f * Hermite(t, 0.0f, 0.0f, 0.0f, 0.1f, 1.0f, 0.0f);
+    } else {
+        return 1.0f - 0.05f * Hermite(t, 0.1f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f);
+    }
+}
+
+/* 0x81330128: fly the cells away for the fade out, staggered by sFxFlyDelay. */
+void fn_81330128(FxCube* c, u32* n, f32 t) {
+    s16 a;
+    u32 i;
+    f32 k;
+    FxCube d;
+    u8 unused[8];
+
+    a = 255.0f * (1.0f - 1.4f * t);
+    if (a < 0) {
+        a = 0;
+    }
+    sFxLight0.a = a;
+    for (i = 0; i < *n; i++) {
+        k = t - 0.4f * (1.0f - sFxFlyDelay[i] / 255.0f);
+        if (k < 0.0f) {
+            k = 0.0f;
+        }
+        c[i].pos.x += -585.0f * k;
+        c[i].pos.y += 200.0f * k;
+        c[i].pos.z -= 500.0f * k;
+        Fx_RotAbout(65535.0f * k, 0, 65535.0f * k, &c[i], &d, 0.0f, 0.0f, 0.0f);
+        c[i].pos.x += d.pos.x;
+        c[i].pos.y += d.pos.y;
+        c[i].pos.z += d.pos.z;
+        c[i].rot[0] += d.rot[0];
+        c[i].rot[2] += d.rot[2];
+    }
+}
+
+/* 0x81330374: fade-out shape: a short squash, then the fly-away. */
+void fn_81330374(FxCube* c, u32* n, f32 t) {
+    Vec o;
+    f32 s;
+    u32 i;
+    u8 unused[12];
+
+    Fx_EvalShape(1, c, n, 1.0f);
+    if (t < 0.1f) {
+        fn_8132C830(&o, c, NULL, *n);
+        s = Fx_Squash(10.0f * t);
+        for (i = 0; i < *n; i++) {
+            Fx_ScaleAbout(&o, s, s, s, &c[i]);
+            c[i].scale.x *= s;
+            c[i].scale.y *= s;
+            c[i].scale.z *= s;
+        }
+    } else {
+        fn_81330128(c, n, t - 0.1f);
+    }
+}
+
+/* 0x81330518: bilinear colour mix: (a*u + b*(1-u))*(1-v) + c*v. */
+void fn_81330518(GXColor* a, GXColor* b, GXColor* c, GXColor* out, f32 u, f32 v) {
+    f32 iu = 1.0f - u;
+    f32 iv = 1.0f - v;
+
+    out->r = v * c->r + iv * (u * a->r + iu * b->r);
+    out->g = v * c->g + iv * (u * a->g + iu * b->g);
+    out->b = v * c->b + iv * (u * a->b + iu * b->b);
+    out->a = v * c->a + iv * (u * a->a + iu * b->a);
+}
+
+/* 0x813306C8: park the cursor on row. */
+void fn_813306C8(s32 row) {
+    sFxCursor.v[2] = 10;
+    sFxCursor.v[1] = row;
+    sFxCursor.v[0] = row;
+    sFxCursor.f[2] = 0.0f;
+    sFxCursor.f[1] = 0.0f;
+    sFxCursor.f[0] = 0.0f;
+}
+
+/* 0x813306FC: start moving the cursor from row to row, with random cell delays. */
+void fn_813306FC(s32 from, s32 to) {
+    s32 i;
+
+    if (from < to) {
+        sFxCursor.f[0] = -1.0f;
+    } else {
+        sFxCursor.f[0] = 1.0f;
+    }
+    sFxCursor.v[2] = 0;
+    sFxCursor.v[0] = from;
+    sFxCursor.v[1] = to;
+    for (i = 0; i < 0x280; i++) {
+        sFxCursor.unk14[i] = Rand() % 60 + 20;
+    }
+}
+
+/* 0x813307B4: cross-fade the cursor glyph between its old and new row. */
+void fn_813307B4(void) {
+    u16* fromList;
+    u16 fromCount;
+    u16* toList;
+    u16 toCount;
+    s32 i;
+
+    switch (sFxState.v[5]) {
+    case 0:
+        fromList = fn_81330F88(sFxCursor.v[0]);
+        fromCount = fn_81330FAC(sFxCursor.v[0]);
+        toList = fn_81330F88(sFxCursor.v[1]);
+        toCount = fn_81330FAC(sFxCursor.v[1]);
+        break;
+    case 1:
+        fromList = fn_81330FC8(sFxCursor.v[0]);
+        fromCount = fn_81330FEC(sFxCursor.v[0]);
+        toList = fn_81330FC8(sFxCursor.v[1]);
+        toCount = fn_81330FEC(sFxCursor.v[1]);
+        break;
+    }
+    for (i = 0; i < fn_81332C9C(); i++) {
+        sFxAlpha[fn_81332C34()[i]] = 0;
+    }
+    for (i = 0; i < fromCount; i++) {
+        f32 t;
+
+        sFxCube[sFxCount + i] = sFxCube[fromList[i]];
+        t = sFxCursor.v[2] / 10.0f;
+        sFxCube[sFxCount + i].pos.x -= 0.2 * (sFxCursor.f[0] * (sFxCursor.unk14[i] * t));
+        sFxAlpha[sFxCount + i] = 255.0f * (1.0f - t);
+        sFxLightCol[sFxCount + i] = sFxLight2;
+        sFxDarkCol[sFxCount + i] = sFxDark2;
+    }
+    sFxCount += fromCount;
+    for (i = 0; i < toCount; i++) {
+        f32 t;
+
+        sFxCube[sFxCount + i] = sFxCube[toList[i]];
+        t = sFxCursor.v[2] / 10.0f;
+        sFxCube[sFxCount + i].pos.x += 0.2 * (sFxCursor.f[0] * (sFxCursor.unk14[fromCount + i] * (1.0f - t)));
+        sFxAlpha[sFxCount + i] = 255.0f * t;
+        sFxLightCol[sFxCount + i] = sFxLight2;
+        sFxDarkCol[sFxCount + i] = sFxDark2;
+    }
+    sFxCount += toCount;
+    fn_81330B7C();
+}
+
+/* 0x81330B7C: fade the selected line's cells across to the cursor's copy. */
+void fn_81330B7C(void) {
+    u16* list;
+    u16 n;
+    s32 i;
+
+    list = fn_813327B8();
+    n = fn_81332820();
+    for (i = 0; i < n; i++) {
+        f32 t;
+
+        sFxCube[sFxCount + i] = sFxCube[list[i]];
+        t = sFxCursor.v[2] / 10.0f;
+        sFxCube[sFxCount + i].pos.x -= 0.2 * (sFxCursor.f[0] * (sFxCursor.unk14[i] * t));
+        sFxAlpha[sFxCount + i] = sFxAlpha[list[i]] * (1.0f - t);
+        sFxLightCol[sFxCount + i] = sFxLightCol[list[i]];
+        sFxDarkCol[sFxCount + i] = sFxDarkCol[list[i]];
+    }
+    sFxCount += n;
+    for (i = 0; i < n; i++) {
+        f32 t;
+
+        t = sFxCursor.v[2] / 10.0f;
+        sFxCube[list[i]].pos.x += 0.2 * (sFxCursor.f[0] * (sFxCursor.unk14[i] * (1.0f - t)));
+        t = sFxCursor.v[2] / 10.0f;
+        sFxAlpha[list[i]] = sFxAlpha[list[i]] * t;
     }
 }
