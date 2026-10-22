@@ -22,6 +22,8 @@ static void Nap_AudioSysProcess(AudioPort* port) {
     s32 i;
     s32 idx;
     s32 flags;
+    STACK_PAD_VAR(3);
+    s32* REF_flags = &flags;
 
     switch (port->command.opcode) {
         case AUDIOCMD_PRELOAD_SEQ:
@@ -251,6 +253,8 @@ extern s32 Nap_SendStart(void) {
     static u8 worst = 0;
     s32 msg;
     s32 res;
+    STACK_PAD_VAR(3);
+    s32* REF_res = &res;
 
     if (AUDIO_SYSTEM_READY != TRUE) {
         return -1;
@@ -310,6 +314,7 @@ extern void Nap_Process1Command(AudioPort* port) {
 
 extern void Nap_AudioPortProcess(u32 msg) {
     static u8 begin = 0;
+    STACK_PAD_VAR(4);
 
     if (AG.thread_cmd_queue_finished == FALSE) {
         begin = (msg >> 8) & 0xFF;
@@ -648,6 +653,7 @@ extern void Nas_InitGAudio(void) {
 extern s32 CreateAudioTask(Acmd* cmds, s16* pSamples, u32 nSamples, s32 param_4) {
     s32 i;
     s32 max;
+    STACK_PAD_VAR(6);
 
     AG.audio_random_seed = (AG.audio_random_seed + AG.frame_audio_task_count) * OSGetTick();
     AG.frame_audio_task_count++;

@@ -98,6 +98,7 @@ void* Nas_WaveDmaCallBack(u32 device_addr, u32 size, s32 arg2, u8* waveload_idx,
     u32 transfer;
     s32 bufferPos;
     u32 i;
+    u32* REF_waveloadDevAddr = &waveloadDevAddr;
 
     if (arg2 != 0 || *waveload_idx >= AG.waveload_count) {
         for (i = AG.waveload_count; i < AG.num_waveloads; i++) {
@@ -185,6 +186,7 @@ void Nas_WaveDmaNew(s32 n_channels) {
     WaveLoad* waveload;
     s32 i;
     s32 t2;
+    STACK_PAD_VAR(4);
 
     AG.waveload_dma_cur_buf_size = AG.waveload_dma_buf0_size;
     AG.waveload_list =
@@ -478,6 +480,7 @@ void Nas_FlushBank(s32 seq_id) {
     s32 bank_id;
     s32 bank_count;
     s32 index = ((u16*)AG.map_header)[seq_id];
+    STACK_PAD_VAR(4);
 
     bank_count = ((u8*)AG.map_header)[index++];
     while (bank_count > 0) {
@@ -559,6 +562,7 @@ static s32 __Nas_StartSeq(s32 group_idx, s32 seq_id, s32 param) {
     s32 bank_id;
     s32 i;
     s32 idx;
+    s32* REF_i = &i;
 
     Nas_ReleaseGroup(group);
     bank_id = 0xFF;
@@ -699,6 +703,8 @@ static u8* __Load_Bank(s32 table_type, s32 id, s32* did_alloc) {
     s32 cache_type;
     u8* rom_addr;
     s32 link_id;
+    STACK_PAD_VAR(1);
+    s32** REF_did_alloc = &did_alloc;
 
     link_id = __Link_BankNum(table_type, id);
     ram_addr = (u8*)__Check_Cache(table_type, link_id);
@@ -851,6 +857,7 @@ static void Nas_BankOfsToAddr_Inner(s32 bank_id, u8* ctrl_p, WaveMedia* wave_med
     n_perc_inst = AG.voice_info[bank_id].num_drums;
     n_sfx_inst = AG.voice_info[bank_id].num_sfx;
     // u32* data_p = (u32*)ctrl_p;
+    WaveMedia** REF_wave_media = &wave_media;
 
     ofs = *BANK_ENTRY(ctrl_p, 0);
     if (ofs != 0 && n_perc_inst != 0) {
@@ -1075,6 +1082,8 @@ static u8* __Load_Bank_BG(s32 table_type, s32 id, s32 n_chunks, s32 ret_data, OS
     s32 asyncLoadStatus;
     s32 link_id = __Link_BankNum(table_type, id);
     voiceinfo* vinfo;
+    u32* REF_devAddr = &devAddr;
+    ArcHeader** REF_header = &header;
 
     switch (table_type) {
         case SEQUENCE_TABLE:
@@ -1618,6 +1627,7 @@ static void __BgCopyFinishProcess(Bgload* bgload) {
     s32 wave0;
     s32 wave1;
     WaveMedia wavemedia;
+    STACK_PAD_VAR(3);
 
     type = BGLOAD_TBLTYPE(msg);
     status = BGLOAD_LOAD_STATUS(msg);
@@ -1787,6 +1797,8 @@ s32 Nas_BankOfsToAddr(s32 bank_id, u8* ctrl_p, WaveMedia* wave_media, s32 async)
     
     // u8 __stack_pad[12];
     // s32* i_p = &i; // this feels wrong but w/e
+    Bgloadreq** REF_top_preload = &top_preload;
+    s32* REF_async = &async;
 
     
     if (AG.num_requested_samples != 0) {
@@ -1975,6 +1987,8 @@ void WaveReload(s32 bank_id, s32 async, WaveMedia* wavemedia) {
     s32 i;
     s32 preloading;
     s32 n_chunks;
+    STACK_PAD_VAR(6);
+    WaveMedia** REF_wavemedia = &wavemedia;
 
     preloading = FALSE;
     if (AG.num_requested_samples != 0) {

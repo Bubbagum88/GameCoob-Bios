@@ -147,6 +147,8 @@ static f32 Nas_Modulator(tmtable* table) {
     f32 invDepth;
     f32 result;
     f32 t;
+    f32* REF_t = &t;
+    f32* REF_depth = &depth;
 
     if (table->delay != 0) {
         table->delay--;

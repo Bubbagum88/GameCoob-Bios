@@ -29,6 +29,8 @@ static void Nas_smzSetParam(channel* chan, drvparam* param) {
     u8 reverbVol;
     phase stereoPhase;
     s32 phaseEffects;
+    STACK_PAD_VAR(2);
+    f32* REF_volL = &volL;
 
     phaseEffects = chan->playback_ch.stereo_headset_effects;
     Nas_smzSetPitch(chan, param->playback.pitch);
@@ -187,6 +189,10 @@ extern void Nas_UpdateChannel(void) {
     u8 bookOfs;
     f32 scale;
     s32 i;
+    STACK_PAD_VAR(1);
+    drvparam* REF_param = &param;
+    channel** REF_chan = &chan;
+    playbackparams** REF_main_param_p = &main_param_p;
 
     for (i = 0; i < AG.num_channels; i++) {
         chan = &AG.channels[i];
@@ -511,6 +517,7 @@ static void __Nas_Release_Channel_Main(note* n, int target) {
     playbackparams* param;
     sub* subtrack;
     s32 i;
+    int* REF_target = &target;
 
     if (n == NA_NO_NOTE) {
         return;
@@ -706,6 +713,7 @@ extern void Nas_AllocVoices(chnode* node, s32 count) {
         if (i == 4) {
             return;
         }
+    s32* REF_count = &count;
 
         switch (i) {
             case 0:
@@ -787,6 +795,8 @@ extern void Nas_EntryTrack(channel* chan, note* n) {
     sub* subtrack = n->sub_track;
     playbackch* playback = &chan->playback_ch;
     commonch* common = &chan->common_ch;
+    STACK_PAD_VAR(1);
+    commonch** REF_common = &common;
 
     playback->previous_parent_note = NA_NO_NOTE;
     playback->current_parent_note = n;
@@ -904,6 +914,7 @@ static channel* __Nas_ChLookRelWait(chnode* node, note* n) {
 extern channel* Nas_AllocationOnRequest(note* n) {
     channel* chan;
     u32 policy = n->sub_track->note_alloc_policy;
+    STACK_PAD_VAR(4);
 
     if (policy & 1) {
         chan = n->channel;
@@ -968,6 +979,7 @@ null_return:
 extern void Nas_ChannelInit(void) {
     s32 i;
     channel* chan;
+    s32* REF_i = &i;
 
     for (i = 0; i < AG.num_channels; i++) {
         chan = &AG.channels[i];

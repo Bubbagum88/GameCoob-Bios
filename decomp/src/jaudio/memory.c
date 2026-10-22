@@ -82,6 +82,7 @@ void Nas_ResetIDtable() {
  * Size:	0000E0
  */
 void Nas_ForceStopChannel(s32 bankID) {
+    STACK_PAD_VAR(2);
     int i;
     for (i = 0; i < AG.num_channels; i++) {
         channel* channel = &AG.channels[i];
@@ -859,6 +860,7 @@ void __Nas_DelayDown() {
     int j;
     delay* delay_p;
     int c;
+    volatile int* REF_i = &i;
 
     if (AG.audio_params.spec == 2) {
         c = 2;
@@ -1156,6 +1158,8 @@ int Nas_Init_Single(s32 a, s32 b) {
     } else {
         Nas_HeapInit(&AG.emem_persistent_wave_heap.heap, alloc, a);
     }
+    STACK_PAD_VAR(3);
+    u8** REF_alloc = &alloc;
 
     alloc = (u8*)Nas_2ndHeapAlloc(&AG.misc_heap, b);
     if (alloc == NULL) {
@@ -1284,6 +1288,7 @@ void __SearchBank(SwMember* entry, s32 bank) {
  * Size:	0000EC
  */
 void __KillSwMember(SwMember* a) {
+    STACK_PAD_VAR(6);
     for (int i = 0, end = AG.bank_header->numEntries; i < end; i++) {
         int bank0 = AG.voice_info[i].wave_bank_id0;
         int bank1 = AG.voice_info[i].wave_bank_id1;
@@ -1348,6 +1353,7 @@ void __Do_EmemKill(SwMember* entry, s32 id0, s32 id1, s32 bank) {
  * Size:	000128
  */
 void Emem_KillSwMember() {
+    STACK_PAD_VAR(4);
     s32 i, j, end;
     for (i = 0, end = AG.bank_header->numEntries; i < end; i++) {
         s32 id0 = AG.voice_info[i].wave_bank_id0;
