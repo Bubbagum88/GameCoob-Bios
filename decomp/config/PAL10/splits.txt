@@ -142,14 +142,14 @@ jaudio/dvdthread.c:
 	.sbss       start:0x814AD6F0 end:0x814AD740
 	.bss        start:0x8156ABD0 end:0x81573898
 
-jaudio/ipl_8133B560.c:
-	.text       start:0x8133B560 end:0x8133C240 align:32
+jaudio/driver.c:
+	.text       start:0x8133B560 end:0x8133E860 align:32
+	.data       start:0x813F1218 end:0x813F1378
+	.sdata      start:0x814AD0F0 end:0x814AD100
+	.sdata2     start:0x814AE1F0 end:0x814AE210
 
-jaudio/audiomesg.c:
-	.text       start:0x8133C240 end:0x8133CB60 align:32
-
-jaudio/ipl_8133CB60.c:
-	.text       start:0x8133CB60 end:0x8133ED60 align:32
+jaudio/ipl_8133E860.c:
+	.text       start:0x8133E860 end:0x8133ED60 align:32
 
 jaudio/stackchecker.c:
 	.text       start:0x8133ED60 end:0x8133EDA0 align:32

@@ -619,9 +619,8 @@ config.libs = [
             Object(Matching, "jaudio/cpubuf.c"),
             Object(Matching, "jaudio/playercall.c"),
             Object(Matching, "jaudio/dvdthread.c"),
-            Object(NonMatching, "jaudio/ipl_8133B560.c"),  # IPL-only, no source yet
-            Object(NonMatching, "jaudio/audiomesg.c"),
-            Object(NonMatching, "jaudio/ipl_8133CB60.c"),  # IPL-only, no source yet
+            Object(NonMatching, "jaudio/driver.c", extra_cflags=["-i include/neos", "-D_LANGUAGE_C"]),  # NEOS, from AC jaudio_NES
+            Object(NonMatching, "jaudio/ipl_8133E860.c"),  # IPL-only, no source yet
             Object(NonMatching, "jaudio/stackchecker.c"),
             Object(NonMatching, "jaudio/ipl_8133EDA0.c"),  # IPL-only, no source yet
             Object(Matching, "jaudio/memory.c"),
