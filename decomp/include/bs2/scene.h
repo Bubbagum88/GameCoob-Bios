@@ -95,11 +95,25 @@ typedef struct Scene {
 } Scene;
 
 /* scene.c */
+extern Mtx sWorldMtx;
 void Scene_Update(void);
 void Scene_Draw2D(void);
 s32 Scene_GetState(void);
 void Scene_Init(BOOL first);
 Scene *Scene_Get(void);
+
+/* scene_intro.c */
+void Scene_DrawWorld(void);
+s32 Scene_UpdateNoDisc(void);
+s32 Scene_UpdateMode0(void);
+s32 Scene_UpdateDisc(void);
+s32 Scene_UpdateMode3(void);
+void Scene_InitModels(void);
+void Scene_Draw2DNoDisc(void);
+void Scene_Draw2DMode0(void);
+void Scene_Draw2DDisc(void);
+void Scene_Draw2DSpinOut(void);
+void Scene_Draw2DMenu(void);
 MtxPtr Scene_GetWorldMtx(void);
 void Scene_LoadLangRes(void);
 J3DModelInstance *Scene_GetBgInner(void);
@@ -107,6 +121,9 @@ J3DModelInstance *Scene_GetBigCube(void);
 J3DModelInstance *Scene_GetLogo(void);
 void *Scene_GetLogoText(void);
 J3DModelInstance *Scene_GetBgOuter(void);
+
+/* scene_spinout.c */
+s32 Scene_SpinOut(void);
 MtxPtr Scene_GetSpinOutMtx(void);
 
 #endif

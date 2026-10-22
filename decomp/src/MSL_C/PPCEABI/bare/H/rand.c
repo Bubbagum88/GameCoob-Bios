@@ -1,6 +1,6 @@
 #include "PowerPC_EABI_Support/MSL_C/MSL_Common/rand.h"
 
-u32 next = 1;
+static u32 next = 1;
 
 /**
  * @TODO: Documentation
