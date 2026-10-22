@@ -535,7 +535,7 @@ static u16 Nas_ReadLengthData(macro* m) {
 
     if (Nas_LENGTH_IS_U16(data)) {
         data = (data << 8) & 0x7F00;
-        data = (*m->pc++) | data;
+        data = data | (*m->pc++);
     }
 
     return data;
@@ -606,6 +606,7 @@ static s32 __SetChannel(note* n, s32 same_sample) {
     if (n->continuous == TRUE && n->continuous_channel_released == TRUE) {
         return 0;
     }
+    STACK_PAD_VAR(1);
 
     if (n->continuous != TRUE || n->channel == nullptr || n->channel_attached == FALSE || same_sample != TRUE ||
         n->channel->playback_ch.current_parent_note != n) {
@@ -638,6 +639,7 @@ static s32 __Command_Seq(note* n) {
     u32 tmp;
     u16 cmdArgU16;
     u16 velocity;
+    u8* REF_cmd = &cmd;
 
     while (TRUE) {
         cmd = Nas_ReadByteData(m);
@@ -1035,6 +1037,7 @@ static s32 __SetNote(note* n, s32 cmd) {
     group* grp = subtrack->group;
     s32 int_delta;
     f32 float_delta;
+    u16* REF_delay = &delay;
 
     if (cmd == 0xC0) {
         n->delay = Nas_ReadLengthData(m);
@@ -1136,11 +1139,10 @@ static s32 __SetNote(note* n, s32 cmd) {
 }
 
 static void Nas_PriorityChanger(sub* subtrack, u8 prio) {
-    u8 prio0 = prio & 0xF;
     u8 prio1;
 
-    if (prio0) {
-        subtrack->note_priority = prio0;
+    if (prio & 0xF) {
+        subtrack->note_priority = prio & 0xF;
     }
 
     prio1 = (u8)(prio >> 4);
@@ -1208,6 +1210,7 @@ static void Nas_SubVolumeSet(sub* subtrack, u8 volume) {
 }
 
 static void Nas_SubSeq(sub* subtrack) {
+    sub** REF_subtrack = &subtrack;
     u8 cmd;
     u8 cmdArgU8;
     s32 i;
@@ -1785,6 +1788,7 @@ note_seq:
 }
 
 static void Nas_GroupSeq(group* grp) {
+    group** REF_grp = &grp;
     u8 cmd;
     u8 cmd_lo_bits;
     macro* m;
@@ -2115,6 +2119,7 @@ extern void Nas_MySeqMain(u32 frames_left) {
     group* grp;
     group* main_grp;
     u32 i;
+    STACK_PAD_VAR(4);
 
     AG.sample_state_offset = (AG.audio_params.updates_per_frame - (frames_left + 1)) * AG.num_channels;
     for (i = 0; i < AG.audio_params.num_groups; i++) {

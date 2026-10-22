@@ -147,6 +147,8 @@ static f32 Nas_Modulator(tmtable* table) {
     f32 invDepth;
     f32 result;
     f32 t;
+    f32* REF_t = &t;
+    f32* REF_depth = &depth;
 
     if (table->delay != 0) {
         table->delay--;
@@ -248,8 +250,10 @@ extern void Nas_ChannelModInit(channel* chan) {
 }
 
 extern void Nas_SweepInit(channel* chan) {
-    chan->playback_ch.portamento_frequency_scale = 1.0f;
-    chan->playback_ch.portamento_sweep = chan->playback_ch.current_parent_note->portamento_sweep;
+    playbackch* playback = &chan->playback_ch;
+
+    playback->portamento_frequency_scale = 1.0f;
+    playback->portamento_sweep = playback->current_parent_note->portamento_sweep;
 }
 
 extern void Nas_EnvInit(envp* env, envdat* data, s16* vol_out) {

@@ -82,6 +82,7 @@ void Nas_ResetIDtable() {
  * Size:	0000E0
  */
 void Nas_ForceStopChannel(s32 bankID) {
+    STACK_PAD_VAR(2);
     int i;
     for (i = 0; i < AG.num_channels; i++) {
         channel* channel = &AG.channels[i];
@@ -356,7 +357,7 @@ void Nas_SzStayDelete(s32 a) {
  * Size:	000068
  */
 void Nas_SzHeapReset(u32 fixSize) {
-    OSReport("FixSIZE is %x\n", fixSize);
+    u32* REF_fixSize = &fixSize;
     Nas_HeapInit(&AG.init_heap, (u8*)AG.audio_heap_p, fixSize);
     Nas_HeapInit(&AG.session_heap, (u8*)AG.audio_heap_p + fixSize, AG.audio_heap_size - fixSize);
     AG.external_heap.base = NULL;
@@ -370,8 +371,6 @@ void Nas_SzHeapReset(u32 fixSize) {
 void Nas_SzHeapDivide(AudioHeapstrc* param_1) {
     AG.session_heap.current = AG.session_heap.base;
     Nas_HeapInit(&AG.misc_heap, (u8*)Nas_HeapAlloc(&AG.session_heap, param_1->misc_heap_size), param_1->misc_heap_size);
-    Nas_HeapInit(&AG.sz_data_heap, (u8*)Nas_HeapAlloc(&AG.session_heap, param_1->cache_heap_size),
-                 param_1->cache_heap_size);
 }
 
 /*
@@ -381,8 +380,6 @@ void Nas_SzHeapDivide(AudioHeapstrc* param_1) {
  */
 void Nas_SzDataDivide(DataHeapstrc* param_1) {
     AG.sz_data_heap.current = AG.sz_data_heap.base;
-    Nas_HeapInit(&AG.data_heap, (u8*)Nas_HeapAlloc(&AG.sz_data_heap, param_1->data_size), param_1->data_size);
-    Nas_HeapInit(&AG.sz_auto_heap, (u8*)Nas_HeapAlloc(&AG.sz_data_heap, param_1->auto_size), param_1->auto_size);
 }
 
 /*
@@ -426,6 +423,8 @@ void Nas_SzAutoDivide(AutoHeapstrc* param_1) {
  * Size:	0006CC
  */
 void* Nas_SzHeapAlloc(s32 tableType, s32 size, s32 param_3, s32 id) {
+    s32* REF_size = &size;
+    s32* REF_param_3 = &param_3;
     SZAuto* auto_heap;
     SZHeap* sound_heap;
     void* alloc;
@@ -714,6 +713,8 @@ void* Nas_SzCacheCheck(s32 tabletype, s32 audioCacheType, s32 id) {
  * Size:	000114
  */
 void* __Nas_SzCacheCheck_Inner(s32 tabletype, s32 audioCacheType, s32 id) {
+    s32* REF_id = &id;
+    STACK_PAD_VAR(1);
     SZHeap* heap;
     switch (tabletype) {
         case SEQUENCE_TABLE: {
@@ -859,6 +860,7 @@ void __Nas_DelayDown() {
     int j;
     delay* delay_p;
     int c;
+    volatile int* REF_i = &i;
 
     if (AG.audio_params.spec == 2) {
         c = 2;
@@ -1101,8 +1103,12 @@ void* EmemOnCheck(s32 tableType, s32 id) {
  * Size:	00007C
  */
 void* EmemAlloc(s32 tableType, s32 id, s32 size) {
-    u32 heapCount = AG.emem_heap.count;
-    u8* p = (u8*)Nas_HeapAlloc(&AG.emem_heap, size);
+    u32 heapCount;
+    u8* p;
+    s32* REF_size = &size;
+    STACK_PAD_VAR(1);
+    heapCount = AG.emem_heap.count;
+    p = (u8*)Nas_HeapAlloc(&AG.emem_heap, size);
     AG.emem_entries[heapCount].addr = p;
     if (p == NULL) {
         return NULL;
@@ -1143,12 +1149,17 @@ void* Nas_Alloc_Single(s32 a, s32 sampleBankID, u8* sampleAddr, s8 originalMediu
  * Size:	0000C4
  */
 int Nas_Init_Single(s32 a, s32 b) {
+    s32* REF_a = &a;
+    s32* REF_b = &b;
+    STACK_PAD_VAR(3);
     u8* alloc = (u8*)Nas_2ndHeapAlloc(&AG.misc_heap, a);
     if (alloc == NULL) {
         AG.emem_persistent_wave_heap.heap.length = 0;
     } else {
         Nas_HeapInit(&AG.emem_persistent_wave_heap.heap, alloc, a);
     }
+    STACK_PAD_VAR(3);
+    u8** REF_alloc = &alloc;
 
     alloc = (u8*)Nas_2ndHeapAlloc(&AG.misc_heap, b);
     if (alloc == NULL) {
@@ -1166,6 +1177,8 @@ int Nas_Init_Single(s32 a, s32 b) {
  * Size:	000200
  */
 SwMember* __Nas_Alloc_Single_Auto_Inner(s32 size) {
+    s32* REF_size = &size;
+    STACK_PAD_VAR(2);
     SwHeap* heap = &AG.emem_temporary_wave_heap;
     void* alloc;
     u8* oldCurrent = heap->heap.current;
@@ -1238,6 +1251,8 @@ SwMember* __Nas_Alloc_Single_Auto_Inner(s32 size) {
  * Size:	00012C
  */
 void __SearchBank(SwMember* entry, s32 bank) {
+    s32* REF_bank = &bank;
+    STACK_PAD_VAR(4);
     perctable* pt;
     percvoicetable* pv;
     voicetable* vt;
@@ -1273,6 +1288,7 @@ void __SearchBank(SwMember* entry, s32 bank) {
  * Size:	0000EC
  */
 void __KillSwMember(SwMember* a) {
+    STACK_PAD_VAR(6);
     for (int i = 0, end = AG.bank_header->numEntries; i < end; i++) {
         int bank0 = AG.voice_info[i].wave_bank_id0;
         int bank1 = AG.voice_info[i].wave_bank_id1;
@@ -1302,6 +1318,8 @@ void __RomAddrSet(SwMember* a, smzwavetable* b) {
  * Size:	000094
  */
 SwMember* __Nas_Alloc_Single_Stay_Inner(s32 a) {
+    s32* REF_a = &a;
+    STACK_PAD_VAR(8);
     SwHeap* heap = &AG.emem_persistent_wave_heap;
     u8* alloc = (u8*)Nas_HeapAlloc(&heap->heap, a);
     if (alloc == NULL) {
@@ -1335,6 +1353,7 @@ void __Do_EmemKill(SwMember* entry, s32 id0, s32 id1, s32 bank) {
  * Size:	000128
  */
 void Emem_KillSwMember() {
+    STACK_PAD_VAR(4);
     s32 i, j, end;
     for (i = 0, end = AG.bank_header->numEntries; i < end; i++) {
         s32 id0 = AG.voice_info[i].wave_bank_id0;
@@ -1400,6 +1419,7 @@ void EntryWave(s32 id) {
  * Size:	000238
  */
 void __ExchangeWave(s32 a, s32 b) {
+    s32* REF_b = &b;
     s32 i;
     Wavelookuptable wavetable;
     voiceinfo* voiceinfo;
@@ -1466,11 +1486,12 @@ void __ExchangeWave(s32 a, s32 b) {
 void Dirty_AllWave() {
     int i;
     SZHeap* heap = &AG.wave_heap;
-    if (heap->auto_heap.entries[0].id != HEAP_INVALID_INDEX) {
-        DirtyWave(heap->auto_heap.entries[0].id);
+    SZAuto* autoh = &heap->auto_heap;
+    if (autoh->entries[0].id != HEAP_INVALID_INDEX) {
+        DirtyWave(autoh->entries[0].id);
     }
-    if (heap->auto_heap.entries[1].id != HEAP_INVALID_INDEX) {
-        DirtyWave(heap->auto_heap.entries[1].id);
+    if (autoh->entries[1].id != HEAP_INVALID_INDEX) {
+        DirtyWave(autoh->entries[1].id);
     }
     for (i = 0; i < heap->stay_heap.num_entries; i++) {
         DirtyWave(heap->stay_heap.entries[i].id);

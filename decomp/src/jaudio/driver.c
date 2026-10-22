@@ -57,6 +57,7 @@ void Nas_CpuFX(s32 chunkLen, s32 updateIdx, s32 reverbIdx) {
     s32 sample;
     s32 n;
     s32 s;
+    STACK_PAD_VAR(6);
 
     del_p = &AG.synth_delay[reverbIdx];
     param_p = &del_p->params[del_p->cur_frame][updateIdx];
@@ -213,7 +214,9 @@ extern Acmd* Nas_smzAudioFrame(Acmd* cmdStart, s32* cmdCount, s16* aiStart, s32 
 
 void __Nas_WaveTerminateProcess(s32 updateIdx, s32 chanIdx) {
     commonch* common;
-    volatile s32 i;
+    s32 i;
+    s32* REF_chanIdx = &chanIdx;
+    s32* REF_i = &i;
 
     for (i = updateIdx + 1; i < AG.audio_params.updates_per_frame; i++) {
         common = &AG.common_channel[i * AG.num_channels + chanIdx];
@@ -361,6 +364,7 @@ Acmd* Nas_LoadAuxBufferCH(Acmd* cmd, s32 samples_per_update, delay* del_p, s16 u
     if (param->wrapped_size != 0) {
         s16 wrapped_ofs_size = ALIGN_NEXT(ofs_size + param->size, 16);
         s32 load_size = 0x1A0 - wrapped_ofs_size;
+    delay** REF_del_p = &del_p;
 
         if (load_size > 0) {
             cmd = __LoadAuxBuf(cmd, 0x3A0 + wrapped_ofs_size, 0, load_size, del_p);
@@ -406,6 +410,7 @@ Acmd* Nas_SendLine(Acmd* cmd, delay* del_p, s32 update_idx) {
 }
 
 Acmd* Nas_LoadAuxBuffer1(Acmd* cmd, s32 samples_per_update, delay* del_p, s16 update_idx) {
+    STACK_PAD_VAR(2);
     delayparam* param_p = &del_p->params[del_p->cur_frame][update_idx];
     
     cmd = __LoadAuxBuf(cmd, 0xC40, param_p->start_pos, param_p->size, del_p);
@@ -417,6 +422,7 @@ Acmd* Nas_LoadAuxBuffer1(Acmd* cmd, s32 samples_per_update, delay* del_p, s16 up
 }
 
 Acmd* Nas_LoadAuxBuffer1_B(Acmd* cmd, s32 samples_per_update, delay* del_p, s16 update_idx) {
+    STACK_PAD_VAR(2);
     delayparam* param_p = &del_p->sub_params[del_p->cur_frame][update_idx];
     
     cmd = __LoadAuxBuf(cmd, 0xC40, param_p->start_pos, param_p->size, del_p);
@@ -567,6 +573,7 @@ extern Acmd* Nas_DriveRsp(s16* aiBuf, s32 aiBufLen, Acmd* cmd, s32 updateIndex) 
                 }
             }
         }
+    STACK_PAD_VAR(1);
 
         for (i = 0; i < AG.num_channels; i++) {
             sampleState = &AG.common_channel[sampleStateOffset + i];
@@ -1316,6 +1323,7 @@ extern Acmd* Nas_Synth_Envelope(Acmd* cmd, commonch* common, driverch* driver, s
     s16 rampRight;
     s16 rampReverb;
     f32 defaultPanVolume;
+    STACK_PAD_VAR(3);
 
     
     // targetReverbVol = common->target_reverb_volume;
@@ -1405,6 +1413,9 @@ extern Acmd* Nas_Synth_Delay(Acmd* cmd, commonch* common, driverch* driver, s32 
     u16 prevHaasEffectDelaySize;
     u16 dmemDest;
     u16 pitch;
+    STACK_PAD_VAR(2);
+    u16* REF_haasEffectDelaySize = &haasEffectDelaySize;
+    commonch** REF_common = &common;
 
     switch (haasEffectDelaySide) {
         case HAAS_EFFECT_DELAY_LEFT:

@@ -98,6 +98,7 @@ void* Nas_WaveDmaCallBack(u32 device_addr, u32 size, s32 arg2, u8* waveload_idx,
     u32 transfer;
     s32 bufferPos;
     u32 i;
+    u32* REF_waveloadDevAddr = &waveloadDevAddr;
 
     if (arg2 != 0 || *waveload_idx >= AG.waveload_count) {
         for (i = AG.waveload_count; i < AG.num_waveloads; i++) {
@@ -185,6 +186,7 @@ void Nas_WaveDmaNew(s32 n_channels) {
     WaveLoad* waveload;
     s32 i;
     s32 t2;
+    STACK_PAD_VAR(4);
 
     AG.waveload_dma_cur_buf_size = AG.waveload_dma_buf0_size;
     AG.waveload_list =
@@ -359,18 +361,22 @@ void* Nas_PreLoadBank(s32 seq_id, s32* bank_id) {
 }
 
 void Nas_PreLoadSeq(s32 seq_id, s32 flags, s32 cmd, OSMesgQueue* mq) {
+    STACK_PAD_VAR(2);
     s32 bank_id;
+    s32* REF_seq_id = &seq_id;
 
-    if ((flags & AUDIO_PRELOAD_BANK)) {
-        Nas_PreLoadBank(seq_id, &bank_id);
-    }
+    if (seq_id < AG.num_sequences) {
+        if ((flags & AUDIO_PRELOAD_BANK)) {
+            Nas_PreLoadBank(seq_id, &bank_id);
+        }
 
-    if ((flags & AUDIO_PRELOAD_SEQ)) {
-        __Load_Seq(seq_id);
-    }
+        if ((flags & AUDIO_PRELOAD_SEQ)) {
+            __Load_Seq(seq_id);
+        }
 
-    if (cmd != 0) {
-        Z_osSendMesg(mq, (void*)(cmd << 24), OS_MESG_NOBLOCK);
+        if (cmd != 0) {
+            Z_osSendMesg(mq, (void*)(cmd << 24), OS_MESG_NOBLOCK);
+        }
     }
 }
 
@@ -427,6 +433,13 @@ s32 Nas_LoadVoice(s32 bank_id, s32 instId, s32 drumId) {
 }
 
 s32 Nas_PreLoad_BG(s32 table_type, s32 id, s32 n_chunks, s32 ret_data, OSMesgQueue* ret_queue) {
+    s32* REF_table_type = &table_type;
+    s32* REF_id = &id;
+    s32* REF_n_chunks = &n_chunks;
+    s32* REF_ret_data = &ret_data;
+    OSMesgQueue** REF_ret_queue = &ret_queue;
+    STACK_PAD_VAR(4);
+
     if (__Load_Bank_BG(table_type, id, n_chunks, ret_data, ret_queue) == NULL) {
         Z_osSendMesg(ret_queue, (OSMesg)-1, OS_MESG_NOBLOCK);
     }
@@ -467,6 +480,7 @@ void Nas_FlushBank(s32 seq_id) {
     s32 bank_id;
     s32 bank_count;
     s32 index = ((u16*)AG.map_header)[seq_id];
+    STACK_PAD_VAR(4);
 
     bank_count = ((u8*)AG.map_header)[index++];
     while (bank_count > 0) {
@@ -505,6 +519,8 @@ static s32 __Kill_Bank(s32 bank_id) {
 }
 
 void Nas_SetExtPointer(s32 table_type, s32 idx, s32 param_3, s32 data) {
+    s32* REF_table_type = &table_type;
+    s32* REF_idx = &idx;
     ArcHeader* header = __Get_ArcHeader(table_type);
 
     if (header->entries[idx].medium == MEDIUM_RAM_UNLOADED) {
@@ -538,11 +554,15 @@ s32 Nas_StartSeq_Skip(s32 group_idx, s32 seq_id, s32 skip_ticks) {
 }
 
 static s32 __Nas_StartSeq(s32 group_idx, s32 seq_id, s32 param) {
+    s32* REF_seq_id = &seq_id;
+    s32* REF_group_idx = &group_idx;
+    STACK_PAD_VAR(6);
     group* group = AG.groups_p[group_idx];
     u8* seq_p;
     s32 bank_id;
     s32 i;
     s32 idx;
+    s32* REF_i = &i;
 
     Nas_ReleaseGroup(group);
     bank_id = 0xFF;
@@ -581,6 +601,8 @@ static s32 __Nas_StartSeq(s32 group_idx, s32 seq_id, s32 param) {
 static u8* __Load_Seq(s32 seq_id) {
     s32 did_alloc;
     s32 link_id;
+    s32* REF_seq_id = &seq_id;
+    s32* REF_link_id = &link_id;
 
     link_id = __Link_BankNum(SEQUENCE_TABLE, seq_id);
     if (AG.sequence_load_status[link_id] == LOAD_STATUS_IN_PROGRESS) {
@@ -595,6 +617,8 @@ static u32 __Load_Wave_Check(s32 wave_id, u32* medium) {
 }
 
 static u32 __Load_Wave(s32 wave_id, u32* medium, s32 no_load) {
+    s32* REF_no_load = &no_load;
+    STACK_PAD_VAR(1);
     void* ram_p;
     s32 link_id = __Link_BankNum(WAVE_TABLE, wave_id);
     ArcHeader* header = __Get_ArcHeader(WAVE_TABLE);
@@ -668,6 +692,9 @@ static u8* __Load_Ctrl(s32 bank_id) {
 }
 
 static u8* __Load_Bank(s32 table_type, s32 id, s32* did_alloc) {
+    s32* REF_table_type = &table_type;
+    s32* REF_id = &id;
+    STACK_PAD_VAR(4);
     u32 size;
     ArcHeader* header;
     s32 medium;
@@ -676,6 +703,8 @@ static u8* __Load_Bank(s32 table_type, s32 id, s32* did_alloc) {
     s32 cache_type;
     u8* rom_addr;
     s32 link_id;
+    STACK_PAD_VAR(1);
+    s32** REF_did_alloc = &did_alloc;
 
     link_id = __Link_BankNum(table_type, id);
     ram_addr = (u8*)__Check_Cache(table_type, link_id);
@@ -815,6 +844,8 @@ static ArcHeader* __Get_ArcHeader(s32 table_type) {
 #define BANK_ENTRY(ctrl, idx) (((u32*)((u32)ctrl)) + idx)
 
 static void Nas_BankOfsToAddr_Inner(s32 bank_id, u8* ctrl_p, WaveMedia* wave_media) {
+    u8** REF_ctrl_p = &ctrl_p;
+    s32* REF_bank_id = &bank_id;
     u32 ofs;
     u32 inst_ofs;
     voicetable* inst;
@@ -826,6 +857,7 @@ static void Nas_BankOfsToAddr_Inner(s32 bank_id, u8* ctrl_p, WaveMedia* wave_med
     n_perc_inst = AG.voice_info[bank_id].num_drums;
     n_sfx_inst = AG.voice_info[bank_id].num_sfx;
     // u32* data_p = (u32*)ctrl_p;
+    WaveMedia** REF_wave_media = &wave_media;
 
     ofs = *BANK_ENTRY(ctrl_p, 0);
     if (ofs != 0 && n_perc_inst != 0) {
@@ -992,6 +1024,9 @@ extern void Nas_FastDiskCopy(u8* SrcAddr, u8* DestAdd, size_t Length, s32 medium
 
 static s32 Nas_StartDma(OSIoMesg* ioMsg, s32 priority, s32 direction, u32 device_addr, void* dram_addr, u32 size,
                         OSMesgQueue* mq, s32 medium, s8* dma_type) {
+    u32* REF_size = &size;
+    s32* REF_medium = &medium;
+    STACK_PAD_VAR(1);
     OSPiHandle* handle;
 
     osInvalDCache2(dram_addr, size);
@@ -1034,6 +1069,9 @@ void EmemLoad(s32 table_type, s32 id) {
 }
 
 static u8* __Load_Bank_BG(s32 table_type, s32 id, s32 n_chunks, s32 ret_data, OSMesgQueue* ret_queue) {
+    s32* REF_table_type = &table_type;
+    s32* REF_id = &id;
+    STACK_PAD_VAR(1);
     u32 size;
     ArcHeader* header;
     u8* ramAddr;
@@ -1044,6 +1082,8 @@ static u8* __Load_Bank_BG(s32 table_type, s32 id, s32 n_chunks, s32 ret_data, OS
     s32 asyncLoadStatus;
     s32 link_id = __Link_BankNum(table_type, id);
     voiceinfo* vinfo;
+    u32* REF_devAddr = &devAddr;
+    ArcHeader** REF_header = &header;
 
     switch (table_type) {
         case SEQUENCE_TABLE:
@@ -1288,6 +1328,8 @@ void LpsInit(void) {
 }
 
 s32 VoiceLoad(s32 bank_id, u32 inst_id, s8* done_p) {
+    s32* REF_bank_id = &bank_id;
+    u32* REF_inst_id = &inst_id;
     smzwavetable* wavetable = __GetWaveTable(bank_id, inst_id);
     lpscache* cache;
 
@@ -1440,6 +1482,8 @@ static void __Nas_SlowDiskCopy(u8* dev_addr, u8* ram_addr, u32 size, s32 medium)
 }
 
 s32 SeqLoad(s32 seq_id, u8* ram_addr, s8* is_done) {
+    s32* REF_seq_id = &seq_id;
+    u8** REF_ram_addr = &ram_addr;
     s32 link_id = __Link_BankNum(SEQUENCE_TABLE, seq_id);
     ArcHeader* header = __Get_ArcHeader(SEQUENCE_TABLE);
     lpscache* cache = &AG.lps_cache[AG.slow_load_pos];
@@ -1583,6 +1627,7 @@ static void __BgCopyFinishProcess(Bgload* bgload) {
     s32 wave0;
     s32 wave1;
     WaveMedia wavemedia;
+    STACK_PAD_VAR(3);
 
     type = BGLOAD_TBLTYPE(msg);
     status = BGLOAD_LOAD_STATUS(msg);
@@ -1695,6 +1740,8 @@ static void __Nas_BgDiskCopy(u8* src, u8* dst, u32 size, s32 param) {
 }
 
 static void __WaveTouch(wtstr* wavetouch_str, u32 ram_addr, WaveMedia* wave_media) {
+    u32* REF_ram_addr = &ram_addr;
+    STACK_PAD_VAR(4);
     smzwavetable* wavetable;
     void* reloc;
 
@@ -1750,6 +1797,8 @@ s32 Nas_BankOfsToAddr(s32 bank_id, u8* ctrl_p, WaveMedia* wave_media, s32 async)
     
     // u8 __stack_pad[12];
     // s32* i_p = &i; // this feels wrong but w/e
+    Bgloadreq** REF_top_preload = &top_preload;
+    s32* REF_async = &async;
 
     
     if (AG.num_requested_samples != 0) {
@@ -1938,6 +1987,8 @@ void WaveReload(s32 bank_id, s32 async, WaveMedia* wavemedia) {
     s32 i;
     s32 preloading;
     s32 n_chunks;
+    STACK_PAD_VAR(6);
+    WaveMedia** REF_wavemedia = &wavemedia;
 
     preloading = FALSE;
     if (AG.num_requested_samples != 0) {
@@ -2115,10 +2166,14 @@ void MK_load(s32 table_type, s32 id, u8* done_p) {
 
 void MK_FrameWork(void) {
     s32 idx;
+    s32 res;
     u32 ret;
     u8* rmes;
+    u8** REF_rmes = &rmes;
+    s32* REF_res = &res;
 
-    if (Z_osRecvMesg(&MK_QUEUE, (OSMesg*)&ret, OS_MESG_NOBLOCK) != -1) {
+    res = Z_osRecvMesg(&MK_QUEUE, (OSMesg*)&ret, OS_MESG_NOBLOCK);
+    if (res != -1) {
         idx = ret >> 24;
         rmes = MK_RMES[idx];
 

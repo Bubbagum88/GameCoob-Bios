@@ -29,6 +29,8 @@ static void Nas_smzSetParam(channel* chan, drvparam* param) {
     u8 reverbVol;
     phase stereoPhase;
     s32 phaseEffects;
+    STACK_PAD_VAR(2);
+    f32* REF_volL = &volL;
 
     phaseEffects = chan->playback_ch.stereo_headset_effects;
     Nas_smzSetPitch(chan, param->playback.pitch);
@@ -126,17 +128,19 @@ static void Nas_smzSetParam(channel* chan, drvparam* param) {
 }
 
 static void Nas_smzSetPitch(channel* chan, f32 pitch) {
-    f32 rate = 0.0f;
+    commonch* common = &chan->common_ch;
+    f32* REF_pitch = &pitch;
+    f32 rate;
 
     if (pitch < 2.0f) {
-        chan->common_ch.has_two_parts = FALSE;
+        common->has_two_parts = FALSE;
         if (pitch > 1.99998f) {
             rate = 1.99998f;
         } else {
             rate = pitch;
         }
     } else {
-        chan->common_ch.has_two_parts = TRUE;
+        common->has_two_parts = TRUE;
         if (pitch > 3.99996f) {
             rate = 1.99998f;
         } else {
@@ -185,6 +189,10 @@ extern void Nas_UpdateChannel(void) {
     u8 bookOfs;
     f32 scale;
     s32 i;
+    STACK_PAD_VAR(1);
+    drvparam* REF_param = &param;
+    channel** REF_chan = &chan;
+    playbackparams** REF_main_param_p = &main_param_p;
 
     for (i = 0; i < AG.num_channels; i++) {
         chan = &AG.channels[i];
@@ -357,7 +365,7 @@ extern wtstr* NoteToVoice(voicetable* vtbl, s32 note) {
     wtstr* voice_p;
 
     if (note < vtbl->normal_range_low) {
-        voice_p = &vtbl->low_pitch_tuned_sample;
+        return &vtbl->low_pitch_tuned_sample;
     } else if (note <= vtbl->normal_range_high) {
         voice_p = &vtbl->normal_pitch_tuned_sample;
     } else {
@@ -368,6 +376,9 @@ extern wtstr* NoteToVoice(voicetable* vtbl, s32 note) {
 }
 
 extern voicetable* ProgToVp(s32 prog, s32 inst) {
+    s32* REF_prog = &prog;
+    s32* REF_inst = &inst;
+    STACK_PAD_VAR(6);
     voicetable* vtbl;
 
     if (prog == 0xFF) {
@@ -394,6 +405,9 @@ extern voicetable* ProgToVp(s32 prog, s32 inst) {
 }
 
 extern perctable* PercToPp(s32 prog, s32 drum) {
+    s32* REF_prog = &prog;
+    s32* REF_drum = &drum;
+    STACK_PAD_VAR(6);
     perctable* vtbl;
 
     if (prog == 0xFF) {
@@ -424,6 +438,9 @@ extern perctable* PercToPp(s32 prog, s32 drum) {
 }
 
 extern percvoicetable* VpercToVep(s32 prog, s32 sfx) {
+    s32* REF_prog = &prog;
+    s32* REF_sfx = &sfx;
+    STACK_PAD_VAR(6);
     percvoicetable* vtbl;
 
     if (prog == 0xFF) {
@@ -494,10 +511,13 @@ extern s32 OverwriteBank(s32 type, s32 bankId, s32 idx, s32 table) {
 }
 
 static void __Nas_Release_Channel_Main(note* n, int target) {
+    note** REF_n = &n;
+    STACK_PAD_VAR(1);
     channel* chan;
     playbackparams* param;
     sub* subtrack;
     s32 i;
+    int* REF_target = &target;
 
     if (n == NA_NO_NOTE) {
         return;
@@ -693,6 +713,7 @@ extern void Nas_AllocVoices(chnode* node, s32 count) {
         if (i == 4) {
             return;
         }
+    s32* REF_count = &count;
 
         switch (i) {
             case 0:
@@ -774,6 +795,8 @@ extern void Nas_EntryTrack(channel* chan, note* n) {
     sub* subtrack = n->sub_track;
     playbackch* playback = &chan->playback_ch;
     commonch* common = &chan->common_ch;
+    STACK_PAD_VAR(1);
+    commonch** REF_common = &common;
 
     playback->previous_parent_note = NA_NO_NOTE;
     playback->current_parent_note = n;
@@ -818,19 +841,15 @@ extern void Nas_EntryTrack(channel* chan, note* n) {
 }
 
 static void __Nas_InterTrack(channel* chan, note* n) {
-    playbackch* playback = &chan->playback_ch;
-
-    Nas_Release_Channel_Force(playback->current_parent_note);
-    playback->wanted_parent_note = n;
+    Nas_Release_Channel_Force(chan->playback_ch.current_parent_note);
+    chan->playback_ch.wanted_parent_note = n;
 }
 
 static void __Nas_InterReleaseTrack(channel* chan, note* n) {
-    playbackch* playback = &chan->playback_ch;
-
-    playback->wanted_parent_note = n;
-    playback->priority = n->sub_track->note_priority;
-    playback->adsr_envp.fadeout_velocity = AG.audio_params.updates_per_frame_inverse;
-    playback->adsr_envp.state.flags.release = TRUE;
+    chan->playback_ch.wanted_parent_note = n;
+    chan->playback_ch.priority = n->sub_track->note_priority;
+    chan->playback_ch.adsr_envp.fadeout_velocity = AG.audio_params.updates_per_frame_inverse;
+    chan->playback_ch.adsr_envp.state.flags.release = TRUE;
 }
 
 static channel* __Nas_ChLookFree(chnode* node, note* n) {
@@ -895,6 +914,7 @@ static channel* __Nas_ChLookRelWait(chnode* node, note* n) {
 extern channel* Nas_AllocationOnRequest(note* n) {
     channel* chan;
     u32 policy = n->sub_track->note_alloc_policy;
+    STACK_PAD_VAR(4);
 
     if (policy & 1) {
         chan = n->channel;
@@ -959,6 +979,7 @@ null_return:
 extern void Nas_ChannelInit(void) {
     s32 i;
     channel* chan;
+    s32* REF_i = &i;
 
     for (i = 0; i < AG.num_channels; i++) {
         chan = &AG.channels[i];
