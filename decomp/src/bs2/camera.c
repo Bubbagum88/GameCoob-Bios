@@ -6,6 +6,7 @@
 #include <dolphin/gx.h>
 #include <math.h>
 #include "bs2/scene.h"
+#include "bs2/mtx.h"
 
 /* Display settings (0x813010F8), only the fields used here. */
 typedef struct CamDispSettings {
@@ -17,13 +18,6 @@ typedef struct CamDispSettings {
 } CamDispSettings;
 CamDispSettings *Disp_GetSettings(void);
 
-typedef struct CamSRT {
-    f32 sx, sy, sz;
-    s16 rx, ry, rz;
-    s16 pad;
-    f32 tx, ty, tz;
-} CamSRT;
-void MtxFromSRT(const CamSRT *srt, Mtx out);  /* 0x8130764C */
 
 static Mtx lbl_814AF630;  /* camera view */
 static Mtx lbl_814AF660;  /* view without the height offset */
@@ -105,7 +99,7 @@ void fn_81302FA0(void) {
 
 void GX_Setup2DView(void) {
     CamDispSettings *disp = Disp_GetSettings();
-    CamSRT srt = { 1.0f, -1.0f, 1.0f, 0, 0, 0, 0, -292.0f, 224.0f, 0.0f };
+    SRT srt = { 1.0f, -1.0f, 1.0f, 0, 0, 0, 0, -292.0f, 224.0f, 0.0f };
     Vec up = { 0.0f, 1.0f, 0.0f };
     Vec pos = { 0.0f, 0.0f, 0.0f };
     Vec target = { 0.0f, 0.0f, 0.0f };

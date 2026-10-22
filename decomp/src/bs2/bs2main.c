@@ -48,8 +48,7 @@ void __CARDSetDiskID(void* id);
 void CardThread_Init(void);
 void DEMOPadInit(void);
 void fn_81308208(s32);
-void SinTableInit(s32);
-void fn_81307EB8(void);
+void RandInit(void);                  /* 0x81307EB8 */
 void fn_813022F4(void);
 void Sound_SetOutputMode(u32);
 void DEMOPadRead(void);
@@ -135,7 +134,7 @@ void BS2Main(void) {
     DEMOPadInit();
     fn_81308208(0);
     SinTableInit(12);
-    fn_81307EB8();
+    RandInit();
     fn_813022F4();
     Scene_Init(1);
     Sound_SetOutputMode(OSGetSoundMode());

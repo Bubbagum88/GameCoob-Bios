@@ -75,6 +75,34 @@ bs2/gMRanim.c:
 	.sbss       start:0x814AD330 end:0x814AD338
 	.sdata2     start:0x814ADC18 end:0x814ADC30
 
+bs2/mtx.c:
+	.text       start:0x81307208 end:0x81307D08
+	.sbss       start:0x814AD338 end:0x814AD348
+	.sdata2     start:0x814ADC30 end:0x814ADC48
+
+bs2/gBase.c:
+	.text       start:0x81307D08 end:0x81307EB8
+	.sdata      start:0x814ACFE0 end:0x814ACFF0
+	.sbss       start:0x814AD348 end:0x814AD350
+	.sdata2     start:0x814ADC48 end:0x814ADC58
+
+bs2/rnd.c:
+	.text       start:0x81307EB8 end:0x81307FB8
+	.sbss       start:0x814AD350 end:0x814AD360
+
+bs2/fader.c:
+	.text       start:0x8130A86C end:0x8130AB14
+
+bs2/backdrop.c:
+	.text       start:0x8130AB14 end:0x8130B474
+	.rodata     start:0x8137EBA8 end:0x8137EBC0
+	.sdata2     start:0x814ADC60 end:0x814ADC78
+
+bs2/lang.c:
+	.text       start:0x8130B474 end:0x8130BDB8
+	.sbss       start:0x814AD388 end:0x814AD3B8
+	.bss        start:0x814AF710 end:0x814AF878
+
 bs2/scene.c:
 	.text       start:0x8130BDB8 end:0x8130C250
 	.data       start:0x813810E8 end:0x81381120
@@ -113,6 +141,14 @@ bs2/cube_draw.c:
 	.sdata2     start:0x814ADDB0 end:0x814ADDB8
 	.bss        start:0x814B5DF0 end:0x814B5EA0
 
+bs2/menu/menu_icon_card.c:
+	.text       start:0x813218C8 end:0x813230F0
+	.rodata     start:0x8137EE18 end:0x8137EE30
+	.data       start:0x813813C0 end:0x81381450
+	.sbss       start:0x814AD520 end:0x814AD538
+	.sdata2     start:0x814ADFA0 end:0x814ADFC0
+	.bss        start:0x814D9F60 end:0x814DB3E8
+
 bs2/menu/menu_icon_game.c:
 	.text       start:0x813230F0 end:0x81323C30
 	.rodata     start:0x8137EE30 end:0x8137EE40
@@ -120,6 +156,21 @@ bs2/menu/menu_icon_game.c:
 	.sbss       start:0x814AD538 end:0x814AD550
 	.sdata2     start:0x814ADFC0 end:0x814ADFD0
 	.bss        start:0x814DB3E8 end:0x814DBCE0
+
+bs2/menu/menu_icon_option.c:
+	.text       start:0x81323C30 end:0x81326114
+	.rodata     start:0x8137EE40 end:0x8137EE58
+	.data       start:0x81381450 end:0x81381498
+	.sbss       start:0x814AD550 end:0x814AD560
+	.sdata2     start:0x814ADFD0 end:0x814AE010
+	.bss        start:0x814DBCE0 end:0x814DDE40
+
+bs2/menu/menu_icon_clock.c:
+	.text       start:0x81326114 end:0x813275CC
+	.rodata     start:0x8137EE58 end:0x8137EE88
+	.sbss       start:0x814AD560 end:0x814AD570
+	.sdata2     start:0x814AE010 end:0x814AE038
+	.bss        start:0x814DDE40 end:0x814DE4B8
 
 bs2/menu/game.c:
 	.text       start:0x813275CC end:0x81327EE4

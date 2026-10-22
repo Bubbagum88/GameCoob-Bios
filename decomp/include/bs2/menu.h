@@ -122,8 +122,7 @@ typedef struct Fader {
     u16 ticks;             /* 0x6 frames since reset */
     u8 pad8;
     u8 maxAlpha;           /* 0x9 (default 255) */
-    u8 slide;              /* 0xA vertical slide distance while fading */
-    u8 padB;
+    s16 slide;             /* 0xA vertical slide distance while fading */
     u32 id;                /* 0xC string index or pane tag */
 } Fader;
 
@@ -160,14 +159,6 @@ typedef struct GlhHeader {
     u16 pad12;
     u16 paneCount;         /* 0x14 */
 } GlhHeader;
-
-/* Scale / rotate / translate record used by MtxFromSRT (0x8130764C). */
-typedef struct SRT {
-    f32 sx, sy, sz;        /* 0x00 */
-    s16 rx, ry, rz;        /* 0x0C */
-    s16 pad;
-    f32 tx, ty, tz;        /* 0x14 */
-} SRT;
 
 /* Per-face resources and fader indices */
 enum { SUBFADE_OPTION = 0, SUBFADE_CARD = 1, SUBFADE_CLOCK = 2, SUBFADE_GAME = 3 };
@@ -495,6 +486,13 @@ void CardIcon_UpdateEnter(void);  /* 0x81322EE8 */
 void CardIcon_UpdateHide(void);   /* 0x81322D58 */
 void CardIcon_CalcMtx(void);      /* 0x81322A18 */
 void CardIcon_ResetFiles(void);   /* 0x813207C8 */
+void CardIcon_InitGrid(void);     /* 0x813219F4 */
+BOOL CardIcon_IsInner(s16 i);     /* 0x81321B98 */
+s16 CardIcon_Diagonal(s16 i);     /* 0x81321BE4 */
+void CardIcon_UpdateFly(void);    /* 0x81321C68 */
+void CardIcon_FadeInner(BOOL in); /* 0x81321F60 */
+void CardIcon_SpinY(s32 t);       /* 0x81322434 */
+BOOL CardIcon_IsSettled(void);    /* 0x813230E8 */
 void GameIcon_InitRing(void);     /* 0x813231F8 */
 void GameIcon_UpdateFace(void);   /* 0x813233C8 */
 void GameIcon_UpdateEnter(void);  /* 0x813239E4 */
@@ -555,7 +553,7 @@ typedef struct TexHeader {
 
 MtxPtr Camera_GetView(void);                                  /* 0x81302F88 */
 void MtxFromSRT(const SRT *srt, Mtx out);                     /* 0x8130764C */
-void MtxInverse33(Mtx in, Mtx out);                    /* 0x81307820 */
+BOOL MtxInverse33(Mtx in, Mtx out);                           /* 0x81307820 */
 void GX_Setup2D(s32 a, s32 b, s32 c);                         /* 0x8130180C */
 void Screen_Dim(u8 alpha);                                    /* 0x81301BC8 black quad */
 void GX_Setup2DView(void);                                    /* 0x813030B0 */
@@ -568,7 +566,7 @@ void Glh_DrawAll(void *glh, GXColor *c);                      /* 0x8130A158 */
 void Glh_DrawPane(u32 tag, void *glh, GXColor *c);            /* 0x8130A1F8 */
 void Glh_DrawPaneOfs(u32 tag, void *glh, GXColor *c, s32 dx, s32 dy); /* 0x8130A284 (12.4) */
 void Glh_DrawPaneTex(u32 tag, void *glh, GXColor *c, void *tex); /* 0x8130A318 */
-void Glh_DrawString(s32 idx, void *sth, void *glh, GXColor *c);  /* 0x8130A39C */
+void Glh_DrawString(u16 idx, void *sth, void *glh, GXColor *c, u8 flags, s32 dx, s32 dy); /* 0x8130A39C */
 void Glh_DrawStringOfs(s32 idx, void *sth, void *glh, GXColor *c, s32 dx, s32 dy); /* 0x8130A5A4 */
 void Glh_DrawText(s32 idx, void *sth, void *glh, GXColor *c);    /* 0x8130A5D0 */
 void Glh_DrawBannerLine(u32 tag, void *glh, GXColor *c, const void *s, s32 max); /* 0x8130A75C */
