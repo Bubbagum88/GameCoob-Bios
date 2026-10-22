@@ -9,6 +9,7 @@
 
 #include <dolphin/card.h>
 #include "bs2/menu.h"
+#include <string.h>
 
 #define CARD_MSG(cmd, res, slot, file)                                                     \
     (((cmd) & 0xFF) | (((res) << 8) & 0xFF00) | (((slot) << 16) & 0x10000) | ((file) << 24))
@@ -38,18 +39,17 @@ typedef struct CardIconInfo {
     u8 hasIcon;            /* 0x01 */
     u8 frames;             /* 0x02 */
     u8 bannerFormat;       /* 0x03 9: CI8, 5: RGB5A3 */
-    u8 pad4;
-    u8 pad5;
-    u8 pingPong;           /* 0x06 */
-    u8 pad7;
-    u8 format[8];          /* 0x08 per frame, 9: CI8, 5: RGB5A3, else as the banner */
+    u8 animating;          /* 0x04 */
+    u8 bounce;             /* 0x05 CARD_STAT_ANIM_BOUNCE */
+    u8 firstSpeed;         /* 0x06 frames x 4 */
+    u8 lastSpeed;          /* 0x07 */
+    u8 format[8];          /* 0x08 per frame, 9: CI8, 5: RGB5A3 */
     u16 speeds;            /* 0x10 CARDDir.iconSpeed */
     s16 duration;          /* 0x12 */
     u8* banner;            /* 0x14 */
     u8* bannerTlut;        /* 0x18 */
-    u8* data;              /* 0x1C start of the icon data in sCardIconBuf */
-    u8* frame[7];          /* 0x20 */
-    u8* frameTlut;         /* 0x3C shared palette of the CI8 frames */
+    u8* image[8];          /* 0x1C */
+    u8* tlut;              /* 0x3C shared palette of the CI8 frames */
 } CardIconInfo;
 
 CardSlot gCardSlots[2];
@@ -91,7 +91,7 @@ void CardThread_SetEnabled(u8 cmd, BOOL enabled);
 s32 CardThread_Fail(u8 slot, s32 cmd, s32 result);
 void CardThread_ClearFiles(u8 slot);
 void CardThread_DoUnmount(u8 slot);
-s32 CardThread_DoMount(u8 slot);
+void CardThread_DoMount(u8 slot);
 void CardThread_DoFormat(u8 slot);
 void CardThread_DoCopyMove(u8 slot, u8 file);
 void CardThread_DoErase(u8 slot, u8 file);
@@ -475,6 +475,9 @@ void CardThread_SetEnabled(u8 cmd, BOOL enabled) {
 
 /* 0x8131CC48: a command failed. Forget the card unless it is only full. */
 s32 CardThread_Fail(u8 slot, s32 cmd, s32 result) {
+    u8 i;
+    s16 file;
+
     if (result != CARD_RESULT_EXIST && result != CARD_RESULT_SIZE && result != CARD_RESULT_NOENT &&
         result != CARD_RESULT_INSSPACE) {
         CardThread_ClearFiles(slot);
@@ -483,18 +486,227 @@ s32 CardThread_Fail(u8 slot, s32 cmd, s32 result) {
             sCardMounted[slot] = FALSE;
         }
     }
-    CardThread_MarkConflicts();
+    for (i = 0; i < 2; i++) {
+        for (file = 0; file < CARD_MAX_FILES; file++) {
+            sCardFiles[i][file].opened = 0;
+            if (sCardMounted[i] && sCardMounted[i ^ 1] && fn_8131E044(i, file) < 0) {
+                sCardFiles[i][file].opened = 1;
+            }
+        }
+    }
     OSSendMessage(&sCardReplyQueue, (OSMessage)CARD_MSG(cmd, result, slot, 0), OS_MESSAGE_BLOCK);
     return 0;
 }
 
 /* 0x8131CD74 */
 void CardThread_ClearFiles(u8 slot) {
+    BOOL enabled;
     s16 file;
 
     for (file = 0; file < CARD_MAX_FILES; file++) {
-        CardFile_Clear(slot, file);
+        enabled = OSDisableInterrupts();
+        sCardFiles[slot][file].used = 0;
+        sCardFiles[slot][file].blocks = 0;
+        sCardFiles[slot][file].canCopy = TRUE;
+        sCardFiles[slot][file].canMove = TRUE;
+        sCardFiles[slot][file].opened = 0;
+        sCardIcons[slot][file].hasIcon = FALSE;
+        sCardIcons[slot][file].hasBanner = FALSE;
+        OSRestoreInterrupts(enabled);
     }
+}
+
+/* 0x8131CE08: where the banner sits in the file's image buffer. Returns its
+   size in bytes. */
+s32 CardThread_SetBanner(u8 slot, s16 file, CARDDir* dir) {
+    s32 size = 0;
+
+    switch (dir->bannerFormat & CARD_STAT_BANNER_MASK) {
+    case CARD_STAT_BANNER_C8:
+        sCardIcons[slot][file].hasBanner = TRUE;
+        sCardIcons[slot][file].bannerFormat = GX_TF_C8;
+        sCardIcons[slot][file].banner = sCardIconBuf[slot][file];
+        size = CARD_BANNER_WIDTH * CARD_BANNER_HEIGHT + 0x200;
+        sCardIcons[slot][file].bannerTlut = sCardIcons[slot][file].banner + CARD_BANNER_WIDTH * CARD_BANNER_HEIGHT;
+        sCardIcons[slot][file].image[0] = sCardIcons[slot][file].bannerTlut + 0x200;
+        break;
+    case CARD_STAT_BANNER_RGB5A3:
+        sCardIcons[slot][file].hasBanner = TRUE;
+        sCardIcons[slot][file].bannerFormat = GX_TF_RGB5A3;
+        size = CARD_BANNER_WIDTH * CARD_BANNER_HEIGHT * 2;
+        sCardIcons[slot][file].banner = sCardIconBuf[slot][file];
+        sCardIcons[slot][file].image[0] = sCardIcons[slot][file].banner + CARD_BANNER_WIDTH * CARD_BANNER_HEIGHT * 2;
+        break;
+    default:
+        sCardIcons[slot][file].hasBanner = FALSE;
+        sCardIcons[slot][file].bannerFormat = 0;
+        sCardIcons[slot][file].image[0] = sCardIconBuf[slot][file];
+        break;
+    }
+    return size;
+}
+
+/* 0x8131CF54: lay out the icon frames after the banner. Returns their size
+   in bytes, palette included. */
+s32 CardThread_SetIcons(u8 slot, s16 file, CARDDir* dir) {
+    CardIconInfo* info = &sCardIcons[slot][file];
+    s32 total = 0;
+    BOOL ci8 = FALSE;
+    s32 size;
+    s32 speed;
+    s32 i;
+
+    info->frames = 0;
+    info->duration = 0;
+    info->speeds = dir->iconSpeed;
+    info->firstSpeed = (dir->iconSpeed & 3) << 2;
+    for (i = 0; i < CARD_ICON_MAX; i++) {
+        speed = (dir->iconSpeed >> (i * 2)) & 3;
+        if (speed == 0) {
+            break;
+        }
+        info->duration += speed << 2;
+    }
+    info->lastSpeed = ((dir->iconSpeed >> ((i - 1) * 2)) & 3) << 2;
+
+    if (!(dir->iconSpeed & 3) || !(dir->iconFormat & 3)) {
+        info->hasIcon = FALSE;
+        return 0;
+    }
+    for (i = 0; i < CARD_ICON_MAX; i++) {
+        if (!((dir->iconSpeed >> (i * 2)) & 3)) {
+            info->tlut = info->image[i];
+            break;
+        }
+        switch ((dir->iconFormat >> (i * 2)) & 3) {
+        case CARD_STAT_ICON_C8:
+            info->format[i] = GX_TF_C8;
+            size = CARD_ICON_WIDTH * CARD_ICON_HEIGHT;
+            ci8 = TRUE;
+            break;
+        case CARD_STAT_ICON_RGB5A3:
+            info->format[i] = GX_TF_RGB5A3;
+            size = CARD_ICON_WIDTH * CARD_ICON_HEIGHT * 2;
+            break;
+        case CARD_STAT_ICON_NONE:
+            size = 0;
+            info->format[i] = (&info->lastSpeed)[i]; /* the previous frame's format */
+            break;
+        }
+        if (i < CARD_ICON_MAX - 1) {
+            info->image[i + 1] = info->image[i] + size;
+        } else {
+            info->tlut = info->image[i] + size;
+        }
+        total += size;
+        info->frames++;
+    }
+    if (ci8) {
+        total += 0x200;
+    }
+    info->hasIcon = TRUE;
+    info->bounce = dir->bannerFormat & CARD_STAT_ANIM_BOUNCE;
+    info->animating = TRUE;
+    return total;
+}
+
+/* 0x8131D268: read the banner and icon images of a file. */
+s32 CardThread_ReadIcon(u8 slot, s16 file, CARDDir* dir, CARDFileInfo* fi) {
+    u32 addr = dir->iconAddr;
+    u32 base = addr & ~0x1FF;
+    s32 ofs = addr - base;
+    s32 size;
+    s32 len;
+    u32 sector;
+    u32 limit;
+    s32 result;
+
+    size = CardThread_SetBanner(slot, file, dir);
+    size += CardThread_SetIcons(slot, file, dir);
+    len = (size + ofs + 0x1FF) & ~0x1FF;
+    if (CARDGetSectorSize(slot, &sector) < 0) {
+        sCardIcons[slot][file].hasBanner = FALSE;
+        sCardIcons[slot][file].hasIcon = FALSE;
+        return 0;
+    }
+    limit = dir->length * sector;
+    if (base > limit) {
+        sCardIcons[slot][file].hasBanner = FALSE;
+        sCardIcons[slot][file].hasIcon = FALSE;
+        return 0;
+    }
+    if (base + len > limit) {
+        sCardIcons[slot][file].hasBanner = FALSE;
+        sCardIcons[slot][file].hasIcon = FALSE;
+        return 0;
+    }
+    if (size > 0) {
+        result = CARDRead(fi, sCardReadBuf, len, base);
+        if (result < 0) {
+            return result;
+        }
+        memcpy(sCardIconBuf[slot][file], sCardReadBuf + ofs, size);
+        DCStoreRange(sCardIconBuf[slot][file], len);
+    }
+    return 0;
+}
+
+/* 0x8131D408: read the two comment lines of a file. */
+s32 CardThread_ReadComment(u8 slot, s16 file, CARDDir* dir, CARDFileInfo* fi) {
+    u32 addr = dir->commentAddr;
+    s32 base = addr & ~0x1FF;
+    s32 len = ((addr + CARD_COMMENT_SIZE + 0x1FF) & ~0x1FF) - base;
+    u32 sector;
+    u32 limit;
+    s32 result;
+
+    result = CARDGetSectorSize(slot, &sector);
+    if (result >= 0) {
+        limit = dir->length * sector;
+        if (base < 0 || (u32)base > limit) {
+            result = 0;
+        } else if (base + len < 0 || (u32)(base + len) > limit) {
+            result = 0;
+        } else {
+            result = CARDRead(fi, sCardCommentRead, len, base);
+            if (result >= 0) {
+                memset(sCardComment[slot][file], 0, CARD_COMMENT_SIZE);
+                memcpy(sCardComment[slot][file], sCardCommentRead + (addr - base), CARD_COMMENT_SIZE);
+                return 0;
+            }
+        }
+    }
+    memset(sCardComment[slot][file], 0, CARD_COMMENT_SIZE);
+    return result;
+}
+
+/* 0x8131D548: everything the browser shows about one file. */
+s32 CardThread_ReadEntry(u8 slot, s16 file, CARDDir* dir) {
+    CARDFileInfo fi;
+    s32 result;
+
+    result = CARDFastOpen(slot, file, &fi);
+    if (result < 0) {
+        return result;
+    }
+    result = CardThread_ReadIcon(slot, file, dir, &fi);
+    if (result < 0) {
+        return result;
+    }
+    result = CardThread_ReadComment(slot, file, dir, &fi);
+    if (result < 0) {
+        return result;
+    }
+    result = CARDClose(&fi);
+    if (result < 0) {
+        return result;
+    }
+    sCardFiles[slot][file].used = TRUE;
+    sCardFiles[slot][file].blocks = dir->length;
+    sCardFiles[slot][file].time = dir->time;
+    sCardFiles[slot][file].canCopy = (dir->permission & CARD_ATTR_NO_COPY) != CARD_ATTR_NO_COPY ? TRUE : FALSE;
+    sCardFiles[slot][file].canMove = (dir->permission & CARD_ATTR_NO_MOVE) != CARD_ATTR_NO_MOVE ? TRUE : FALSE;
+    return 0;
 }
 
 /* 0x8131D670 */
@@ -509,6 +721,129 @@ void CardThread_DoUnmount(u8 slot) {
     CardThread_MarkConflicts();
     OSSendMessage(&sCardReplyQueue, (OSMessage)CARD_MSG(CARD_CMD_UNMOUNT, CARD_RESULT_NOCARD, slot, 0),
                   OS_MESSAGE_BLOCK);
+}
+
+/* A CARD call failed while mounting: carry on with the next file, check a
+   broken card, or give up (FALSE). */
+inline BOOL CardThread_Recover(u8 slot, s32 result) {
+    switch (result) {
+    case CARD_RESULT_NOFILE:
+        return TRUE;
+    case CARD_RESULT_BROKEN:
+        result = CARDCheck(slot);
+        if (result < 0) {
+            return CardThread_Fail(slot, CARD_CMD_MOUNT, result);
+        }
+        return TRUE;
+    case CARD_RESULT_IOERROR:
+    default:
+        return CardThread_Fail(slot, CARD_CMD_MOUNT, result);
+    }
+}
+
+/* 0x8131D6FC */
+void CardThread_DoMount(u8 slot) {
+    static const u8 noGame[4] = { 0, 0, 0, 0 };
+    static const u8 noCompany[2] = { 0, 0 };
+    CARDDir dir;
+    CARDDir dir2;
+    char name[CARD_FILENAME_MAX + 1];
+    u8 game[4];
+    u8 company[2];
+    u16 memSize;
+    u32 sector;
+    s32 freeBytes;
+    s32 freeFiles;
+    BOOL enabled;
+    s32 result;
+    s16 file;
+    u16 i;
+
+    result = CARDMount(slot, sCardWork[slot], NULL);
+    if (result < 0) {
+        if (!CardThread_Recover(slot, result)) {
+            return;
+        }
+    } else {
+        result = CARDCheck(slot);
+        if (result < 0) {
+            goto fail;
+        }
+    }
+
+    for (file = 0; file < CARD_MAX_FILES; file++) {
+        enabled = OSDisableInterrupts();
+        sCardFiles[slot][file].used = 0;
+        sCardFiles[slot][file].blocks = 0;
+        sCardFiles[slot][file].canCopy = TRUE;
+        sCardFiles[slot][file].canMove = TRUE;
+        sCardFiles[slot][file].opened = 0;
+        sCardIcons[slot][file].hasIcon = FALSE;
+        sCardIcons[slot][file].hasBanner = FALSE;
+        OSRestoreInterrupts(enabled);
+    }
+    for (file = 0; file < CARD_MAX_FILES; file++) {
+        result = __CARDGetStatusEx(slot, file, &dir);
+        if (result < 0) {
+            if (!CardThread_Recover(slot, result)) {
+                return;
+            }
+            continue;
+        }
+        /* a file the IPL left behind while copying */
+        *(u16*)company = *(u16*)noCompany;
+        *(u32*)game = *(u32*)noGame;
+        if (strncmp((char*)dir.fileName, "Broken File", 11) == 0 && memcmp(dir.gameName, game, 4) == 0 &&
+            memcmp(dir.company, company, 2) == 0) {
+            result = CARDFastDelete(slot, file);
+            if (result < 0) {
+                goto fail;
+            }
+        } else {
+            result = CardThread_ReadEntry(slot, file, &dir);
+            if (result < 0) {
+                goto fail;
+            }
+        }
+    }
+
+    CARDGetMemSize(slot, &memSize);
+    CARDGetSectorSize(slot, &sector);
+    CARDFreeBlocks(slot, &freeBytes, &freeFiles);
+    if (CARDGetResultCode(slot) >= 0) {
+        enabled = OSDisableInterrupts();
+        gCardSlots[slot].userBlocks = ((u32)memSize << 17) / sector - 5;
+        gCardSlots[slot].sectorSize = sector;
+        gCardSlots[slot].freeFiles = freeFiles;
+        gCardSlots[slot].freeBlocks = (u32)freeBytes / sector;
+        OSRestoreInterrupts(enabled);
+    }
+    sCardMounted[slot] = TRUE;
+    CardThread_MarkConflicts();
+    OSSendMessage(&sCardReplyQueue, (OSMessage)CARD_MSG(CARD_CMD_MOUNT, CARD_RESULT_READY, slot, 0), OS_MESSAGE_BLOCK);
+
+    /* left over from a debug listing of the file names */
+    for (i = 0; i < CARD_MAX_FILES; i++) {
+        if (__CARDGetStatusEx(slot, i, &dir2) == 0) {
+            memcpy(name, dir2.fileName, CARD_FILENAME_MAX);
+            name[CARD_FILENAME_MAX] = '\0';
+        }
+    }
+    return;
+
+fail:
+    if (result != CARD_RESULT_EXIST && result != CARD_RESULT_SIZE && result != CARD_RESULT_NOENT &&
+        result != CARD_RESULT_INSSPACE) {
+        for (file = 0; file < CARD_MAX_FILES; file++) {
+            CardFile_Clear(slot, file);
+        }
+        if (result != CARD_RESULT_BROKEN && result != CARD_RESULT_ENCODING) {
+            CARDUnmount(slot);
+            sCardMounted[slot] = FALSE;
+        }
+    }
+    CardThread_MarkConflicts();
+    OSSendMessage(&sCardReplyQueue, (OSMessage)CARD_MSG(CARD_CMD_MOUNT, result, slot, 0), OS_MESSAGE_BLOCK);
 }
 
 /* 0x8131DAE8 */

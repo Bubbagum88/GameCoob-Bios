@@ -598,7 +598,7 @@ config.libs = [
             Object(Matching, "bs2/menu/game.c"),
             Object(NonMatching, "bs2/menu/calendar.c"),
             Object(NonMatching, "bs2/menu/menu_icon_card.c"),
-            Object(NonMatching, "bs2/menu/memcard_card.c"),
+            Object(NonMatching, "bs2/menu/memcard_card.c", extra_cflags=["-inline noauto"]),
             Object(NonMatching, "bs2/menu/menu_icon_game.c"),
             Object(NonMatching, "bs2/menu/menu_icon_option.c", extra_cflags=["-inline noauto"]),
             Object(NonMatching, "bs2/menu/menu_icon_clock.c"),

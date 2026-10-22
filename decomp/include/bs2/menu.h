@@ -355,7 +355,7 @@ typedef struct CardSlot {
     s16 state;             /* 0x02 CARD_SLOT_* */
     s32 result;            /* 0x04 last CARD result */
     u32 sectorSize;        /* 0x08 */
-    u16 pad0C;
+    u16 userBlocks;        /* 0x0C blocks for files (card size less the 5 system blocks) */
     u16 freeFiles;         /* 0x0E */
     u16 freeBlocks;        /* 0x10 */
     u16 totalBlocks;       /* 0x12 */
@@ -378,7 +378,7 @@ typedef struct CardFile {
     u8 canCopy;            /* 0x4 */
     u8 canMove;            /* 0x5 */
     u16 opened;            /* 0x6 file is in use / permission bits */
-    u32 pad8;
+    u32 time;              /* 0x8 CARDDir.time */
 } CardFile;
 
 /* Card errors shown by the UI (index into the STH0 card table) */
