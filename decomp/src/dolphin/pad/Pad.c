@@ -1,11 +1,6 @@
 // Based on the Pikmin decomp (CC0) Pad.c. PADSetSamplingRate and its u8 XY
 // tables follow the IPL's own code and data.
 #include <dolphin/pad.h>
-
-#ifndef TRAP_UNIMPLEMENTED
-#define TRAP_UNIMPLEMENTED asm { trap } ((void)0)
-#endif
-#include <dolphin/hw_regs.h>
 #include <dolphin/os.h>
 #include <dolphin/si.h>
 #include <dolphin/vi.h>
@@ -49,7 +44,6 @@ static PADSamplingCallback SamplingCallback = NULL;
 
 static u32 CmdReadOrigin    = 0x41000000;
 static u32 CmdCalibrate     = 0x42000000;
-static u32 CmdTypeAndStatus = 0x00000000;
 static u32 CmdProbeDevice[PAD_MAX_CONTROLLERS];
 
 static OSResetFunctionInfo ResetFunctionInfo = {
@@ -80,7 +74,7 @@ static XY XYPAL[12] = {
 static void DoReset(void) {
     u32 chanBit;
 
-    ResettingChan = __mwerks_cntlzw(ResettingBits);
+    ResettingChan = __cntlzw(ResettingBits);
 
     if (ResettingChan != 0x20) {
         chanBit = PAD_CHAN0_BIT >> ResettingChan;
@@ -704,10 +698,6 @@ static void SPEC2_MakeStatus(s32 chan, PADStatus* status, u32 data[2]) {
     status->substickY    = ClampS8(status->substickY, origin->substickY);
     status->triggerLeft  = ClampU8(status->triggerLeft, origin->triggerLeft);
     status->triggerRight = ClampU8(status->triggerRight, origin->triggerRight);
-}
-
-int PADGetType(s32 chan, u32* type) {
-    TRAP_UNIMPLEMENTED;
 }
 
 BOOL PADSync(void) {

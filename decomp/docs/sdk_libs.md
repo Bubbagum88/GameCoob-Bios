@@ -52,13 +52,26 @@ code calls `_savefpr_NN` / `_restfpr_NN` but never `_savegpr_NN`.
 | `dolphin/mtx/mtxvec.c` | 1 |
 | `dolphin/mtx/mtx44.c` | 2 (+ stripped `C_MTXFrustum`) |
 | `dolphin/mtx/vec.c` | 3 |
+| `dolphin/os/OS.c` | 12 |
+| `dolphin/os/OSAudioSystem.c` | 2 |
+| `dolphin/os/OSContext.c` | 12 |
+| `dolphin/os/OSExi.c` | 20 (EXIBios) |
+| `dolphin/os/OSExiAd16.c` | 3 |
+| `dolphin/os/OSFont.c` | 1 |
+| `dolphin/os/OSLink.c` | 1 |
+| `dolphin/os/OSReset.c` | 2 (`OSGetResetCode` is built unoptimized, as in the IPL) |
+| `dolphin/os/OSRtc.c` | 16 |
+| `dolphin/si/SIBios.c` | 20 |
+| `dolphin/vi/vi.c` | 15 |
+| `dolphin/db/db.c` | 5 |
+| `dolphin/pad/Pad.c` | 19 |
+| `dolphin/pad/Padclamp.c` | 2 |
 
-Partial (NonMatching, source in `src/`):
-
-- `dolphin/os/OSAudioSystem.c`: `__OSStopAudioSystem` matches; `__OSInitAudioSystem`
-  is 106/111 instructions (the `li r0, 0x8AC` is scheduled one slot early).
-- `dolphin/os/OSContext.c`: 11 of 12 functions match; `OSDumpContext` loads the
-  current context into `r0` and copies it to `r30` in the original.
+Most of these units are based on the Pikmin decomp (projectPiki/pikmin, CC0). It is
+the same SDK revision (Dolphin OS rev 47, Sep 2001). Where the IPL differs
+(`OSRtc` ROM/RTC readers, `OSExiAd16`, `SIGetStatus`, the SI RDST wait, older `vi`), the code
+was written from the IPL asm. See `other_decomps.md` for which sources may be
+copied.
 
 ## Map
 
@@ -90,7 +103,7 @@ Partial (NonMatching, source in `src/`):
 | `813641C4-813642D0` | db | `DBPrintf` and DB init helpers |
 | `813642D0-8136498C` | mtx | `PSMTXIdentity`, `PSMTXCopy`, `PSMTXConcat`, `PSMTXTranspose`, `PSMTXTrans`, `PSMTXScale`, `C_MTXLookAt`, `PSMTXMultVec`, `C_MTXPerspective`, `C_MTXOrtho`, vec helpers |
 | `8136498C-81368D54` | dvd | dvdlow (`__DVDInitWA`, `__DVDInterruptHandler`, `DVDLow*`), dvdfs (`__DVDFSInit`, `DVDConvertPathToEntrynum`, `DVDOpen`, `DVDClose`), dvd (`DVDInit`, state machine, `DVDReadAbsAsyncForBS`, `DVDReadDiskID`, `DVDReset`, `DVDGetDriveStatus`, `DVDCancelAsync`), dvdqueue, dvderror (`__DVDStoreErrorCode`), fstload (`__fstLoad`) |
-| `81368D54-8136A7CC` | vi | `fn_81368D54` (__VIRetraceHandler), `__VIInit`, `VIInit`, `VIWaitForRetrace`, `VIConfigure`, `VIFlush`, `VISetNextFrameBuffer`, `VISetBlack`, `VIGetNextField`, `VIGetTvFormat`, `__VISetAdjustingValues` |
+| `81368D54-8136A7CC` | vi | `__VIRetraceHandler`, `getTiming`, `__VIInit`, `VIInit`, `VIWaitForRetrace`, `VIConfigure`, `VIFlush`, `VISetNextFrameBuffer`, `VISetBlack`, `VIGetNextField`, `VIGetTvFormat`, `__VISetAdjustingValues` |
 | `8136A7CC-8136C408` | pad | `PADClamp`, `PADInit`, `PADRead`, `PADSetSpec`, SPEC*_MakeStatus helpers |
 | `8136C408-8136CDB4` | ai | AI regs (+ DSP block for AID DMA); `fn_8136C908` is AIInit |
 | `8136CDB4-8136E0F8` | ar | `fn_8136CDB4` (ARRegisterDMACallback), `fn_8136CDF8` (ARStartDMA), `fn_8136CFE4` (__ARHandler), `fn_8136D05C` (__ARChecksize). The symbol named `DSPInit` at `8136CEE8` sits here and calls __ARChecksize, so it is probably **ARInit** |
