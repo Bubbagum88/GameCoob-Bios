@@ -206,16 +206,17 @@ _bs1_sha = Path("config") / config.version / "bs1.sha1"
 if _bs1_sha.exists():
     _bs1_dir = Path(config.build_dir) / config.version / "bs1"
     _binutils = Path(config.binutils_path or Path(config.build_dir) / "binutils")
-    _dtk = config.dtk_path or Path(config.build_dir) / "tools" / "dtk"
+    _exe = ".exe" if is_windows() else ""
+    _dtk = config.dtk_path or Path(config.build_dir) / "tools" / f"dtk{_exe}"
     config.custom_build_rules = [
         {
             "name": "bs1_as",
-            "command": f"{_binutils / 'powerpc-eabi-as'} -mgekko -mregnames -o $out $in",
+            "command": f"{_binutils / f'powerpc-eabi-as{_exe}'} -mgekko -mregnames -o $out $in",
             "description": "AS $in",
         },
         {
             "name": "bs1_bin",
-            "command": f"{_binutils / 'powerpc-eabi-objcopy'} -O binary -j .text $in $out",
+            "command": f"{_binutils / f'powerpc-eabi-objcopy{_exe}'} -O binary -j .text $in $out",
             "description": "OBJCOPY $out",
         },
         {
@@ -526,49 +527,49 @@ config.libs = [
     DolphinLib(
         "dvd",
         [
-            Object(NonMatching, "dolphin/dvd/dvdlow.c"),
-            Object(NonMatching, "dolphin/dvd/dvdfs.c"),
-            Object(NonMatching, "dolphin/dvd/dvd.c"),
-            Object(NonMatching, "dolphin/dvd/dvdqueue.c"),
-            Object(NonMatching, "dolphin/dvd/dvderror.c"),
-            Object(NonMatching, "dolphin/dvd/fstload.c"),
+            Object(Matching, "dolphin/dvd/dvdlow.c"),
+            Object(Matching, "dolphin/dvd/dvdfs.c"),
+            Object(Matching, "dolphin/dvd/dvd.c"),
+            Object(Matching, "dolphin/dvd/dvdqueue.c"),
+            Object(Matching, "dolphin/dvd/dvderror.c"),
+            Object(Matching, "dolphin/dvd/fstload.c"),
         ],
     ),
     DolphinLib(
         "ai",
         [
-            Object(NonMatching, "dolphin/ai/ai.c"),
+            Object(Matching, "dolphin/ai/ai.c"),
         ],
     ),
     DolphinLib(
         "ar",
         [
-            Object(NonMatching, "dolphin/ar/ar.c"),
-            Object(NonMatching, "dolphin/ar/arq.c"),
+            Object(Matching, "dolphin/ar/ar.c"),
+            Object(Matching, "dolphin/ar/arq.c"),
         ],
     ),
     DolphinLib(
         "dsp",
         [
-            Object(NonMatching, "dolphin/dsp/dsp.c"),
+            Object(Matching, "dolphin/dsp/dsp.c"),
         ],
     ),
     DolphinLib(
         "card",
         [
-            Object(NonMatching, "dolphin/card/CARDBios.c"),
-            Object(NonMatching, "dolphin/card/CARDRdwr.c"),
-            Object(NonMatching, "dolphin/card/CARDBlock.c"),
-            Object(NonMatching, "dolphin/card/CARDDir.c"),
-            Object(NonMatching, "dolphin/card/CARDCheck.c"),
-            Object(NonMatching, "dolphin/card/CARDMount.c"),
-            Object(NonMatching, "dolphin/card/CARDFormat.c"),
-            Object(NonMatching, "dolphin/card/CARDOpen.c"),
-            Object(NonMatching, "dolphin/card/CARDCreate.c"),
-            Object(NonMatching, "dolphin/card/CARDRead.c"),
-            Object(NonMatching, "dolphin/card/CARDWrite.c"),
-            Object(NonMatching, "dolphin/card/CARDDelete.c"),
-            Object(NonMatching, "dolphin/card/CARDStatEx.c"),
+            Object(Matching, "dolphin/card/CARDBios.c"),
+            Object(Matching, "dolphin/card/CARDRdwr.c"),
+            Object(Matching, "dolphin/card/CARDBlock.c"),
+            Object(Matching, "dolphin/card/CARDDir.c"),
+            Object(Matching, "dolphin/card/CARDCheck.c"),
+            Object(Matching, "dolphin/card/CARDMount.c"),
+            Object(Matching, "dolphin/card/CARDFormat.c"),
+            Object(Matching, "dolphin/card/CARDOpen.c"),
+            Object(Matching, "dolphin/card/CARDCreate.c"),
+            Object(Matching, "dolphin/card/CARDRead.c"),
+            Object(Matching, "dolphin/card/CARDWrite.c"),
+            Object(Matching, "dolphin/card/CARDDelete.c"),
+            Object(Matching, "dolphin/card/CARDStatEx.c"),
         ],
     ),
     {
@@ -577,8 +578,11 @@ config.libs = [
         "cflags": cflags_base,
         "progress_category": "game",
         "objects": [
-            Object(NonMatching, "bs2/scene.c"),
-            Object(NonMatching, "bs2/cube.c"),
+            Object(NonMatching, "bs2/scene.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
+            Object(NonMatching, "bs2/scene_intro.c", extra_cflags=["-inline noauto", "-fp_contract off", "-opt nostrength"]),
+            Object(NonMatching, "bs2/scene_spinout.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
+            Object(NonMatching, "bs2/cube.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
+            Object(NonMatching, "bs2/cube_draw.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
             Object(Matching, "bs2/menu/game.c"),
             Object(NonMatching, "bs2/menu/calendar.c"),
             Object(NonMatching, "bs2/menu/menu_icon_game.c"),
