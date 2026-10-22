@@ -422,6 +422,8 @@ void Nas_SzAutoDivide(AutoHeapstrc* param_1) {
  * Size:	0006CC
  */
 void* Nas_SzHeapAlloc(s32 tableType, s32 size, s32 param_3, s32 id) {
+    s32* REF_size = &size;
+    s32* REF_param_3 = &param_3;
     SZAuto* auto_heap;
     SZHeap* sound_heap;
     void* alloc;
@@ -710,6 +712,8 @@ void* Nas_SzCacheCheck(s32 tabletype, s32 audioCacheType, s32 id) {
  * Size:	000114
  */
 void* __Nas_SzCacheCheck_Inner(s32 tabletype, s32 audioCacheType, s32 id) {
+    s32* REF_id = &id;
+    STACK_PAD_VAR(1);
     SZHeap* heap;
     switch (tabletype) {
         case SEQUENCE_TABLE: {
@@ -1143,6 +1147,9 @@ void* Nas_Alloc_Single(s32 a, s32 sampleBankID, u8* sampleAddr, s8 originalMediu
  * Size:	0000C4
  */
 int Nas_Init_Single(s32 a, s32 b) {
+    s32* REF_a = &a;
+    s32* REF_b = &b;
+    STACK_PAD_VAR(3);
     u8* alloc = (u8*)Nas_2ndHeapAlloc(&AG.misc_heap, a);
     if (alloc == NULL) {
         AG.emem_persistent_wave_heap.heap.length = 0;
@@ -1166,6 +1173,8 @@ int Nas_Init_Single(s32 a, s32 b) {
  * Size:	000200
  */
 SwMember* __Nas_Alloc_Single_Auto_Inner(s32 size) {
+    s32* REF_size = &size;
+    STACK_PAD_VAR(2);
     SwHeap* heap = &AG.emem_temporary_wave_heap;
     void* alloc;
     u8* oldCurrent = heap->heap.current;
@@ -1238,6 +1247,8 @@ SwMember* __Nas_Alloc_Single_Auto_Inner(s32 size) {
  * Size:	00012C
  */
 void __SearchBank(SwMember* entry, s32 bank) {
+    s32* REF_bank = &bank;
+    STACK_PAD_VAR(4);
     perctable* pt;
     percvoicetable* pv;
     voicetable* vt;
@@ -1302,6 +1313,8 @@ void __RomAddrSet(SwMember* a, smzwavetable* b) {
  * Size:	000094
  */
 SwMember* __Nas_Alloc_Single_Stay_Inner(s32 a) {
+    s32* REF_a = &a;
+    STACK_PAD_VAR(8);
     SwHeap* heap = &AG.emem_persistent_wave_heap;
     u8* alloc = (u8*)Nas_HeapAlloc(&heap->heap, a);
     if (alloc == NULL) {
@@ -1400,6 +1413,7 @@ void EntryWave(s32 id) {
  * Size:	000238
  */
 void __ExchangeWave(s32 a, s32 b) {
+    s32* REF_b = &b;
     s32 i;
     Wavelookuptable wavetable;
     voiceinfo* voiceinfo;
@@ -1466,11 +1480,12 @@ void __ExchangeWave(s32 a, s32 b) {
 void Dirty_AllWave() {
     int i;
     SZHeap* heap = &AG.wave_heap;
-    if (heap->auto_heap.entries[0].id != HEAP_INVALID_INDEX) {
-        DirtyWave(heap->auto_heap.entries[0].id);
+    SZAuto* autoh = &heap->auto_heap;
+    if (autoh->entries[0].id != HEAP_INVALID_INDEX) {
+        DirtyWave(autoh->entries[0].id);
     }
-    if (heap->auto_heap.entries[1].id != HEAP_INVALID_INDEX) {
-        DirtyWave(heap->auto_heap.entries[1].id);
+    if (autoh->entries[1].id != HEAP_INVALID_INDEX) {
+        DirtyWave(autoh->entries[1].id);
     }
     for (i = 0; i < heap->stay_heap.num_entries; i++) {
         DirtyWave(heap->stay_heap.entries[i].id);

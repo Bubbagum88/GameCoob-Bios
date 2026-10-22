@@ -1207,6 +1207,7 @@ static void Nas_SubVolumeSet(sub* subtrack, u8 volume) {
 }
 
 static void Nas_SubSeq(sub* subtrack) {
+    sub** REF_subtrack = &subtrack;
     u8 cmd;
     u8 cmdArgU8;
     s32 i;
@@ -1784,6 +1785,7 @@ note_seq:
 }
 
 static void Nas_GroupSeq(group* grp) {
+    group** REF_grp = &grp;
     u8 cmd;
     u8 cmd_lo_bits;
     macro* m;

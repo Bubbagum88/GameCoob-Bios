@@ -359,18 +359,22 @@ void* Nas_PreLoadBank(s32 seq_id, s32* bank_id) {
 }
 
 void Nas_PreLoadSeq(s32 seq_id, s32 flags, s32 cmd, OSMesgQueue* mq) {
+    STACK_PAD_VAR(2);
     s32 bank_id;
+    s32* REF_seq_id = &seq_id;
 
-    if ((flags & AUDIO_PRELOAD_BANK)) {
-        Nas_PreLoadBank(seq_id, &bank_id);
-    }
+    if (seq_id < AG.num_sequences) {
+        if ((flags & AUDIO_PRELOAD_BANK)) {
+            Nas_PreLoadBank(seq_id, &bank_id);
+        }
 
-    if ((flags & AUDIO_PRELOAD_SEQ)) {
-        __Load_Seq(seq_id);
-    }
+        if ((flags & AUDIO_PRELOAD_SEQ)) {
+            __Load_Seq(seq_id);
+        }
 
-    if (cmd != 0) {
-        Z_osSendMesg(mq, (void*)(cmd << 24), OS_MESG_NOBLOCK);
+        if (cmd != 0) {
+            Z_osSendMesg(mq, (void*)(cmd << 24), OS_MESG_NOBLOCK);
+        }
     }
 }
 
@@ -547,6 +551,9 @@ s32 Nas_StartSeq_Skip(s32 group_idx, s32 seq_id, s32 skip_ticks) {
 }
 
 static s32 __Nas_StartSeq(s32 group_idx, s32 seq_id, s32 param) {
+    s32* REF_seq_id = &seq_id;
+    s32* REF_group_idx = &group_idx;
+    STACK_PAD_VAR(6);
     group* group = AG.groups_p[group_idx];
     u8* seq_p;
     s32 bank_id;
@@ -606,6 +613,8 @@ static u32 __Load_Wave_Check(s32 wave_id, u32* medium) {
 }
 
 static u32 __Load_Wave(s32 wave_id, u32* medium, s32 no_load) {
+    s32* REF_no_load = &no_load;
+    STACK_PAD_VAR(1);
     void* ram_p;
     s32 link_id = __Link_BankNum(WAVE_TABLE, wave_id);
     ArcHeader* header = __Get_ArcHeader(WAVE_TABLE);
@@ -679,6 +688,9 @@ static u8* __Load_Ctrl(s32 bank_id) {
 }
 
 static u8* __Load_Bank(s32 table_type, s32 id, s32* did_alloc) {
+    s32* REF_table_type = &table_type;
+    s32* REF_id = &id;
+    STACK_PAD_VAR(4);
     u32 size;
     ArcHeader* header;
     s32 medium;
@@ -826,6 +838,8 @@ static ArcHeader* __Get_ArcHeader(s32 table_type) {
 #define BANK_ENTRY(ctrl, idx) (((u32*)((u32)ctrl)) + idx)
 
 static void Nas_BankOfsToAddr_Inner(s32 bank_id, u8* ctrl_p, WaveMedia* wave_media) {
+    u8** REF_ctrl_p = &ctrl_p;
+    s32* REF_bank_id = &bank_id;
     u32 ofs;
     u32 inst_ofs;
     voicetable* inst;
@@ -1003,6 +1017,9 @@ extern void Nas_FastDiskCopy(u8* SrcAddr, u8* DestAdd, size_t Length, s32 medium
 
 static s32 Nas_StartDma(OSIoMesg* ioMsg, s32 priority, s32 direction, u32 device_addr, void* dram_addr, u32 size,
                         OSMesgQueue* mq, s32 medium, s8* dma_type) {
+    u32* REF_size = &size;
+    s32* REF_medium = &medium;
+    STACK_PAD_VAR(1);
     OSPiHandle* handle;
 
     osInvalDCache2(dram_addr, size);
@@ -1045,6 +1062,9 @@ void EmemLoad(s32 table_type, s32 id) {
 }
 
 static u8* __Load_Bank_BG(s32 table_type, s32 id, s32 n_chunks, s32 ret_data, OSMesgQueue* ret_queue) {
+    s32* REF_table_type = &table_type;
+    s32* REF_id = &id;
+    STACK_PAD_VAR(1);
     u32 size;
     ArcHeader* header;
     u8* ramAddr;
@@ -1299,6 +1319,8 @@ void LpsInit(void) {
 }
 
 s32 VoiceLoad(s32 bank_id, u32 inst_id, s8* done_p) {
+    s32* REF_bank_id = &bank_id;
+    u32* REF_inst_id = &inst_id;
     smzwavetable* wavetable = __GetWaveTable(bank_id, inst_id);
     lpscache* cache;
 
@@ -1451,6 +1473,8 @@ static void __Nas_SlowDiskCopy(u8* dev_addr, u8* ram_addr, u32 size, s32 medium)
 }
 
 s32 SeqLoad(s32 seq_id, u8* ram_addr, s8* is_done) {
+    s32* REF_seq_id = &seq_id;
+    u8** REF_ram_addr = &ram_addr;
     s32 link_id = __Link_BankNum(SEQUENCE_TABLE, seq_id);
     ArcHeader* header = __Get_ArcHeader(SEQUENCE_TABLE);
     lpscache* cache = &AG.lps_cache[AG.slow_load_pos];
@@ -1706,6 +1730,8 @@ static void __Nas_BgDiskCopy(u8* src, u8* dst, u32 size, s32 param) {
 }
 
 static void __WaveTouch(wtstr* wavetouch_str, u32 ram_addr, WaveMedia* wave_media) {
+    u32* REF_ram_addr = &ram_addr;
+    STACK_PAD_VAR(4);
     smzwavetable* wavetable;
     void* reloc;
 

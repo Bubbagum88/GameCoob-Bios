@@ -126,17 +126,19 @@ static void Nas_smzSetParam(channel* chan, drvparam* param) {
 }
 
 static void Nas_smzSetPitch(channel* chan, f32 pitch) {
-    f32 rate = 0.0f;
+    commonch* common = &chan->common_ch;
+    f32* REF_pitch = &pitch;
+    f32 rate;
 
     if (pitch < 2.0f) {
-        chan->common_ch.has_two_parts = FALSE;
+        common->has_two_parts = FALSE;
         if (pitch > 1.99998f) {
             rate = 1.99998f;
         } else {
             rate = pitch;
         }
     } else {
-        chan->common_ch.has_two_parts = TRUE;
+        common->has_two_parts = TRUE;
         if (pitch > 3.99996f) {
             rate = 1.99998f;
         } else {
@@ -368,6 +370,9 @@ extern wtstr* NoteToVoice(voicetable* vtbl, s32 note) {
 }
 
 extern voicetable* ProgToVp(s32 prog, s32 inst) {
+    s32* REF_prog = &prog;
+    s32* REF_inst = &inst;
+    STACK_PAD_VAR(6);
     voicetable* vtbl;
 
     if (prog == 0xFF) {
@@ -394,6 +399,9 @@ extern voicetable* ProgToVp(s32 prog, s32 inst) {
 }
 
 extern perctable* PercToPp(s32 prog, s32 drum) {
+    s32* REF_prog = &prog;
+    s32* REF_drum = &drum;
+    STACK_PAD_VAR(6);
     perctable* vtbl;
 
     if (prog == 0xFF) {
@@ -424,6 +432,9 @@ extern perctable* PercToPp(s32 prog, s32 drum) {
 }
 
 extern percvoicetable* VpercToVep(s32 prog, s32 sfx) {
+    s32* REF_prog = &prog;
+    s32* REF_sfx = &sfx;
+    STACK_PAD_VAR(6);
     percvoicetable* vtbl;
 
     if (prog == 0xFF) {
@@ -494,6 +505,8 @@ extern s32 OverwriteBank(s32 type, s32 bankId, s32 idx, s32 table) {
 }
 
 static void __Nas_Release_Channel_Main(note* n, int target) {
+    note** REF_n = &n;
+    STACK_PAD_VAR(1);
     channel* chan;
     playbackparams* param;
     sub* subtrack;
