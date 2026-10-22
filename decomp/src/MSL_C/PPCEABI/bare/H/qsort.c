@@ -9,7 +9,7 @@
 		char* p;                   \
 		char* q;                   \
 		size_t n = cnt;            \
-		char tmp;                  \
+		int tmp;                   \
                                    \
 		for (p = (char*)(src) - 1, q = (char*)(dst) - 1, n++; --n;) { \
 			tmp  = *++q;           \
