@@ -114,10 +114,15 @@ s16 CardIcon_Diagonal(s16 i) {
 }
 
 /* 0x81321C68: fly the cubes in and fade the outer ones up on the way. */
+static inline f32 CardIcon_Ease(f32 t, f32 t0, f32 p0, f32 t1, f32 p1) {
+    return Hermite(t, t0, p0, (p1 - p0) / (t1 - t0), t1, p1, 0.0f);
+}
+
 void CardIcon_UpdateFly(void) {
     s16 i;
     s16 start;
     s16 end;
+    f32 dur;
 
     for (i = 0; i < CARDICON_CUBES; i++) {
         if (sCardIconFrame <= sCardCube[i].start) {
@@ -134,12 +139,15 @@ void CardIcon_UpdateFly(void) {
         if (sCardIconFrame > start) {
             end = sCardCube[i].end;
             if (sCardIconFrame < end) {
-                sCardCube[i].pos[0] = Hermite(sCardIconFrame, start, sCardCube[i].from[0],
-                                              (f32)(sCardCube[i].to[0] - sCardCube[i].from[0]) / (end - start),
-                                              end, sCardCube[i].to[0], 0.0f);
-                sCardCube[i].pos[1] = Hermite(sCardIconFrame, start, sCardCube[i].from[1],
-                                              (f32)(sCardCube[i].to[1] - sCardCube[i].from[1]) / (end - start),
-                                              end, sCardCube[i].to[1], 0.0f);
+                f32 x0 = sCardCube[i].from[0];
+                f32 y0 = sCardCube[i].from[1];
+                f32 x1 = sCardCube[i].to[0];
+                f32 y1 = sCardCube[i].to[1];
+                f32 t0 = start;
+                f32 t1 = end;
+                dur = t1 - t0;
+                sCardCube[i].pos[0] = Hermite(sCardIconFrame, t0, x0, (x1 - x0) / dur, t1, x1, 0.0f);
+                sCardCube[i].pos[1] = Hermite(sCardIconFrame, t0, y0, (y1 - y0) / dur, t1, y1, 0.0f);
                 sCardCube[i].pos[2] = 0;
             }
         }
@@ -215,18 +223,27 @@ void CardIcon_FadeInner(BOOL in) {
     }
 }
 
-/* 0x81322434: swing the grid around its vertical axis and back. */
 void CardIcon_SpinY(s32 t) {
+    s32 t0;
+    s32 t1;
+
     if (t < 50) {
-        sCardIconRotY = Hermite(t, 0.0f, 0.0f, 0.0f, 50.0f, -8000.0f, 0.0f);
+        t1 = 50;
+        sCardIconRotY = Hermite(t, 0.0f, 0.0f, 0.0f, t1, -8000.0f, 0.0f);
     } else if (t < 90) {
-        sCardIconRotY = Hermite(t, 50.0f, -8000.0f, 0.0f, 90.0f, 32768.0f, 0.0f);
+        t1 = 90;
+        t0 = 50;
+        sCardIconRotY = Hermite(t, t0, -8000.0f, 0.0f, t1, 32768.0f, 0.0f);
     } else if (t < 140) {
         sCardIconRotY = -0x8000;
     } else if (t < 190) {
-        sCardIconRotY = Hermite(t, 140.0f, 32768.0f, 0.0f, 190.0f, 40768.0f, 0.0f);
+        t1 = 190;
+        t0 = 140;
+        sCardIconRotY = Hermite(t, t0, 32768.0f, 0.0f, t1, 40768.0f, 0.0f);
     } else if (t < 230) {
-        sCardIconRotY = Hermite(t, 190.0f, 40768.0f, 0.0f, 230.0f, 0.0f, 0.0f);
+        t1 = 230;
+        t0 = 190;
+        sCardIconRotY = Hermite(t, t0, 40768.0f, 0.0f, t1, 0.0f, 0.0f);
     } else if (t < 280) {
         sCardIconRotY = 0;
     }
