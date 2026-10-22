@@ -288,8 +288,7 @@ typedef struct CardParams {
     f32 cubeScale;         /* 0x10 0.7 */
     s16 rows;              /* 0x14 5 */
     s16 cols;              /* 0x16 8 */
-    s16 colorA[2][3];      /* 0x18 interleaved colour table (see Card_SetParams) */
-    s16 colorTbl[0x18];    /* 0x18..0x47 */
+    s16 colorTbl[0x18];    /* 0x18..0x47 interleaved colour table (see Card_SetParams) */
     f32 iconZoom;          /* 0x48 2.0 */
     f32 iconZoomSel;       /* 0x4C 1.3 */
     s16 white[3];          /* 0x50 (255, 255, 255) */
