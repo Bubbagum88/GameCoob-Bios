@@ -11,6 +11,8 @@ detect_strings: true
 write_asm: true
 fill_gaps: true
 block_relocations:
+# word in the app's .data asset blob that only looks like a pointer into neosthread's task_buf
+- source: .data:0x8143442C
 # word in the app's .data asset blob that only looks like a pointer into parse_format
 - source: .data:0x81475984
 # word in the app's .data asset blob that only looks like a pointer into JAudio's bankp

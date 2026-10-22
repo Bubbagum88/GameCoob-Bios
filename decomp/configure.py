@@ -597,7 +597,7 @@ config.libs = [
             Object(Matching, "jaudio/sample.c"),
             Object(Matching, "jaudio/dummyrom.c"),
             Object(NonMatching, "jaudio/audiothread.c"),
-            Object(NonMatching, "jaudio/ipl_813396C0.c"),  # IPL-only, no source yet
+            Object(Matching, "jaudio/neosthread.c"),
             Object(Matching, "jaudio/streamctrl.c"),
             Object(Matching, "jaudio/dspbuf.c"),
             Object(Matching, "jaudio/cpubuf.c"),

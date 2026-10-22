@@ -10,6 +10,7 @@ extern u8* JAC_ARAM_DMA_BUFFER_TOP;
 extern ALHeap aram_hp;
 
 // Global functions (all C++, so no extern C wrap).
+u32 GetNeosRomTop();
 void Jac_SetAudioARAMSize(u32 size);
 void* ARAllocFull(u32* outSize);
 void Jac_InitARAM(u32 loadAudiorom);

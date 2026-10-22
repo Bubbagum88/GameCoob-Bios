@@ -81,14 +81,18 @@ jaudio/dummyrom.c:
 	.sbss       start:0x814AD688 end:0x814AD698
 
 jaudio/audiothread.c:
-	.text       start:0x81339220 end:0x813396C0 align:32
+	.text       start:0x81339220 end:0x81339880 align:32
 	.rodata     start:0x8137F398 end:0x8137F6C8
-	.sbss       start:0x814AD698 end:0x814AD6A8
+	.sbss       start:0x814AD698 end:0x814AD6B8
 	.sdata2     start:0x814AE1D8 end:0x814AE1E0
 	.bss        start:0x81561600 end:0x81564660
 
-jaudio/ipl_813396C0.c:
-	.text       start:0x813396C0 end:0x81339B60 align:32
+jaudio/neosthread.c:
+	.text       start:0x81339880 end:0x81339B60 align:32
+	.rodata     start:0x8137F6C8 end:0x8137F808
+	.sdata      start:0x814AD0D8 end:0x814AD0E0
+	.sbss       start:0x814AD6B8 end:0x814AD6D0
+	.bss        start:0x81564660 end:0x8156AA80
 
 jaudio/streamctrl.c:
 	.text       start:0x81339B60 end:0x81339F00 align:32

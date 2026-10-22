@@ -1,6 +1,7 @@
 #include "jaudio/cpubuf.h"
 #include "jaudio/sdk.h"
 #include "jaudio/aictrl.h"
+#include "jaudio/neosthread.h"
 #include "jaudio/rate.h"
 #include <stddef.h>
 
@@ -9,9 +10,6 @@ static u8 read_buffer  = 0;
 static u8 dspstatus    = 0;
 
 static s16* dsp_buf[DSPBUF_NUM];
-
-// IPL-only, in the unsplit audiothread code at 813396C0: posts a mixed buffer to the audio thread
-extern "C" u32 fn_81339880(s16* buffer);
 
 /**
  * @TODO: Documentation
@@ -50,7 +48,7 @@ s16* CpubufProcess(DSPBUF_EVENTS event)
 			dspstatus = 0;
 		} else {
 			write_buffer = write;
-			if (fn_81339880(dsp_buf[write_buffer]) == 1) {
+			if (Neos_Update(dsp_buf[write_buffer]) == 1) {
 				dspstatus = 1;
 			}
 		}

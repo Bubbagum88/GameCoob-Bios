@@ -7,6 +7,7 @@
 /////////// JAUDIO CPU BUFFER DEFINITIONS ///////////
 // Global functions (all C++, so no extern C wrap).
 s16* CpubufProcess(DSPBUF_EVENTS event);
+s16* MixCpu(s32);
 void CpuFrameEnd();
 
 /////////////////////////////////////////////////////

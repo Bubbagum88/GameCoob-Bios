@@ -32,4 +32,7 @@ void StartAudioThread(void* heap, s32 heapSize, u32 aramSize, u32 flags);
 
 END_SCOPE_EXTERN_C
 
+// C++ linkage.
+void NeosSync();
+
 #endif
