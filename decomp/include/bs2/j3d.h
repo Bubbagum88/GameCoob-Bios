@@ -9,6 +9,7 @@
 typedef struct J3DMaterial {
     u8 pad0[0x30];
     void* tevColor;        /* 0x30 GXColorS10 used by the TEV stage */
+    void* tevColor2;       /* 0x34 second TEV colour (GXColorS10) */
 } J3DMaterial;
 
 typedef struct J3DModel {

@@ -608,6 +608,11 @@ config.libs = [
             Object(NonMatching, "bs2/menu/menu_icon_option.c", extra_cflags=["-inline noauto"]),
             Object(NonMatching, "bs2/menu/menu_icon_clock.c"),
             Object(NonMatching, "bs2/menu/options.c"),
+            Object(Matching, "bs2/menu/menu_fx_draw.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
+            Object(Matching, "bs2/menu/menu_fx_shape.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
+            Object(NonMatching, "bs2/menu/menu_fx_spark.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
+            Object(NonMatching, "bs2/menu/menu_fx_grid.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
+            Object(NonMatching, "bs2/menu/menu_fx_wipe.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
         ],
     },
     {

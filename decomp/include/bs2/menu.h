@@ -203,7 +203,8 @@ typedef struct MenuWork {
     f32 fxCubeScale;       /* 0x0AC 1.0 */
     s32 fxB0;              /* 0x0B0 100 */
     f32 fxB4, fxB8, fxBC, fxC0, fxC4; /* 0x0B4 2, 5, 30, 3, 0.45 (particle flight) */
-    s32 fxC8;              /* 0x0C8 120 */
+    s16 fxC8;              /* 0x0C8 spark cycle length in frames */
+    s16 fxCA;
     f32 fxCC;              /* 0x0CC 0.4 */
     f32 fxD0;              /* 0x0D0 2.0 */
     s16 fxD4;              /* 0x0D4 10 */
