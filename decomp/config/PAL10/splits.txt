@@ -142,26 +142,35 @@ jaudio/dvdthread.c:
 	.sbss       start:0x814AD6F0 end:0x814AD740
 	.bss        start:0x8156ABD0 end:0x81573898
 
-jaudio/ipl_8133B560.c:
-	.text       start:0x8133B560 end:0x8133C240 align:32
-
-jaudio/audiomesg.c:
-	.text       start:0x8133C240 end:0x8133CB60 align:32
-
-jaudio/ipl_8133CB60.c:
-	.text       start:0x8133CB60 end:0x8133ED60 align:32
-
-jaudio/stackchecker.c:
-	.text       start:0x8133ED60 end:0x8133EDA0 align:32
-
-jaudio/ipl_8133EDA0.c:
-	.text       start:0x8133EDA0 end:0x8133EE40 align:32
+jaudio/driver.c:
+	.text       start:0x8133B560 end:0x8133E860 align:32
+	.data       start:0x813F1218 end:0x813F1378
+	.sdata      start:0x814AD0F0 end:0x814AD100
+	.sdata2     start:0x814AE1F0 end:0x814AE210
 
 jaudio/memory.c:
-	.text       start:0x8133EE40 end:0x8133EF20 align:32
+	.text       start:0x8133E860 end:0x813419E0 align:32
 
-jaudio/ipl_8133EF20.c:
-	.text       start:0x8133EF20 end:0x8134D2C0 align:32
+jaudio/system.c:
+	.text       start:0x813419E0 end:0x81345900 align:32
+
+jaudio/sub_sys.c:
+	.text       start:0x81345900 end:0x81346B20 align:32
+
+jaudio/os.c:
+	.text       start:0x81346B20 end:0x81346D00 align:32
+
+jaudio/astest.c:
+	.text       start:0x81346D00 end:0x81346D40 align:32
+
+jaudio/channel.c:
+	.text       start:0x81346D40 end:0x81348CA0 align:32
+
+jaudio/effect.c:
+	.text       start:0x81348CA0 end:0x81349920 align:32
+
+jaudio/track.c:
+	.text       start:0x81349920 end:0x8134D2C0 align:32
 
 jaudio/dspboot.c:
 	.text       start:0x8134D2C0 end:0x8134D680 align:32
