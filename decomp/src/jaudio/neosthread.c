@@ -21,8 +21,9 @@ typedef struct NeosGlobalConfig {
 	u32 _0C;
 } NeosGlobalConfig;
 extern "C" NeosGlobalConfig lbl_813F4750;                                    // AGC
-extern "C" void fn_81343BC0(u64* acmdBuf, s32 size);                         // Nas_InitAudio
-extern "C" u32 fn_813468A0(u64* taskBuf, s16* dst, s32 samples, s32 flags); // CreateAudioTask
+union Acmd;
+void Nas_InitAudio(u64* acmdBuf, s32 size);
+u32 CreateAudioTask(Acmd* cmds, s16* dst, u32 samples, s32 flags);
 extern "C" void fn_81337740(u32* taskBuf, u32 task, s32 flags);             // RspStart2
 
 void Jac_RegisterMixcallback(MixCallback callback, u8 mixmode);
@@ -98,7 +99,7 @@ void* neosproc(void* param)
 		// "could not reserve memory for CPU audio"
 		OSReport("\201\364Jac/NEOS::CPU\203I\201[\203f\203B\203I\227p\202\314\203\201\203\202\203\212\202\252\212m\225\333\202\305\202\253\202\334\202\271\202\361\n");
 	}
-	fn_81343BC0((u64*)addr, tmp);
+	Nas_InitAudio((u64*)addr, tmp);
 	NeosSync();
 	neos_ready = TRUE;
 
@@ -111,7 +112,7 @@ void* neosproc(void* param)
 		OSReceiveMessage(&neosproc_mq, &msg, OS_MESSAGE_BLOCK);
 		Probe_Start(8, "NEOS THREAD");
 		addr = (u32)msg;
-		tasks[cur]       = fn_813468A0(task_buf[cur], tmp_buf, JAC_FRAMESAMPLES, 0);
+		tasks[cur]       = CreateAudioTask((Acmd*)task_buf[cur], tmp_buf, JAC_FRAMESAMPLES, 0);
 
 		tmp = (cur + 1) & 1;
 		if (tasks[tmp]) {

@@ -5,7 +5,8 @@
 #include "jaudio/dvdthread.h"
 
 // IPL-only callees not named yet.
-extern "C" int fn_81346BA0(OSMessageQueue* mq, void* msg, int flags);           // nonblocking send
+struct OSMesgQueue_s;
+s32 Z_osSendMesg(OSMesgQueue_s* mq, void* msg, s32 flags); // NEOS os.c
 
 ALHeap aram_hp;
 u8* JAC_ARAM_DMA_BUFFER_TOP;
@@ -29,7 +30,7 @@ u32 GetNeosRomTop()
  */
 void mesg_finishcall(u32 mq)
 {
-	fn_81346BA0((OSMessageQueue*)mq, NULL, 0);
+	Z_osSendMesg((OSMesgQueue_s*)mq, NULL, 0);
 }
 
 /**

@@ -3,6 +3,15 @@
 
 #include "types.h"
 #include "PR/abi.h"
+#include "dolphin/os/OSUtil.h"
+#include "macros.h"
+
+#ifndef ARRAY_COUNT
+#define ARRAY_COUNT(arr) (s32)(sizeof(arr) / sizeof(arr[0]))
+#endif
+#ifndef nullptr
+#define nullptr 0
+#endif
 
 #ifdef __cplusplus
 extern "C" {

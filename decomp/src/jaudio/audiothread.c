@@ -15,7 +15,6 @@
 #include "jaudio/ja_calc.h"
 #include "jaudio/playercall.h"
 #include "jaudio/rate.h"
-#include "jaudio/stackchecker.h"
 #include <stddef.h>
 
 // this is purely for comm bullshit to match. pretty sure it's not the comm bug, just wacky.

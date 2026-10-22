@@ -619,12 +619,15 @@ config.libs = [
             Object(Matching, "jaudio/cpubuf.c"),
             Object(Matching, "jaudio/playercall.c"),
             Object(Matching, "jaudio/dvdthread.c"),
-            Object(NonMatching, "jaudio/driver.c", extra_cflags=["-i include/neos", "-D_LANGUAGE_C"]),  # NEOS, from AC jaudio_NES
-            Object(NonMatching, "jaudio/ipl_8133E860.c"),  # IPL-only, no source yet
-            Object(NonMatching, "jaudio/stackchecker.c"),
-            Object(NonMatching, "jaudio/ipl_8133EDA0.c"),  # IPL-only, no source yet
-            Object(Matching, "jaudio/memory.c"),
-            Object(NonMatching, "jaudio/ipl_8133EF20.c"),  # IPL-only, no source yet
+            Object(NonMatching, "jaudio/driver.c", extra_cflags=["-i include/neos", "-D_LANGUAGE_C"]),  # NEOS (N64 audio on CPU), from AC jaudio_NES
+            Object(NonMatching, "jaudio/memory.c", extra_cflags=["-i include/neos", "-D_LANGUAGE_C"]),
+            Object(NonMatching, "jaudio/system.c", extra_cflags=["-i include/neos", "-D_LANGUAGE_C"]),
+            Object(NonMatching, "jaudio/sub_sys.c", extra_cflags=["-i include/neos", "-D_LANGUAGE_C"]),
+            Object(NonMatching, "jaudio/os.c", extra_cflags=["-i include/neos", "-D_LANGUAGE_C"]),
+            Object(NonMatching, "jaudio/astest.c", extra_cflags=["-i include/neos", "-D_LANGUAGE_C"]),
+            Object(NonMatching, "jaudio/channel.c", extra_cflags=["-i include/neos", "-D_LANGUAGE_C"]),
+            Object(NonMatching, "jaudio/effect.c", extra_cflags=["-i include/neos", "-D_LANGUAGE_C"]),
+            Object(NonMatching, "jaudio/track.c", extra_cflags=["-i include/neos", "-D_LANGUAGE_C"]),
             Object(Matching, "jaudio/dspboot.c"),
             Object(Matching, "jaudio/dspproc.c", mw_version="GC/1.2.5"),
             Object(Matching, "jaudio/ipldec.c", mw_version="GC/1.2.5"),
