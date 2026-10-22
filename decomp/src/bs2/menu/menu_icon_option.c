@@ -100,9 +100,36 @@ void OptionIcon_ResetShape(void) {
     }
 }
 
+static inline void OptionIcon_ClampAlpha(s16* alpha, s32 add) {
+    s16 a = *alpha;
+    a += add;
+
+    if (a > 255) {
+        a = 255;
+    }
+    if (a < 0) {
+        a = 0;
+    }
+    *alpha = a;
+}
+
+static inline void OptionIcon_CopyHome(void) {
+    s16 i;
+
+    for (i = 0; i < OPT_RING; i++) {
+        sOptRingCube[i].dx = sOptRingCube[i].x;
+        sOptRingCube[i].dy = sOptRingCube[i].y;
+    }
+    for (i = 0; i < OPT_SHAPE; i++) {
+        sOptShapeCube[i].dx = sOptShapeCube[i].x;
+        sOptShapeCube[i].dy = sOptShapeCube[i].y;
+    }
+}
+
 /* 0x8132406C */
 static void OptionIcon_AddAlpha(s16* alpha, s32 add) {
-    s16 a = *alpha + add;
+    s16 a = *alpha;
+    a += add;
 
     if (a > 255) {
         a = 255;
@@ -131,6 +158,21 @@ static void OptionIcon_ShowHome(void) {
 static void OptionIcon_Nop1(void) {
 }
 
+/* the four corners fly out from the centre to the corners of the square */
+static inline void OptionIcon_FlyOut(s16 t) {
+    u8 corner[4] = { 0, 7, 22, 15 };
+    s16 j;
+    s16 toX, toY;
+
+    for (j = 0; j < 4; j++) {
+        toX = (j % 2) * 160 - 80;
+        toY = 70 - (j / 2) * 140;
+        sOptRingCube[corner[j]].x = Hermite(t, 0.0f, 0.0f, toX / 20, 20.0f, toX, 0.0f);
+        sOptRingCube[corner[j]].y = Hermite(t, 0.0f, 0.0f, toY / 20, 20.0f, toY, 0.0f);
+        OptionIcon_ClampAlpha(&sOptRing[corner[j]].alpha, 6);
+    }
+}
+
 /* 0x81324268: the corners move round to the next corner, and the outline
    cubes they pass light up. */
 static void OptionIcon_SlideCorners(s16 t, s16 dur) {
@@ -141,13 +183,13 @@ static void OptionIcon_SlideCorners(s16 t, s16 dur) {
     s16 fromX, fromY, toX, toY;
 
     for (j = 0; j < 4; j++) {
-        fromY = 70 - (from[j] / 2) * 140;
         fromX = (from[j] % 2) * 160 - 80;
+        fromY = 70 - (from[j] / 2) * 140;
         toX = (j % 2) * 160 - 80;
         toY = 70 - (j / 2) * 140;
         sOptRingCube[corner[j]].x = Hermite(t, 0.0f, fromX, (toX - fromX) / dur, dur, toX, 0.0f);
         sOptRingCube[corner[j]].y = Hermite(t, 0.0f, fromY, (toY - fromY) / dur, dur, toY, 0.0f);
-        OptionIcon_AddAlpha(&sOptRing[corner[j]].alpha, 6);
+        OptionIcon_ClampAlpha(&sOptRing[corner[j]].alpha, 6);
         switch (j) {
         case 0:
             for (k = 7; k > (s16)((70.0f - sOptRingCube[corner[j]].y) / 20.0f); k--) {
@@ -171,35 +213,43 @@ static void OptionIcon_SlideCorners(s16 t, s16 dur) {
             break;
         }
     }
-    OptionIcon_ShowHome();
+    OptionIcon_CopyHome();
 }
 
 /* 0x81324938: the outline cubes flip a quarter turn, 5 frames apart. */
 static void OptionIcon_FlipRing(s16 t) {
     s16 i;
-    s32 start = 0;
-    s32 end = 10;
 
     for (i = 0; i < OPT_RING; i++) {
-        if (t >= start && t <= end) {
+        if (t >= i * 5 && t <= i * 5 + 10) {
             if (i < 7) {
-                sOptRingCube[i].rotX = ((t - start) << 14) / 10;
+                sOptRingCube[i].rotX = ((t - i * 5) << 14) / 10;
                 sOptRingCube[i].rotY = 0;
             } else if (i < 15) {
                 sOptRingCube[i].rotX = 0;
-                sOptRingCube[i].rotY = -((t - start) << 14) / 10;
+                sOptRingCube[i].rotY = -((t - i * 5) << 14) / 10;
             } else if (i < 22) {
-                sOptRingCube[i].rotX = -((t - start) << 14) / 10;
+                sOptRingCube[i].rotX = -((t - i * 5) << 14) / 10;
                 sOptRingCube[i].rotY = 0;
             } else {
                 sOptRingCube[i].rotX = 0;
-                sOptRingCube[i].rotY = ((t - start) << 14) / 10;
+                sOptRingCube[i].rotY = ((t - i * 5) << 14) / 10;
             }
         }
-        start += 5;
-        end += 5;
     }
-    OptionIcon_ShowHome();
+    OptionIcon_CopyHome();
+}
+
+/* hide whichever group is shown and show the other one */
+static inline void OptionIcon_Swap(void) {
+    s16 i;
+
+    for (i = 0; i < OPT_RING; i++) {
+        sOptRing[i].alpha ^= 255;
+    }
+    for (i = 0; i < OPT_SHAPE; i++) {
+        sOptShape[i].alpha ^= 255;
+    }
 }
 
 /* 0x81324C20 */
@@ -210,24 +260,17 @@ static void OptionIcon_Nop2(void) {
 static void OptionIcon_WipeToShape(s16 t, s16 dur) {
     s16 i;
     s16 r = Hermite(t, 0.0f, 0.0f, 0.0f, dur, 80.0f, 0.0f);
-    s16 l;
     f32 x;
 
     if (t == 0) {
-        for (i = 0; i < OPT_RING; i++) {
-            sOptRing[i].alpha ^= 255;
-        }
-        for (i = 0; i < OPT_SHAPE; i++) {
-            sOptShape[i].alpha ^= 255;
-        }
+        OptionIcon_Swap();
     }
-    l = -r;
     for (i = 0; i < OPT_SHAPE; i++) {
         x = sOptShapeCube[i].x;
         if (x > 0.0f && x > r) {
             sOptShapeCube[i].dx = r;
-        } else if (x < 0.0f && x < l) {
-            sOptShapeCube[i].dx = l;
+        } else if (x < 0.0f && x < -r) {
+            sOptShapeCube[i].dx = -r;
         } else {
             sOptShapeCube[i].dx = x;
         }
@@ -259,15 +302,14 @@ static void OptionIcon_BounceShape(s16 t) {
 static void OptionIcon_SqueezeShape(s16 t, s16 dur) {
     s16 i;
     s16 r = Hermite(t, 0.0f, 70.0f, 0.0f, dur, 0.0f, 0.0f);
-    s16 l = -r;
     f32 y;
 
     for (i = 0; i < OPT_SHAPE; i++) {
         y = sOptShapeCube[i].y;
         if (y > 0.0f && y > r) {
             sOptShapeCube[i].dy = r;
-        } else if (y < 0.0f && y < l) {
-            sOptShapeCube[i].dy = l;
+        } else if (y < 0.0f && y < -r) {
+            sOptShapeCube[i].dy = -r;
         } else {
             sOptShapeCube[i].dy = y;
         }
@@ -279,24 +321,17 @@ static void OptionIcon_SqueezeShape(s16 t, s16 dur) {
 static void OptionIcon_WipeToRing(s16 t, s16 dur) {
     s16 i;
     s16 r = Hermite(t, 0.0f, 0.0f, 0.0f, dur, 80.0f, 0.0f);
-    s16 l;
     f32 y;
 
     if (t == 0) {
-        for (i = 0; i < OPT_RING; i++) {
-            sOptRing[i].alpha ^= 255;
-        }
-        for (i = 0; i < OPT_SHAPE; i++) {
-            sOptShape[i].alpha ^= 255;
-        }
+        OptionIcon_Swap();
     }
-    l = -r;
     for (i = 0; i < OPT_RING; i++) {
         y = sOptRingCube[i].y;
         if (y > 0.0f && y > r) {
             sOptRingCube[i].dy = r;
-        } else if (y < 0.0f && y < l) {
-            sOptRingCube[i].dy = l;
+        } else if (y < 0.0f && y < -r) {
+            sOptRingCube[i].dy = -r;
         } else {
             sOptRingCube[i].dy = y;
         }
@@ -306,16 +341,12 @@ static void OptionIcon_WipeToRing(s16 t, s16 dur) {
 
 /* 0x8132554C */
 void OptionIcon_UpdateFace(void) {
-    u8 corner[4] = { 0, 7, 22, 15 };
-    s16 j;
-    s16 t;
-    s16 to;
+    OptionParams* p;
     s16 i;
     s16 r;
-    s16 l;
     f32 x;
 
-    Option_GetParams();
+    p = Option_GetParams();
     if (sOptFrame == 0) {
         OptionIcon_ResetShape();
     }
@@ -335,15 +366,7 @@ void OptionIcon_UpdateFace(void) {
         OptionIcon_AddAlpha(&sOptRing[22].alpha, 6);
         OptionIcon_ShowHome();
     } else if (sOptFrame < 40) {
-        /* ... and fly out to the corners of the square */
-        t = sOptFrame - 20;
-        for (j = 0; j < 4; j++) {
-            to = (j % 2) * 160 - 80;
-            sOptRingCube[corner[j]].x = Hermite(t, 0.0f, 0.0f, to / 20, 20.0f, to, 0.0f);
-            to = 70 - (j / 2) * 140;
-            sOptRingCube[corner[j]].y = Hermite(t, 0.0f, 0.0f, to / 20, 20.0f, to, 0.0f);
-            OptionIcon_AddAlpha(&sOptRing[corner[j]].alpha, 6);
-        }
+        OptionIcon_FlyOut(sOptFrame - 20);
         OptionIcon_ShowHome();
     } else if (sOptFrame < 70) {
         OptionIcon_SlideCorners(sOptFrame - 40, 30);
@@ -352,13 +375,12 @@ void OptionIcon_UpdateFace(void) {
     } else if (sOptFrame < 265) {
         /* squeeze the square horizontally into a line */
         r = Hermite((s16)(sOptFrame - 225), 0.0f, 80.0f, 0.0f, 40.0f, 0.0f, 0.0f);
-        l = -r;
         for (i = 0; i < OPT_RING; i++) {
             x = sOptRingCube[i].x;
             if (x > 0.0f && x > r) {
                 sOptRingCube[i].dx = r;
-            } else if (x < 0.0f && x < l) {
-                sOptRingCube[i].dx = l;
+            } else if (x < 0.0f && x < -r) {
+                sOptRingCube[i].dx = -r;
             } else {
                 sOptRingCube[i].dx = x;
             }
@@ -438,10 +460,10 @@ void OptionIcon_UpdateHide(void) {
     s32 i;
 
     for (i = 0; i < OPT_RING; i++) {
-        OptionIcon_AddAlpha(&sOptRing[i].alpha, -10);
+        OptionIcon_ClampAlpha(&sOptRing[i].alpha, -10);
     }
     for (i = 0; i < OPT_SHAPE; i++) {
-        OptionIcon_AddAlpha(&sOptShape[i].alpha, -10);
+        OptionIcon_ClampAlpha(&sOptShape[i].alpha, -10);
     }
     sOptFrame = 0;
 }
@@ -467,12 +489,12 @@ static inline BOOL OptionIcon_Shrink(f32* pv) {
 
 /* 0x81325DB0: pull every cube back to the centre. */
 void OptionIcon_UpdateEnter(void) {
+    s32 i;
     s32 settled = 0;
     OptionParams* p = Option_GetParams();
-    s32 i;
 
     for (i = 0; i < OPT_RING; i++) {
-        OptionIcon_AddAlpha(&sOptRing[i].alpha, -p->s20);
+        OptionIcon_ClampAlpha(&sOptRing[i].alpha, -p->s20);
         if (OptionIcon_Shrink(&sOptRingCube[i].dx)) {
             settled++;
         }
@@ -481,7 +503,7 @@ void OptionIcon_UpdateEnter(void) {
         }
     }
     for (i = 0; i < OPT_SHAPE; i++) {
-        OptionIcon_AddAlpha(&sOptShape[i].alpha, -p->s20);
+        OptionIcon_ClampAlpha(&sOptShape[i].alpha, -p->s20);
         if (OptionIcon_Shrink(&sOptShapeCube[i].dx)) {
             settled++;
         }
