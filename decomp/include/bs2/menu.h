@@ -16,6 +16,13 @@ typedef struct DispSettings {
     u8 menuFlag;           /* 0x1E cleared every menu frame */
     u8 pad1F[0x2B - 0x1F];
     u8 textPad;            /* 0x2B frame padding around dialog text, pixels */
+    s16 punctHang;         /* 0x2C how far a line-end SJIS comma/period hangs out */
+    u8 pad2E[0x32 - 0x2E];
+    s16 glowMax;           /* 0x32 text glow alpha range */
+    s16 glowMin;           /* 0x34 */
+    s16 pulse;             /* 0x36 glow pulse, 0..pulseLen */
+    s16 pulseLen;          /* 0x38 */
+    s16 pulseStep;         /* 0x3A +1 or -1 */
 } DispSettings;
 DispSettings *Disp_GetSettings(void);
 
@@ -564,11 +571,14 @@ void Glh_DrawPaneRect(u16 pane, void *glh, GXColor *c, s32 x, s32 y, s32 w, s32 
 void Glh_DrawFrame(u32 tag, void *glh, GXColor *c);           /* 0x81309C3C 9-slice frame */
 void Glh_DrawAll(void *glh, GXColor *c);                      /* 0x8130A158 */
 void Glh_DrawPane(u32 tag, void *glh, GXColor *c);            /* 0x8130A1F8 */
+#ifndef BS2_GLH_C
+/* glh.c takes s16; the menu's prototype passes s32 */
 void Glh_DrawPaneOfs(u32 tag, void *glh, GXColor *c, s32 dx, s32 dy); /* 0x8130A284 (12.4) */
+#endif
 void Glh_DrawPaneTex(u32 tag, void *glh, GXColor *c, void *tex); /* 0x8130A318 */
-void Glh_DrawString(u16 idx, void *sth, void *glh, GXColor *c, u8 flags, s32 dx, s32 dy); /* 0x8130A39C */
-void Glh_DrawStringOfs(s32 idx, void *sth, void *glh, GXColor *c, s32 dx, s32 dy); /* 0x8130A5A4 */
-void Glh_DrawText(s32 idx, void *sth, void *glh, GXColor *c);    /* 0x8130A5D0 */
+void Glh_DrawString(u16 idx, void *sth, void *glh, GXColor *c, GXColor *glow, s32 dx, s32 dy); /* 0x8130A39C */
+void Glh_DrawStringOfs(u16 idx, void *sth, void *glh, GXColor *c, s32 dx, s32 dy); /* 0x8130A5A4 */
+void Glh_DrawText(u16 idx, void *sth, void *glh, GXColor *c);    /* 0x8130A5D0 */
 void Glh_DrawBannerLine(u32 tag, void *glh, GXColor *c, const void *s, s32 max); /* 0x8130A75C */
 void Glh_DrawBannerBox(u32 tag, void *glh, GXColor *c, const void *s, s32 max);  /* 0x8130A7E4 */
 void Backdrop_Draw(Mtx mv, u8 alpha);                         /* 0x8130B244 */
