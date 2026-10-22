@@ -7,6 +7,7 @@
 #include <dolphin/card.h>
 #include <dolphin/vi.h>
 #include <dolphin/pad.h>
+#include <dolphin/hw_regs.h>
 #include <string.h>
 
 void AD16Init(void);
@@ -17,8 +18,15 @@ void BS2Main(void);             /* 0x81300FF4 */
 void fn_81301F0C(void);         /* 0x81301F0C */
 
 extern u32 __PADFixBits;
+extern u32 __OSCoreClock : 0x800000FC;
 
 static f64 ZeroF;               /* 0x814AD260 */
+
+/* Inlined; its local is what gives BS2Init its 0x18-byte frame. */
+static inline u32 GetConsoleRev(void) {
+    u32 rev = __PIRegs[11];
+    return (rev & 0xF0000000) >> 28;
+}
 
 /* 0x813003A0 */
 static asm void ClearUnusedBatRegisters(void) {
@@ -84,7 +92,7 @@ void BS2Init(void) {
     ClearUnusedBatRegisters();
     *(u32*)0x80000028 = 0x01800000;
     *(u32*)0x8000002C = 1;
-    *(u32*)0x8000002C += *(u32*)0xCC00302C >> 28;
+    *(u32*)0x8000002C += GetConsoleRev();
     __PADFixBits = 0xFFFFFFFF;
     ClearFPURegisters();
 }
@@ -103,8 +111,8 @@ int main(void) {
     __VIInit(VI_TVMODE_PAL_INT);
     VIInit();
     AD16WriteReg(0x0B000000);
-    *(u32*)0x800000F8 = 162000000;
-    *(u32*)0x800000FC = 486000000;
+    __OSBusClock = 162000000;
+    __OSCoreClock = 486000000;
     BS2SetTime();
     InitDVDLoader();
     PADSetSpec(PAD_SPEC_5);

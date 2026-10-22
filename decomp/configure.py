@@ -590,7 +590,7 @@ config.libs = [
         "cflags": cflags_base,
         "progress_category": "game",
         "objects": [
-            Object(NonMatching, "bs2/BS2.c", extra_cflags=["-inline noauto"]),
+            Object(Matching, "bs2/BS2.c", extra_cflags=["-inline noauto"]),
             Object(NonMatching, "bs2/dvdload.c"),
             Object(NonMatching, "bs2/bs2main.c"),
             Object(NonMatching, "bs2/gInit.c"),
