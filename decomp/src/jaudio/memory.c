@@ -22,6 +22,7 @@ void Emem_KillSwMember();
 void Dirty_AllWave();
 void Nas_SetDelayLine(s32 a, fxconfig* b, s32 c);
 int Nas_Init_Single(s32, s32);
+void Nas_SetEcho(s32 mode, u8 numTaps, echotap* tapsL, echotap* tapsR);
 /*
  * --INFO--
  * Address:	........
@@ -1059,6 +1060,18 @@ void __Nas_MemoryReconfig() {
     }
     AG.adsr_decay_table = (f32*)Nas_HeapAlloc(&AG.misc_heap, sizeof(f32) * 0x100);
     MakeReleaseTable();
+    // IPL-only: echo line.
+    if (spec->_08 >= 1) {
+        AG.echo.length = 0x4000;
+        AG.echo.buf_l = (s16*)Nas_2ndHeapAlloc_CL(&AG.misc_heap, AG.echo.length * sizeof(s16));
+        AG.echo.buf_r = (s16*)Nas_2ndHeapAlloc_CL(&AG.misc_heap, AG.echo.length * sizeof(s16));
+        AG.echo.pos = 0;
+    }
+    if (spec->_08 > 1) {
+        Nas_SetEcho(spec->_08, 0, NULL, NULL);
+    } else {
+        Nas_SetEcho(0, 0, NULL, NULL);
+    }
     for (i = 0; i < ARRAY_COUNT(AG.synth_delay); i++) {
         AG.synth_delay[i].use_reverb = FALSE;
     }

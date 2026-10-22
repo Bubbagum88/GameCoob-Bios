@@ -792,6 +792,24 @@ typedef struct SZHeap_ {
 
 typedef u32 (*SequenceCallback)(s8, sub*);
 
+/* IPL-only: multi-tap echo line (not in AC) */
+/* sizeof(echotap) == 0x8 */
+typedef struct echotap_ {
+    /* 0x00 */ s32 delay;
+    /* 0x04 */ s16 gain;
+} echotap;
+
+/* sizeof(echoline) == 0x1C */
+typedef struct echoline_ {
+    /* 0x00 */ u8 num_taps;
+    /* 0x04 */ s32 length;
+    /* 0x08 */ echotap* taps_l;
+    /* 0x0C */ echotap* taps_r;
+    /* 0x10 */ s32 pos;
+    /* 0x14 */ s16* buf_l;
+    /* 0x18 */ s16* buf_r;
+} echoline;
+
 /* sizeof(AudioGlobals) == 0x92b0 */
 typedef struct AudioGlobals {
     /* 0x0000 */ u8 _0000;
@@ -802,7 +820,9 @@ typedef struct AudioGlobals {
     /* 0x0010 */ s16* adpcm_code_book;
     /* 0x0014 */ commonch* common_channel;
     /* 0x0018 */ delay synth_delay[4];
-    /* 0x0B58 */ u8 _0B58[0x30];
+    /* 0x0B58 */ u8 _0B58[0x10];
+    /* 0x0B68 */ echoline echo;
+    /* 0x0B84 */ u8 _0B84[4];
     /* 0x0B88 */ smzwavetable* used_samples[128];
     /* 0x0D88 */ Bgloadreq requested_samples[128];
     /* 0x1788 */ s32 num_used_samples;
@@ -846,7 +866,8 @@ typedef struct AudioGlobals {
     /* 0x2894 */ f32 sample_to_update_delay_scale; /* tempo scale? */
     /* 0x2898 */ s32 waveload_dma_buf0_size;
     /* 0x289C */ s32 waveload_dma_buf1_size;
-    /* 0x28A0 */ u8 _28A0[16];
+    /* 0x28A0 */ s32 echo_mode;
+    /* 0x28A4 */ u8 _28A4[12];
     /* 0x28B0 */ s32 waveload_dma_cur_buf_size;
     /* 0x28B4 */ s32 max_audio_cmds;
     /* 0x28B8 */ s32 num_channels;

@@ -30,6 +30,16 @@ typedef enum {
     /* 2 */ HAAS_EFFECT_DELAY_RIGHT // Delay right channel so that left channel is heard first
 } HaasEffectDelaySide;
 
+// IPL-only: echo tap presets (not in AC).
+static echotap ECHO_TAPS_DEF_L[] = { { 0x0, -0x400 }, { 0x400, 0x100 }, { 0x2000, 0x1FF } };
+static echotap ECHO_TAPS_DEF_R[] = { { 0x0, 0x3FF }, { 0x800, 0x200 }, { 0x2010, 0x1FF } };
+static echotap ECHO_TAPS_4_L[] = { { 0x0, 0x0 }, { 0x100, 0xFFF }, { 0x300, 0xFFF }, { 0x5A0, 0x3FF }, { 0x2000, -0x1001 } };
+static echotap ECHO_TAPS_4_R[] = { { 0x0, 0x0 }, { 0x180, 0x3FF }, { 0x200, 0xBFF }, { 0x400, -0x2001 }, { 0x1000, 0x1FFF } };
+static echotap ECHO_TAPS_3_L[] = { { 0x0, 0xFFF }, { 0x1000, 0x3FF }, { 0x1400, 0x7FF }, { 0x2000, 0xBFF }, { 0x2400, -0x2001 } };
+static echotap ECHO_TAPS_3_R[] = { { 0x0, 0xFFF }, { 0x1400, 0x3FF }, { 0x1800, 0x7FF }, { 0x2400, 0xBFF }, { 0x2800, -0x2001 } };
+static echotap ECHO_TAPS_2_R[] = { { 0x0, 0xFF }, { 0x180, -0x4000 }, { 0x200, 0x1000 }, { 0x400, 0x1000 }, { 0x880, 0x800 } };
+static echotap ECHO_TAPS_2_L[] = { { 0x0, 0xFF }, { 0x180, -0x4000 }, { 0x240, 0x1000 }, { 0x400, 0x1000 }, { 0x880, 0x800 } };
+
 static u16 NOISE_TABLE[] = { 0, 1, 2, 4, 8, 12, 16, 20, 24, 32, 36, 40, 46, 52, 56, 64 };
 static dspch_ DSPCH[64];
 static s32 STOP_VELOCONV = 0;
@@ -149,6 +159,46 @@ void Nas_CpuFX(s32 chunkLen, s32 updateIdx, s32 reverbIdx) {
     }
 }
 
+// IPL-only: echo line setup and processing (not in AC).
+void Nas_SetEcho(s32 mode, u8 numTaps, echotap* tapsL, echotap* tapsR) {
+    if (mode == 0) {
+        AG.echo_mode = 0;
+        return;
+    }
+
+    AG.echo_mode = mode;
+    if (mode == 1) {
+        AG.echo.num_taps = numTaps;
+        AG.echo.taps_l = tapsL;
+        AG.echo.taps_r = tapsR;
+        return;
+    }
+
+    switch (mode) {
+        case 2:
+            AG.echo.num_taps = 5;
+            AG.echo.taps_l = ECHO_TAPS_2_L;
+            AG.echo.taps_r = ECHO_TAPS_2_R;
+            break;
+        case 3:
+            AG.echo.num_taps = 5;
+            AG.echo.taps_l = ECHO_TAPS_3_L;
+            AG.echo.taps_r = ECHO_TAPS_3_R;
+            break;
+        case 4:
+            AG.echo.num_taps = 5;
+            AG.echo.taps_l = ECHO_TAPS_4_L;
+            AG.echo.taps_r = ECHO_TAPS_4_R;
+            break;
+        case 5:
+        default:
+            AG.echo.num_taps = 3;
+            AG.echo.taps_l = ECHO_TAPS_DEF_L;
+            AG.echo.taps_r = ECHO_TAPS_DEF_R;
+            break;
+    }
+}
+
 // IPL-only: echo line buffer transfers (not in AC).
 void Nas_LoadEchoBuf(Acmd* cmd, s16* buf, s32 pos, s32 len, s32 dmem) {
     aLoadBuffer2(cmd, &buf[pos], dmem, len * 2);
@@ -156,6 +206,99 @@ void Nas_LoadEchoBuf(Acmd* cmd, s16* buf, s32 pos, s32 len, s32 dmem) {
 
 void Nas_SaveEchoBuf(Acmd* cmd, s16* buf, s32 pos, s32 len, s32 dmem) {
     aSaveBuffer2(cmd, &buf[pos], dmem, len * 2);
+}
+
+Acmd* Nas_DriveEcho(Acmd* cmd, echoline* echo, s32 len) {
+    s32 i;
+    s32 length;
+    s32 size;
+    s32 wrapSize;
+    s32 posL;
+    s32 posR;
+    s32 wrapL;
+    s32 wrapR;
+    s32 sizeL;
+    s32 sizeR;
+    STACK_PAD_VAR(4);
+
+    length = echo->length;
+    wrapSize = echo->pos + len - length;
+    if (wrapSize > 0) {
+        size = len - wrapSize;
+    } else {
+        size = len;
+        wrapSize = 0;
+    }
+
+    Nas_LoadEchoBuf(cmd++, echo->buf_l, echo->pos, size, 0x3A0);
+    Nas_LoadEchoBuf(cmd++, echo->buf_r, echo->pos, size, 0x540);
+    if (wrapSize != 0) {
+        Nas_LoadEchoBuf(cmd++, echo->buf_l, 0, wrapSize, 0x3A0 + size * 2);
+        Nas_LoadEchoBuf(cmd++, echo->buf_r, 0, wrapSize, 0x540 + size * 2);
+    }
+
+    aMix(cmd++, (len * 2) >> 4, 0x7FFF, 0x3A0, 0x900);
+    aMix(cmd++, (len * 2) >> 4, 0x7FFF, 0x540, 0xAA0);
+
+    for (i = 0; i < echo->num_taps; i++) {
+        posL = echo->pos + echo->taps_l[i].delay;
+        if (posL >= length) {
+            posL -= length;
+        }
+        posR = echo->pos + echo->taps_r[i].delay;
+        if (posR >= length) {
+            posR -= length;
+        }
+
+        wrapL = posL + len - length;
+        wrapR = posR + len - length;
+        if (wrapL > 0) {
+            sizeL = len - wrapL;
+        } else {
+            sizeL = len;
+            wrapL = 0;
+        }
+        if (wrapR > 0) {
+            sizeR = len - wrapR;
+        } else {
+            sizeR = len;
+            wrapR = 0;
+        }
+
+        if (i == 0 && echo->taps_l[i].delay == 0) {
+            aClearBuffer(cmd++, 0x3A0, len * 2);
+        } else {
+            Nas_LoadEchoBuf(cmd++, echo->buf_l, posL, sizeL, 0x3A0);
+            if (wrapL != 0) {
+                Nas_LoadEchoBuf(cmd++, echo->buf_l, 0, wrapL, 0x3A0 + sizeL * 2);
+            }
+        }
+        aMix(cmd++, (len * 2) >> 4, echo->taps_l[i].gain, 0x900, 0x3A0);
+        Nas_SaveEchoBuf(cmd++, echo->buf_l, posL, sizeL, 0x3A0);
+        if (wrapL != 0) {
+            Nas_SaveEchoBuf(cmd++, echo->buf_l, 0, wrapL, 0x3A0 + sizeL * 2);
+        }
+
+        if (i == 0 && echo->taps_r[i].delay == 0) {
+            aClearBuffer(cmd++, 0x540, len * 2);
+        } else {
+            Nas_LoadEchoBuf(cmd++, echo->buf_r, posR, sizeR, 0x540);
+            if (wrapR != 0) {
+                Nas_LoadEchoBuf(cmd++, echo->buf_r, 0, wrapR, 0x540 + sizeR * 2);
+            }
+        }
+        aMix(cmd++, (len * 2) >> 4, echo->taps_r[i].gain, 0xAA0, 0x540);
+        Nas_SaveEchoBuf(cmd++, echo->buf_r, posR, sizeR, 0x540);
+        if (wrapR != 0) {
+            Nas_SaveEchoBuf(cmd++, echo->buf_r, 0, wrapR, 0x540 + sizeR * 2);
+        }
+    }
+
+    echo->pos += len;
+    if (echo->pos >= length) {
+        echo->pos -= length;
+    }
+    return cmd;
 }
 
 void __Nas_PushDrvReg(s32 updateIdx) {
@@ -665,6 +808,11 @@ extern Acmd* Nas_DriveRsp(s16* aiBuf, s32 aiBufLen, Acmd* cmd, s32 updateIndex) 
                                        &AG.channels[noteIndices[i]].driver_ch, aiBuf, aiBufLen, cmd,
                                        updateIndex);
         i++;
+    }
+
+    // IPL-only: echo line.
+    if (AG.echo_mode != 0) {
+        cmd = Nas_DriveEcho(cmd, &AG.echo, aiBufLen);
     }
 
     // size = aiBufLen * SAMPLE_SIZE;
