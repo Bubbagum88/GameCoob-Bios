@@ -16,13 +16,22 @@ bs2/mtx.c:
 	.sdata2     start:0x814ADC30 end:0x814ADC48
 
 bs2/gBase.c:
-	.text       start:0x81307D08 end:0x81307FB8
+	.text       start:0x81307D08 end:0x81307EB8
 	.sdata      start:0x814ACFE0 end:0x814ACFF0
-	.sbss       start:0x814AD348 end:0x814AD360
+	.sbss       start:0x814AD348 end:0x814AD350
 	.sdata2     start:0x814ADC48 end:0x814ADC58
+
+bs2/rnd.c:
+	.text       start:0x81307EB8 end:0x81307FB8
+	.sbss       start:0x814AD350 end:0x814AD360
 
 bs2/fader.c:
 	.text       start:0x8130A86C end:0x8130AB14
+
+bs2/backdrop.c:
+	.text       start:0x8130AB14 end:0x8130B474
+	.rodata     start:0x8137EBA8 end:0x8137EBC0
+	.sdata2     start:0x814ADC60 end:0x814ADC78
 
 bs2/lang.c:
 	.text       start:0x8130B474 end:0x8130BDB8

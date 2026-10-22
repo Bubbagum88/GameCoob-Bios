@@ -591,8 +591,10 @@ config.libs = [
         "progress_category": "game",
         "objects": [
             Object(NonMatching, "bs2/mtx.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
-            Object(NonMatching, "bs2/gBase.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
+            Object(Matching, "bs2/gBase.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
+            Object(Matching, "bs2/rnd.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
             Object(NonMatching, "bs2/fader.c"),
+            Object(NonMatching, "bs2/backdrop.c", extra_cflags=["-fp_contract off"]),
             Object(NonMatching, "bs2/lang.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
             Object(NonMatching, "bs2/scene.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
             Object(NonMatching, "bs2/scene_intro.c", extra_cflags=["-inline noauto", "-fp_contract off", "-opt nostrength"]),
