@@ -2,12 +2,10 @@
 #include "jaudio/sdk.h"
 #include "jaudio/audiocommon.h"
 #include "jaudio/memory.h"
+#include "jaudio/dvdthread.h"
 
 // IPL-only callees not named yet.
 extern "C" int fn_81346BA0(OSMessageQueue* mq, void* msg, int flags);           // nonblocking send
-extern "C" s32 fn_8133B180(u32, u32, u32, u32, u32*, void (*)(u32));  // DVDT_ARAMtoDRAM
-extern "C" s32 fn_8133B220(u32, u32, u32, u32, u32*, void (*)(u32));  // DVDT_DRAMtoARAM
-extern "C" u32 fn_8133B360(immut char* file);                          // Jac_CheckFile
 
 ALHeap aram_hp;
 u8* JAC_ARAM_DMA_BUFFER_TOP;
@@ -42,9 +40,9 @@ BOOL ARAMStartDMAmesg(u32 dir, u32 dramAddr, u32 aramAddr, u32 size, s32, OSMess
 {
 	aramAddr += AUDIO_ARAM_TOP;
 	if (dir == 1) {
-		fn_8133B180((u32)mq, dramAddr, aramAddr, size, NULL, mesg_finishcall);
+		DVDT_ARAMtoDRAM((u32)mq, dramAddr, aramAddr, size, NULL, mesg_finishcall);
 	} else {
-		fn_8133B220((u32)mq, dramAddr, aramAddr, size, NULL, mesg_finishcall);
+		DVDT_DRAMtoARAM((u32)mq, dramAddr, aramAddr, size, NULL, mesg_finishcall);
 	}
 	return FALSE;
 }
@@ -100,7 +98,7 @@ void Jac_InitARAM(u32 loadAudiorom)
 
 	AUDIO_ARAM_TOP = ARGetBaseAddress();
 	if (loadAudiorom) {
-		audiorom_size = fn_8133B360("/audiorom.img");
+		audiorom_size = Jac_CheckFile("/audiorom.img");
 		if (audiorom_size == 0) {
 			// "audiorom.img is missing"
 			OSReport("\201\364Jac/ARAM/DVD:: audiorom.img\202\252\202\240\202\350\202\334\202\271\202\361\n");

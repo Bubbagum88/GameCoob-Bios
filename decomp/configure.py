@@ -618,7 +618,7 @@ config.libs = [
             Object(Matching, "jaudio/dspbuf.c"),
             Object(Matching, "jaudio/cpubuf.c"),
             Object(Matching, "jaudio/playercall.c"),
-            Object(NonMatching, "jaudio/dvdthread.c"),
+            Object(Matching, "jaudio/dvdthread.c"),
             Object(NonMatching, "jaudio/ipl_8133B560.c"),  # IPL-only, no source yet
             Object(NonMatching, "jaudio/audiomesg.c"),
             Object(NonMatching, "jaudio/ipl_8133CB60.c"),  # IPL-only, no source yet
