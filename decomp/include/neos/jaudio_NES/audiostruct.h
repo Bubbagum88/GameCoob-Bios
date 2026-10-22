@@ -502,17 +502,17 @@ typedef struct sub_ {
     /* 0x48 */ note* note;
     /* 0x4C */ voicetable* voicetable;
     /* 0x50 */ group* group;
-    /* 0x54 */ struct note_* note_layers[4];
-    /* 0x64 */ macro macro_player;
-    /* 0x80 */ env adsr_env;
-    /* 0x88 */ chnode channel_node;
-    /* 0xC8 */ s8 port[8];
-    /* 0xD0 */ u8* sfx_state;
-    /* 0xD4 */ s16* filter;
-    /* 0xD8 */ phase stereo_phase;
-    /* 0xDC */ s32 sample_start_pos;
-    /* 0xE0 */ s32 _E0;
-    /* 0xE4 */ u8 _unk[0x100 - 0x0E4];
+    /* 0x54 */ struct note_* note_layers[8]; /* IPL: 8 (AC 4) */
+    /* 0x74 */ macro macro_player;
+    /* 0x90 */ env adsr_env;
+    /* 0x98 */ chnode channel_node;
+    /* 0xD8 */ s8 port[8];
+    /* 0xE0 */ u8* sfx_state;
+    /* 0xE4 */ s16* filter;
+    /* 0xE8 */ phase stereo_phase;
+    /* 0xEC */ s32 sample_start_pos;
+    /* 0xF0 */ s32 _E0;
+    /* 0xF4 */ u8 _unk[0x100 - 0x0F4];
 } sub;
 
 /* sizeof(group) == 0x160 */
@@ -892,9 +892,9 @@ typedef struct AudioGlobals {
     /* 0x34FC */ DataHeapstrc cache_heap;
     /* 0x3504 */ StayHeapstrc persistent_common_heap_info;
     /* 0x3510 */ StayHeapstrc temporary_common_heap_info;
-    /* 0x351C */ u8 wave_load_status[172];
-    /* 0x35C8 */ u8 bank_load_status[172];
-    /* 0x3674 */ u8 sequence_load_status[252];
+    /* 0x351C */ u8 wave_load_status[32]; /* IPL: 32 (AC 172) */
+    /* 0x35C8 */ u8 bank_load_status[32];
+    /* 0x3674 */ u8 sequence_load_status[256];
     /* 0x3770 */ volatile u8 reset_status;
     /* 0x3771 */ u8 spec_id;
     /* 0x3774 */ s32 audio_reset_fadeout_frames_left;
@@ -902,10 +902,10 @@ typedef struct AudioGlobals {
     /* 0x377C */ u64* audio_heap_p;
     /* 0x3780 */ s32 audio_heap_size;
     /* 0x3784 */ channel* channels;
-    /* 0x3788 */ struct group_ groups[AUDIO_GROUP_MAX];
+    /* 0x3788 */ struct group_ groups[AUDIO_GROUP_NUM];
     /* 0x3E68 */ note notes[AUDIO_NOTE_MAX];
     /* 0x8668 */ sub null_sub_track; /* used for 'null' sub tracks */
-    /* 0x8748 */ group* groups_p[AUDIO_GROUP_MAX];
+    /* 0x8748 */ group* groups_p[AUDIO_GROUP_NUM];
     /* 0x877C */ s32 sample_state_offset;
     /* 0x8780 */ link note_link;
     /* 0x8790 */ chnode channel_node; /* main chnode */
@@ -914,7 +914,7 @@ typedef struct AudioGlobals {
     /* 0x8A30 */ u8 thread_cmd_write_pos;
     /* 0x8A31 */ u8 thread_cmd_read_pos;
     /* 0x8A32 */ u8 thread_cmd_queue_finished;
-    /* 0x8A34 */ u16 thread_cmd_group_mask[AUDIO_GROUP_MAX];
+    /* 0x8A34 */ u16 thread_cmd_group_mask[AUDIO_GROUP_NUM];
     /* 0x8A40 */ OSMesgQueue* spec_change_mq_p;
     /* 0x8A44 */ OSMesgQueue* task_start_mq_p;
     /* 0x8A48 */ OSMesgQueue* thread_cmd_proc_mq_p;

@@ -27,6 +27,7 @@ extern "C" {
 #define AUDIO_ARAM_HEAP_SIZE 0xC000
 
 #define AUDIO_GROUP_MAX 5
+#define AUDIO_GROUP_NUM 4 /* IPL AudioGlobals has 4 groups (AC 5) */
 #define AUDIO_SUBTRACK_NUM 16
 #define AUDIO_NOTE_MAX 128
 #define AUDIO_SUBTRACK_NOTE_NUM 4
