@@ -149,6 +149,15 @@ void Nas_CpuFX(s32 chunkLen, s32 updateIdx, s32 reverbIdx) {
     }
 }
 
+// IPL-only: echo line buffer transfers (not in AC).
+void Nas_LoadEchoBuf(Acmd* cmd, s16* buf, s32 pos, s32 len, s32 dmem) {
+    aLoadBuffer2(cmd, &buf[pos], dmem, len * 2);
+}
+
+void Nas_SaveEchoBuf(Acmd* cmd, s16* buf, s32 pos, s32 len, s32 dmem) {
+    aSaveBuffer2(cmd, &buf[pos], dmem, len * 2);
+}
+
 void __Nas_PushDrvReg(s32 updateIdx) {
     s32 i;
     commonch* common0;
