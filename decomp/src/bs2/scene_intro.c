@@ -745,16 +745,16 @@ void Scene_Draw2DNoDisc(void) {
 static void Scene_DrawList(GlhTextBox *boxes, SthEntry *entries, u16 first, u16 count, u16 y,
                            u16 h, s16 sel, u8 alpha) {
     DispSettings *disp = Disp_GetSettings();
+    GlhTextBox box;
     GXColor hi = { 255, 255, 255, 255 };
     GXColor lo = { 0xF0, 0xE6, 0x00, 0xFF };
-    GlhTextBox box;
     s32 i;
     u32 ofs = first * 8;
 
     hi.a = alpha;
     lo.a = alpha;
-    box = boxes[*(u16 *)((u8 *)entries + ofs)];
-    box.y = y + disp->textPad * 16 + (s32)h / 2;
+    box = boxes[entries[first].box];
+    box.y = (s16)(disp->textPad * 16 + (s32)h / 2) + y;
     GX_Setup2DText();
     for (i = 0; i < count; i++) {
         fn_813095A0(&lo, &lo);
