@@ -30,7 +30,7 @@ extern "C" {
 #define AUDIO_GROUP_NUM 4 /* IPL AudioGlobals has 4 groups (AC 5) */
 #define AUDIO_SUBTRACK_NUM 16
 #define AUDIO_NOTE_MAX 128
-#define AUDIO_SUBTRACK_NOTE_NUM 4
+#define AUDIO_SUBTRACK_NOTE_NUM 8 /* IPL: 8 (AC 4) */
 
 #define AUDIO_TATUMS_PER_BEAT 48
 
