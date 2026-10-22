@@ -11,6 +11,8 @@ detect_strings: true
 write_asm: true
 fill_gaps: true
 block_relocations:
+# word in the app's .data asset blob that only looks like a pointer into dvdthread's CALLSTACK
+- source: .data:0x81436730
 # word in the app's .data asset blob that only looks like a pointer into audiothread's stacks
 - source: .data:0x8145F484
 # word in the app's .data asset blob that only looks like a pointer into neosthread's task_buf

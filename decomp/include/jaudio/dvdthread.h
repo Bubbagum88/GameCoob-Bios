@@ -31,6 +31,7 @@ typedef struct DVDCall_ {
 // Global functions (all C++, so no extern C wrap).
 void DVDT_SetRootPath(immut char* path);
 void DVDT_ExtendPath(char* dst, immut char* ext);
+s32 DVDT_AddTaskHigh(TaskCallback callback, void* stack, size_t len);
 s32 DVDT_AddTask(TaskCallback callback, void* stack, size_t len);
 void jac_dvdproc_init();
 void* jac_dvdproc(void*);
@@ -40,7 +41,10 @@ void DVDT_SetBuffer(u8*, u32, u32);
 s32 DVDT_CloseBuffer(u8*);
 s32 DVDT_LoadtoARAM_Main(void*);
 s32 DVDT_LoadtoARAM(u32 owner, immut char* name, u32 dst, u32 src, u32 length, u32* status, Jac_DVDCallback callback);
+s32 DVDT_ARAMtoDRAM(u32 owner, u32 dst, u32 src, u32 length, u32* status, Jac_DVDCallback callback);
+s32 DVDT_DRAMtoARAM(u32 owner, u32 dst, u32 src, u32 length, u32* status, Jac_DVDCallback callback);
 s32 DVDT_CheckFile(immut char* file);
+s32 Jac_CheckFile(immut char* file);
 s32 DVDT_LoadFile(immut char* file, u8* dst);
 void DVDT_CheckPass(u32 owner, u32* status, Jac_DVDCallback callback);
 s32 Jac_RegisterExtFastOpen(immut char* ext);
