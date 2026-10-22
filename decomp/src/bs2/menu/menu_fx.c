@@ -83,6 +83,8 @@ void fn_813307B4(void);
 void fn_81330518(GXColor* a, GXColor* b, GXColor* c, GXColor* out, f32 t, f32 u);
 
 void Fx_EmitSparks(FxCube* cubes);
+u16* fn_81332008(void);
+u16 fn_81332070(void);
 FxCube* fn_8133491C(void);
 u16* fn_8133166C(void);
 u16 fn_813316D4(void);
@@ -1250,4 +1252,63 @@ void FxOption_ChangeUiLang(s32 from, s32 to) {
 /* 0x8132DE98: current position of the language list. */
 f32 fn_8132DE98(void) {
     return Hermite(sFxSlide.t, 0.0f, sFxSlide.from, 0.0f, 10.0f, sFxSlide.to, 0.0f);
+}
+
+#define FX_PLACE_ITEM(listFn, countFn, line)                                          \
+    list = listFn();                                                                \
+    fn_8132C830(&o, sFxCube, list, countFn());                                      \
+    for (i = 0; i < countFn(); i++) {                                               \
+        sFxCube[list[i]].pos.x += Menu_Get()->fxItem[line].x;                       \
+        sFxCube[list[i]].pos.y += Menu_Get()->fxItem[line].y;                       \
+        Fx_ScaleAbout(&o, Menu_Get()->fxItem[line].scale, Menu_Get()->fxItem[line].scale, \
+                      Menu_Get()->fxItem[line].scale, &sFxCube[list[i]]);           \
+    }
+
+#define FX_GROW_ITEM(listFn, countFn, line)                                           \
+    list = listFn();                                                                \
+    fn_8132C830(&o, sFxCube, list, countFn());                                      \
+    for (i = 0; i < countFn(); i++) {                                               \
+        Fx_ScaleAbout(&o,                                                           \
+                      1.0f + Fx_Lit(list[i]) * Menu_Get()->fxItem[line].spacing,    \
+                      1.0f + Fx_Lit(list[i]) * Menu_Get()->fxItem[line].spacing,    \
+                      1.0f + Fx_Lit(list[i]) * Menu_Get()->fxItem[line].spacing,    \
+                      &sFxCube[list[i]]);                                           \
+    }
+
+/* 0x8132DEFC: lay out the Calendar date and time lines. */
+void fn_8132DEFC(void) {
+    s32 i;
+    u16* list;
+    Vec o;
+
+    FX_PLACE_ITEM(fn_813315C8, fn_81331630, 0)
+    FX_PLACE_ITEM(fn_813311F4, fn_81331258, 1)
+    switch (sFxState.v[6]) {
+    case 1:
+        switch (sFxState.v[8]) {
+        case 0:
+            FX_GROW_ITEM(fn_81332008, fn_81332070, 0)
+            break;
+        case 1:
+            FX_GROW_ITEM(fn_81331C30, fn_81331C98, 0)
+            break;
+        case 2:
+            FX_GROW_ITEM(fn_8133166C, fn_813316D4, 0)
+            break;
+        }
+        break;
+    case 2:
+        switch (sFxState.v[9]) {
+        case 0:
+            FX_GROW_ITEM(fn_81331858, fn_813318C0, 1)
+            break;
+        case 1:
+            FX_GROW_ITEM(fn_81331A44, fn_81331AAC, 1)
+            break;
+        case 2:
+            FX_GROW_ITEM(fn_81331E1C, fn_81331E84, 1)
+            break;
+        }
+        break;
+    }
 }
