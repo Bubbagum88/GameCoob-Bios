@@ -33,9 +33,18 @@ static u8 ext_mixmode                = MixMode_Mono;
 void Jac_HeapSetup(void* heap, s32 size)
 {
 	if (heap) {
+		u8* end = (u8*)heap + size;
+		// "memory is assigned from the main side, initialising the audio heap"
+		OSReport("\n\201\364Jac/AI/Heap:: \203\201\203C\203\223\202\251\202\347\203\201\203\202\203\212\202\360\216w\222\350\202\263\202\352\202\334\202\265\202\275\202\314\202\305\n");
+		OSReport("                  \203I\201[\203f\203B\203I\203q\201[\203v\202\360\217\211\212\372\211\273\202\265\202\334\202\267\n");
 		Nas_HeapInit(&audio_hp, (u8*)heap, size);
+		// "addresses %x to %x are usable"
+		OSReport("\201\364Jac/AI/Heap:: \203A\203h\203\214\203X\201@%x \202\251\202\347 %x \202\334\202\305\216g\227p\211\302\224\\\202\305\202\267\n", heap, end - 1);
 		audio_hp_exist = TRUE;
 	} else {
+		// "no memory assigned from the main side, using OSAlloc without an audio heap"
+		OSReport("\n\201\364Jac/AI/Heap:: \203\201\203C\203\223\202\251\202\347\202\314\203\201\203\202\203\212\216w\222\350\202\252\202\240\202\350\202\334\202\271\202\361\202\314\202\305\n");
+		OSReport("                  \203I\201[\203f\203B\203I\203q\201[\203v\202\360\212m\225\333\202\271\202\270\202\311OSAlloc\202\360\216g\227p\202\265\202\334\202\267\n");
 		audio_hp_exist = FALSE;
 	}
 }
@@ -55,13 +64,15 @@ void GetAudioHeapRemain(void)
  */
 void* OSAlloc2(u32 size)
 {
-	u32* REF_size;
-
 	void* alloc;
 	BOOL enabled;
 
-	enabled  = OSDisableInterrupts();
-	REF_size = &size;
+	Console_printf("\201\364Jac/Alloc2:: Request SIZE %d\n", size);
+	if (audio_hp_exist == FALSE) {
+		// "the audio heap has not been set up"
+		OSReport("\201\364Jac/Alloc2:: \203I\201[\203f\203B\203I\203q\201[\203v\202\252\212m\225\333\202\263\202\352\202\304\202\242\202\334\202\271\202\361\n");
+	}
+	enabled = OSDisableInterrupts();
 	switch (audio_hp_exist) {
 	case FALSE:
 	{
@@ -94,18 +105,25 @@ void OSFree2(void)
  */
 void Jac_Init()
 {
-	volatile int i;
+	s16** thisDac;
+	int i;
+	STACK_PAD_VAR(2);
+	// "initialising the Jac system"
+	OSReport("\n\201\364Jac/AI/Init:: Jac\203V\203X\203e\203\200\202\360\217\211\212\372\211\273\202\265\202\334\202\267\n");
 	for (i = 0; i < 3; i++) {
-		void* alloc   = OSAlloc2(DAC_SIZE * 2);
-		s16** thisDac = &dac[i];
-		*thisDac      = (s16*)alloc;
+		void* alloc = OSAlloc2(DAC_SIZE * 2);
+		thisDac     = &dac[i];
+		*thisDac    = (s16*)alloc;
+		// "internal DAC buffer %d= %x"
+		OSReport("\201\364Jac/AI/Init:: \223\340\225\224DAC\203o\203b\203t\203@%d= %x\n", i, *thisDac);
 		Jac_bzero(*thisDac, DAC_SIZE * 2);
 		DCStoreRange(*thisDac, DAC_SIZE * 2);
 	}
 
 	AIInit(NULL);
 	AIInitDMA((u32)dac[2], DAC_SIZE * 2);
-	STACK_PAD_VAR(4);
+	// "JAC system initialisation finished"
+	OSReport("\201\364Jac/AI/Init:: JAC\203V\203X\203e\203\200\202\314\217\211\212\372\211\273\202\252\217I\227\271\202\265\202\334\202\265\202\275\n\n");
 }
 
 /**
