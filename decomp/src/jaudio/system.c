@@ -631,6 +631,7 @@ static u8* __Load_Ctrl(s32 bank_id) {
     s32 did_alloc;
     WaveMedia wave_media;
     s32 link_id = __Link_BankNum(BANK_TABLE, bank_id);
+    STACK_PAD_VAR(2);
 
     if (AG.bank_load_status[link_id] == LOAD_STATUS_IN_PROGRESS) {
         return NULL;
@@ -1364,6 +1365,7 @@ static smzwavetable* __GetWaveTable(s32 bank_id, s32 inst_id) {
 }
 
 static void __SwapLoadLps(lpscache* cache) {
+    STACK_PAD_VAR(2);
     if (cache->sample.sample != NULL) {
         smzwavetable* wavetable = __GetWaveTable(cache->seq_or_bank_id, cache->inst_id);
 
@@ -1622,6 +1624,7 @@ static void __BgCopyFinishProcess(Bgload* bgload) {
 }
 
 static void __BgCopySub(Bgload* bgload, s32 reset_status) {
+    STACK_PAD_VAR(1);
     ArcHeader* header = AG.wave_header;
 
     if (bgload->delay > 1) {
@@ -1851,6 +1854,7 @@ s32 Nas_CheckBgWave(s32 reset_status) {
     u32 preload_idx;
     s32 key;
     s32 n_chunks;
+    STACK_PAD_VAR(6);
 
     if (AG.num_requested_samples > 0) {
         if (reset_status != 0) {
@@ -2057,6 +2061,7 @@ void WaveReload(s32 bank_id, s32 async, WaveMedia* wavemedia) {
 }
 
 void EmemReload(void) {
+    STACK_PAD_VAR(1);
     s32 i;
     s32 bank_id;
     ArcHeader* header;

@@ -170,6 +170,7 @@ void __Nas_PushDrvReg(s32 updateIdx) {
 }
 
 extern Acmd* Nas_smzAudioFrame(Acmd* cmdStart, s32* cmdCount, s16* aiStart, s32 aiBufLen) {
+    STACK_PAD_VAR(1);
     Acmd* cmdP;
     s16* aiBufP;
     s32 chunkLen;

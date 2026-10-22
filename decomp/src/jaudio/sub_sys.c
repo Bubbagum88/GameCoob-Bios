@@ -176,6 +176,7 @@ static void Nap_AudioSysProcess(AudioPort* port) {
 }
 
 static void __Nas_GroupFadeOut(s32 groupId, s32 fadeout_time) {
+    STACK_PAD_VAR(1);
     group* group = AG.groups_p[groupId];
 
     if (fadeout_time == 0) {
@@ -200,6 +201,7 @@ static void __Nas_GroupFadeIn(s32 groupId, s32 fadein_time) {
 }
 
 extern void Nap_AudioPortInit(void) {
+    STACK_PAD_VAR(8);
     AG.thread_cmd_write_pos = 0;
     AG.thread_cmd_read_pos = 0;
     AG.thread_cmd_queue_finished = FALSE;
@@ -211,7 +213,6 @@ extern void Nap_AudioPortInit(void) {
     Z_osCreateMesgQueue(AG.task_start_mq_p, AG.task_start_msg_buf, ARRAY_COUNT(AG.task_start_msg_buf));
     Z_osCreateMesgQueue(AG.thread_cmd_proc_mq_p, AG.thread_cmd_proc_msg_buf, ARRAY_COUNT(AG.thread_cmd_proc_msg_buf));
     Z_osCreateMesgQueue(AG.spec_change_mq_p, AG.spec_change_msg_buf, ARRAY_COUNT(AG.spec_change_msg_buf));
-    AG.spec_change_mq_p->validCount;
 }
 
 static void Nap_PortSet(u32 data, s32* param_p) {
@@ -412,6 +413,7 @@ extern s8 Nap_ReadGrpPort(s32 groupId, s32 portId) {
 }
 
 static void __SetGrpParam(group* group, AudioPort* port) {
+    STACK_PAD_VAR(1);
     f32 fade_vol;
 
     switch (port->command.opcode) {

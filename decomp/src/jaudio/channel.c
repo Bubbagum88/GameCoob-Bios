@@ -857,6 +857,7 @@ static channel* __Nas_ChLookRelease(chnode* node, note* n) {
 }
 
 static channel* __Nas_ChLookRelWait(chnode* node, note* n) {
+    STACK_PAD_VAR(3);
     channel* relWaitChan;
     channel* useChan;
     s32 relWaitPrio;

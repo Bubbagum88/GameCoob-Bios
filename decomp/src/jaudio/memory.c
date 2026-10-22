@@ -194,6 +194,7 @@ void* Nas_NcHeapAlloc_CL(ALHeap* heap, s32 size) {
  * Size:	000054
  */
 void* Nas_HeapAlloc_CL(ALHeap* heap, s32 size) {
+    STACK_PAD_VAR(1);
     // int i;
     void* ret = Nas_HeapAlloc(heap, size);
     if (ret != NULL) {
