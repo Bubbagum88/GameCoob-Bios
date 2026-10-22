@@ -37,7 +37,7 @@ void J3D_SetViewMtx(J3DModelInstance* inst, MtxPtr view);              /* 0x8130
 
 /* BS2 math helpers */
 void MtxRotTrans(s16 rx, s16 ry, s16 rz, Mtx m, f32 tx, f32 ty, f32 tz); /* 0x813073B4 */
-f32 SinS(s32 angle);                                                    /* 0x81307CD0 */
-f32 CosS(s32 angle);                                                    /* 0x81307CEC */
+f32 SinS(s16 angle);                                                    /* 0x81307CD0 */
+f32 CosS(s16 angle);                                                    /* 0x81307CEC */
 
 #endif
