@@ -614,7 +614,7 @@ config.libs = [
             Object(Matching, "jaudio/dspproc.c", mw_version="GC/1.2.5"),
             Object(Matching, "jaudio/ipldec.c", mw_version="GC/1.2.5"),
             Object(Matching, "jaudio/dsp_cardunlock.c"),
-            Object(NonMatching, "jaudio/driverinterface.c"),
+            Object(Matching, "jaudio/driverinterface.c"),
             Object(Matching, "jaudio/dspdriver.c"),
             Object(Matching, "jaudio/dspinterface.c"),
             Object(Matching, "jaudio/fxinterface.c"),

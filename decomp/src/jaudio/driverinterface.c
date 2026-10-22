@@ -8,7 +8,8 @@
 #include "jaudio/ja_calc.h"
 #include <stddef.h>
 
-#include <stddef.h>
+#include "jaudio/dummyprobe.h"
+#include "jaudio/sdk.h"
 
 #define CHANNEL_SIZE (0x100)
 
@@ -71,11 +72,14 @@ int List_CountChannel(jc_** jc)
 
 /**
  * @TODO: Documentation
- * @note UNUSED Size: 000044
+ * BS2: 8134E5A0, size 0x44 (unused in Pikmin)
  */
-void Check_GlobalActiveChannel()
+int Check_GlobalActiveChannel()
 {
-	TRAP_UNIMPLEMENTED;
+	int active    = List_CountChannel(&GLOBAL_CHANNEL.activeChannels);
+	int releasing = List_CountChannel(&GLOBAL_CHANNEL.releasingChannels);
+	STACK_PAD_VAR(4);
+	return active + releasing;
 }
 
 /**
@@ -90,10 +94,19 @@ void Check_GlobalRelease(jc_** jc)
 /**
  * @TODO: Documentation
  * @note UNUSED Size: 00006C
+ * Not in BS2's text (dead-stripped), but its two strings head BS2's rodata, so this
+ * debug dump is a guess that only has to emit them first.
  */
 void List_GlobalChannel()
 {
-	TRAP_UNIMPLEMENTED;
+	jc_* jc;
+	for (jc = GLOBAL_CHANNEL.releasingChannels; jc; jc = jc->nextChan) {
+		OSReport("Rel.Jc (%x) Have DSPch  %x\n", jc, jc->dspChannel);
+		if (jc->dspChannel) {
+			OSReport(" DSPch Sign/Stat/CB is %x, %x, %x\n", jc->dspChannel->logicalChan, jc->dspChannel->allocState,
+			         jc->dspChannel->logicalChanCb);
+		}
+	}
 }
 
 /**
@@ -113,6 +126,7 @@ int List_CutChannel(jc_* jc)
 	while (TRUE) {
 		num++;
 		if (chan == NULL) {
+			Console_printf("Error: No Member\n");
 			return -1;
 		}
 
@@ -151,7 +165,10 @@ jc_* List_GetChannel(jc_** jc)
  */
 void List_AddChannelTail(jc_** jc, jc_* in)
 {
-	jc_* chan        = *jc;
+	jc_* chan = *jc;
+	if (in->chanListHead) {
+		OSReport("ROOTJC Error\n");
+	}
 	in->chanListHead = jc;
 
 	if (chan == NULL) {
@@ -177,7 +194,10 @@ void List_AddChannelTail(jc_** jc, jc_* in)
  */
 void List_AddChannel(jc_** jc, jc_* in)
 {
-	jc_* chan        = *jc;
+	jc_* chan = *jc;
+	if (in->chanListHead) {
+		OSReport("ROOTJC Error2\n");
+	}
 	in->chanListHead = jc;
 	*jc              = in;
 	in->nextChan     = chan;
@@ -188,9 +208,9 @@ void List_AddChannel(jc_** jc, jc_* in)
  */
 int FixAllocChannel(jcs_* sys, u32 size)
 {
-	jcs_** REF_sys = &sys;
-	u32* REF_size  = &size;
-	int num        = 0;
+	int num;
+	Console_printf("Jcs %x : Allocate %d Channels \n", sys, size);
+	num = 0;
 	while (num < size) {
 		jc_* chan = List_GetChannel(&GLOBAL_CHANNEL.freeChannels);
 		if (chan == NULL) {
@@ -772,45 +792,46 @@ static void KillBrokenLogicalChannels(dspch_* ch)
  */
 static int CommonCallbackLogicalChannel(dspch_* ch, u32 eventType)
 {
-	u32 activeOscCount = 0;
-	jc_* jc            = ch->logicalChan;
+	jc_* jc;
 	u32 oscIndex;
-	dspch_** REF_ch = &ch;
-	jc_** REF_jc    = &jc;
-	STACK_PAD_VAR(10);
+	u32 activeOscCount;
+	STACK_PAD_VAR(2);
 
-	// Handle null logical channel - cleanup and return
-	if (jc == NULL) {
-		ch->logicalChanCb = NULL;
-		ch->prio          = 0;
-		KillBrokenLogicalChannels(ch);
-		return DSPCHAN_CALLBACK_STOP;
-	}
+	activeOscCount = 0;
+	jc             = ch->logicalChan;
 
 	// Verify channel relationship integrity
 	if (jc->dspChannel != ch) {
-		if (jc->dspChannel && jc->dspChannel->logicalChan == jc) {
-			KillBrokenLogicalChannels(ch);
+		// "logical channel and physical channel link is broken"
+		OSReport("\230_\227\235\203`\203\203\203\223\203l\203\213\202\306\225\250\227\235\203`\203\203\203\223\203l\203\213\202\314\214\213\215\207\224j\222]\n");
+		OSReport("PHY. %x Log->phy. %x\n", ch, jc->dspChannel);
+		OSReport("Log. %x phy->log. %x\n", jc, ch->logicalChan);
+		if (jc->dspChannel) {
+			OSReport("Log->phy->log  %x\n", jc->dspChannel->logicalChan);
+		}
+		ForceStopDSPchannel(ch);
+		StopLogicalChannel(jc);
+		if (List_CutChannel(jc) == -1) {
+			OSReport("Cut\202\305\202\253\202\310\202\242\n"); // "can't cut"
 		} else {
-			StopLogicalChannel(jc);
-			if (List_CutChannel(jc) != -1) {
-				List_AddChannel(&jc->chanMgr->freeChannels, jc);
-			}
+			List_AddChannel(&jc->chanMgr->freeChannels, jc);
 		}
 
-		ch->logicalChan   = 0;
-		ch->prio          = 0;
-		ch->logicalChanCb = nullptr;
+		ch->logicalChan = 0;
 		return DSPCHAN_CALLBACK_STOP;
 	}
 
 	// Handle completion event
 	if (eventType == DSPCHCB_Completion) {
+		Console_printf("DSPSTOP (JC= %x)\n", jc);
+		Console_printf("-->call %8x\n", jc->updateCallback);
 		if (jc->updateCallback) {
 			jc->updateCallback(jc, JCSTAT_Unk1);
 		} else {
 			StopLogicalChannel(jc);
-			if (List_CutChannel(jc) != -1) {
+			if (List_CutChannel(jc) == -1) {
+				OSReport("Cut\202\305\202\253\202\310\202\242\n");
+			} else {
 				List_AddChannel(&jc->chanMgr->freeChannels, jc);
 			}
 		}
@@ -838,11 +859,14 @@ static int CommonCallbackLogicalChannel(dspch_* ch, u32 eventType)
 	if (eventType == DSPCHCB_StateChange) {
 		jc->mOscBuffers[0].state = 6;
 		if (List_CutChannel(jc) == -1) {
+			Console_printf("\201\364Jesus/DrvIF/CommonCB:: Error: Cut\202\305\202\253\202\334\202\271\202\361\n");
 			return DSPCHAN_CALLBACK_CONTINUE;
 		}
 
 		List_AddChannel(&jc->chanMgr->waitingChannels, jc);
 		eventType = 0;
+		// "starting FORCESTOP"
+		Console_printf("--------FORCESTOP \212J\216n\202\265\202\334\202\267 (PHY.%x ) (JC =%x) \n", ch, jc);
 	}
 
 	// Handle normal update processing
@@ -856,20 +880,26 @@ static int CommonCallbackLogicalChannel(dspch_* ch, u32 eventType)
 
 		// Process all oscillators
 		for (oscIndex = 0; oscIndex < 4; oscIndex++) {
-			u32* REF_i = &oscIndex;
 			if (jc->mOscillators[oscIndex]) {
 				DoEffectOsc(jc, jc->mOscillators[oscIndex]->mode, Bank_OscToOfs(jc->mOscillators[oscIndex], &jc->mOscBuffers[oscIndex]));
 
 				// Check if oscillator finished
 				if (jc->mOscBuffers[oscIndex].state == 0) {
+					// "envelope %d stopped"
+					Console_printf("\201\364Jesus/DrvIF/Callback::\203G\203\223\203x\203\215\201[\203v %d \222\342\216~\202\265\202\334\202\265\202\275\n", oscIndex);
+					// "FINISH request from the oscillator"
+					Console_printf("\201\364Jesus/DRVINT:\203I\203V\203\214\201[\203^ \202\251\202\347\202\314FINISH\203\212\203N\203G\203X\203g\224\255\220\266\n");
 					if (jc->updateCallback == NULL) {
 						// No callback - stop channel immediately
+						OSReport("Error: JC\222\342\216~\202\314\202\275\202\337\202\314UPDATECALL\202\252NULL\202\305\202\305\202\253\202\310\202\242(JC %x)\n", jc);
 						if (StopLogicalChannel(jc) == FALSE) {
 							DSP_PlayStop(ch->buffer_idx);
 							DSP_FlushChannel(ch->buffer_idx);
 						}
 
-						if (List_CutChannel(jc) != -1) {
+						if (List_CutChannel(jc) == -1) {
+							OSReport("Cut\202\305\202\253\202\310\202\242\n");
+						} else {
 							List_AddChannel(&jc->chanMgr->freeChannels, jc);
 						}
 						return DSPCHAN_CALLBACK_STOP;
@@ -907,6 +937,8 @@ static int CommonCallbackLogicalChannel(dspch_* ch, u32 eventType)
 
 	// Handle callback timing and notification
 	if (jc->lastNotePlayed == 0) {
+		// "UPDATE request from the timer"
+		Console_printf("\201\364Jesus/DRVINT:\203^\203C\203}\201[ \202\251\202\347\202\314UPDATE\203\212\203N\203G\203X\203g\224\255\220\266\n");
 		jc->updateCallback(jc, JCSTAT_Unk0);
 		jc->lastNotePlayed = jc->noteId;
 	}
@@ -927,6 +959,9 @@ BOOL StopLogicalChannel(jc_* jc)
 {
 	dspch_* ch = jc->dspChannel;
 	if (ch == NULL) {
+		// "no physical DSP channel is assigned"
+		Console_printf("\201\364Jesus/DrvIF/Stop:: \225\250\227\235DSP\203`\203\203\203\223\203l\203\213\202\252\203A\203T\203C\203\223\202\263\202\352\202\304\202\242\202\334\202\271\202\361\n");
+		Console_printf("---------------- \225\250\227\235DSP\203`\203\203\203\223\203l\203\213\202\252\203A\203T\203C\203\223\202\263\202\352\202\304\202\242\202\334\202\271\202\361\n");
 		return FALSE;
 	}
 
@@ -934,7 +969,10 @@ BOOL StopLogicalChannel(jc_* jc)
 	jc->dspChannel->callbackTimer = 0;
 	DSP_PlayStop(jc->dspChannel->buffer_idx);
 	DSP_FlushChannel(jc->dspChannel->buffer_idx);
-	DeAllocDSPchannel(jc->dspChannel, (u32)jc);
+	if ((u32)DeAllocDSPchannel(jc->dspChannel, (u32)jc) != 0) {
+		// "failed to release the physical voice"
+		Console_printf("-----------------: \225\250\227\235\203{\203C\203X\202\314\225\324\213p\202\311\216\270\224s\202\265\202\334\202\265\202\275\n");
+	}
 	jc->dspChannel = NULL;
 	return TRUE;
 }
@@ -945,6 +983,8 @@ BOOL StopLogicalChannel(jc_* jc)
 BOOL CheckLogicalChannel(jc_* jc)
 {
 	if (jc->waveData == NULL && jc->logicalChanType == 0) {
+		// "no waveform is assigned"
+		Console_printf("\201\364Jesus/DrvIF/Play:: \224g\214`\202\252\203A\203T\203C\203\223\202\263\202\352\202\304\202\242\202\334\202\271\202\361\n");
 		return FALSE;
 	}
 	return TRUE;
@@ -956,6 +996,8 @@ BOOL CheckLogicalChannel(jc_* jc)
 BOOL PlayLogicalChannel(jc_* jc)
 {
 	if (jc->dspChannel == NULL) {
+		// "no physical DSP channel is assigned"
+		Console_printf("\201\364Jesus/DrvIF/Play:: \225\250\227\235DSP\203`\203\203\203\223\203l\203\213\202\252\203A\203T\203C\203\223\202\263\202\352\202\304\202\242\202\334\202\271\202\361\n");
 		return FALSE;
 	}
 	if (CheckLogicalChannel(jc) == FALSE) {
@@ -984,23 +1026,6 @@ BOOL PlayLogicalChannel(jc_* jc)
 
 	for (u32 i = 0; i < 6; i++) {
 		MixConfig bus = jc->busRouting[i];
-#if defined(VERSION_GPIE01_00) || defined(VERSION_GPIJ01_01) || defined(VERSION_G98P01_PIKIDEMO) || defined(VERSION_DPIJ01_PIKIDEMO)
-#else
-		if (JAC_SYSTEM_OUTPUT_MODE == 0) {
-			switch (bus.parts.upper) {
-			case 8:
-			{
-				bus.parts.upper = 11;
-				break;
-			}
-			case 9:
-			{
-				bus.parts.upper = 2;
-				break;
-			}
-			}
-		}
-#endif
 		DSP_SetBusConnect(jc->dspChannel->buffer_idx, i, bus.parts.upper);
 	}
 
@@ -1020,6 +1045,7 @@ BOOL PlayLogicalChannel(jc_* jc)
 BOOL ResetInitialVolume(jc_* jc)
 {
 	if (jc->dspChannel == NULL) {
+		Console_printf("\201\364Jesus/DrvIF/Play:: \225\250\227\235DSP\203`\203\203\203\223\203l\203\213\202\252\203A\203T\203C\203\223\202\263\202\352\202\304\202\242\202\334\202\271\202\361\n");
 		return FALSE;
 	}
 
@@ -1040,10 +1066,15 @@ BOOL ResetInitialVolume(jc_* jc)
 BOOL Add_WaitDSPChannel(jc_* jc)
 {
 	if (cur_waits == 32) {
+		// "the wait entry list is full"
+		Console_printf("\203E\203G\203C\203g\202\314\203G\203\223\203g\203\212\201[\202\360\203~\203X\202\350\202\334\202\265\202\275\n");
 		return FALSE;
 	}
 
+	// "force-stop: DSP channel"
+	Console_printf("\213\255\220\247\222\342\216~:DSP\203`\203\203\203\223\203l\203\213\n");
 	if (BreakLowerDSPchannel(jc->channelPriority) == FALSE) {
+		Console_printf("\203u\203\214\201[\203N\202\311\216\270\224s\201F\203v\203\211\203C\203I\203\212\203e\203B\202\252\222\341\202\242(%d)\202\251\201A\221S\202\304\203u\203\214\201[\203N\222\206\202\335\202\275\202\242\202\305\202\267\n", jc->channelPriority);
 		return FALSE;
 	}
 
@@ -1055,9 +1086,9 @@ BOOL Add_WaitDSPChannel(jc_* jc)
 	if (cur_tail == 32) {
 		cur_tail = 0;
 	}
+	// "registered in the wait entry list"
+	Console_printf("\203E\203G\203C\203g\202\314\203G\203\223\203g\203\212\201[\202\360\215s\202\242\202\334\202\265\202\275\n");
 	return TRUE;
-
-	STACK_PAD_VAR(2);
 }
 
 /**
@@ -1083,18 +1114,25 @@ void __Entry_WaitChannel(u8 a)
 {
 	jc_* jc;
 	dspch_* ch;
-	STACK_PAD_VAR(2);
 
 	while (cur_waits != 0) {
 		jc = waitp[cur_top];
 		if (jc) {
+			if (jc->dspChannel) {
+				OSReport("------------\202\267\202\305\202\311\202\261\202\242\202\302\202\315DSP\203`\203\203\203\223\203l\203\213\202\360\216\235\202\301\202\304\202\250\202\351\202\314\202\305\201A\217\234\212O\202\271\202\346\n");
+			}
 			ch = AllocDSPchannel(0, (u32)jc);
 			if (ch == NULL) {
+				Console_printf("\202\250\202\251\202\265\202\242\202\310\201A\213\363\202\242\202\304\202\310\202\242\202\274\n");
 				break;
 			}
 			jc->dspChannel = ch;
-			PlayLogicalChannel(jc);
-			if (List_CutChannel(jc) != -1) {
+			if (PlayLogicalChannel(jc) == FALSE) {
+				OSReport("\202\240\202\350\202\246\202\310\202\242\203G\203\211\201[\201F\203E\203G\203C\203g\221\322\202\277\214\343\202\314\203m\201[\203g\203I\203\223\202\305\201A\202\310\202\272\202\251\216\270\224s\n");
+			}
+			if (List_CutChannel(jc) == -1) {
+				Console_printf("\201\364Jesus/DrvIF:: \203E\203G\203C\203g\202\251\202\347\202\314\203G\203\223\203g\203\212\201[\202\305Cut\216\270\224s\n");
+			} else {
 				List_AddChannelTail(&jc->chanMgr->activeChannels, jc);
 			}
 			cur_top++;
@@ -1130,6 +1168,7 @@ void EntryCheck_WaitDSPChannel()
 				jc->noteId--;
 			}
 			if (jc->noteId == 0) {
+				OSReport("\221\322\202\301\202\304\202\242\202\351\212\324\202\311\217\301\202\246\202\304\202\265\202\340\202\244\202\275(%d)\n", jc->lastNotePlayed);
 				jc->updateCallback(jc, JCSTAT_Unk6);
 				waitp[(cur_top + i) & 0x1f] = NULL;
 			}
@@ -1144,8 +1183,11 @@ void EntryCheck_WaitDSPChannel()
  */
 static void Cancel_WaitDSPChannel(jc_* jc)
 {
+	STACK_PAD_VAR(2);
 	for (u32 i = 0; i < cur_waits; i++) {
 		if (waitp[(cur_top + i) & 0x1F] == jc) {
+			// "found in the JCS release list, relwait cancelled"
+			OSReport("JCS\203\212\203\212\201[\203X\202\311\224\272\202\244relwait\203L\203\203\203\223\203Z\203\213\224\255\220\266\n");
 			waitp[(cur_top + i) & 0x1F] = NULL;
 		}
 	}

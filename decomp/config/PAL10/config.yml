@@ -15,6 +15,8 @@ block_relocations:
 - source: .data:0x81475984
 # word in the app's .data asset blob that only looks like a pointer into JAudio's bankp
 - source: .data:0x8145EF74
+# word in the app's .data asset blob that only looks like a pointer into JAudio's CHANNEL
+- source: .data:0x81411434
 
 # Data extracted at build time into build/PAL10/include (never committed)
 extract:
