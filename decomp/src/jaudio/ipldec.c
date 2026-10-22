@@ -40,7 +40,7 @@ static DSPTask* WriteTask(u8 target, u32 cmd, void* task, DSPCallback callback)
  */
 static void DoTask()
 {
-	STACK_PAD_VAR(1);
+	STACK_PAD_VAR(2);
 
 	while (TASK_REMAIN != 0) {
 		DSPTask* dspTask = &EX_DSPTASK[TASK_READPTR];
@@ -50,17 +50,23 @@ static void DoTask()
 		switch (dspTask->target) {
 		case DSPTARGET_IPL:
 		{
+			OSReport("Do CARD Task \n");
 			DiplSec(cmd);
+			OSReport("   CARD Task Finish\n");
 			break;
 		}
 		case DSPTARGET_AGB:
 		{
+			OSReport("Do AGB Task \n");
 			DagbSec(cmd);
+			OSReport("   AGB Task Finish\n");
 			break;
 		}
 		}
 
-		if (cb) {
+		if (!cb) {
+			OSReport(" Audio Error:: DSP_SECURITY_CALLBACK is NULL\n");
+		} else {
 			cb(task);
 		}
 

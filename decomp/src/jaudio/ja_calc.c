@@ -2,12 +2,13 @@
 
 #include "jaudio/sdk.h"
 
-// MSL C++'s std::sqrtf; BS2 keeps it out of line here (sqrtf__3stdFf)
+// MSL C++'s std::sqrtf, kept out of line here (sqrtf__3stdFf). In this older
+// MSL its constants are plain locals, so they land in this unit's .sdata2 pool.
 namespace std {
 inline f32 sqrtf(f32 x)
 {
-	static const f64 _half  = 0.5;
-	static const f64 _three = 3.0;
+	const f64 _half  = 0.5;
+	const f64 _three = 3.0;
 
 	vf32 y;
 	if (x > 0.0f) {

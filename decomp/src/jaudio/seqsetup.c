@@ -1,5 +1,6 @@
 #include "jaudio/seqsetup.h"
 
+#include "jaudio/dummyprobe.h"
 #include "jaudio/driverinterface.h"
 #include "jaudio/fat.h"
 #include "jaudio/jammain_2.h"
@@ -67,12 +68,10 @@ void Jaq_GetRemainFreeTracks(void)
  */
 static BOOL BackTrack(seqp_* track)
 {
-	seqp_** REF_track;
-
-	REF_track         = &track;
 	track->trackState = 0;
 	if (track->isAllocated == 1) {
 		if (SEQ_REMAIN == FREE_SEQP_QUEUE_SIZE) {
+			OSReport("\201\364Jam/setup:: Error : Cannot back sequence structure %x\n", track);
 			return FALSE;
 		}
 
@@ -140,9 +139,13 @@ int DeAllocRoot(seqp_* track)
 	for (i = 0; i < ROOTSEQ_SIZE; ++i) {
 		if (rootseq[i] == track) {
 			rootseq[i] = NULL;
+			// "returned the RootSeq"
+			OSReport("\201\364Jam/Setup::RootSeq\202\360\225\324\213p\202\265\202\334\202\265\202\275\n");
 			return i;
 		}
 	}
+	// "could not return (DeAlloc) the RootSeq"
+	OSReport("\201\364Jam/Setup:: Error : RootSeq\202\360\225\324\213p(DeAlloc)\202\305\202\253\202\334\202\271\202\361\n");
 	return -1;
 }
 
@@ -230,6 +233,7 @@ static void Init_Track(seqp_* track, u32 dataAddress, seqp_* parent)
 		track->regParam.reg[i] = 0;
 	}
 
+	Console_printf("Parent_Relation %d\n", track->flags);
 	if ((track->flags & 2) || !track->parent) {
 		track->regParam.param.arguments[0] = 0;
 		track->regParam.param.arguments[1] = 1;
@@ -349,23 +353,29 @@ s32 Jaq_SetSeqData(seqp_* track, u8* sequenceData, u32 sequenceSize, u32 sourceM
  */
 s32 Jaq_SetSeqData_Limit(seqp_* track, u8* sequenceData, u32 sequenceSize, u32 sourceMode, u8 oneShotMode)
 {
+	u8* trackData;
 	s32 root;
 	BOOL enabled;
-	u8* trackData;
 
 	if (!track) {
 		enabled = OSDisableInterrupts();
 		track   = GetNewTrack();
 		OSRestoreInterrupts(enabled);
 		if (!track) {
+			// "failed to allocate the root sequence struct"
+			OSReport("\203\213\201[\203g\203V\201[\203P\203\223\203X\215\\\221\242\221\314\202\314\212m\225\333\202\311\216\270\224s\202\265\202\334\202\265\202\275\n");
 			return -1;
 		}
+		// "root NULL given => root sequence struct allocated"
+		OSReport("\203\213\201[\203gNULL\216w\222\350\201\313\203\213\201[\203g\203V\201[\203P\203\223\203X\215\\\221\242\221\314\202\314\212m\225\333\202\311\220\254\214\367\202\265\202\334\202\265\202\275\n");
 	} else {
 		track->isAllocated = 0;
 	}
 
 	root = AllocNewRoot(track);
 	if (root == -1) {
+		// "the root sequence pointers are full"
+		OSReport("\203\213\201[\203g\203V\201[\203P\203\223\203X\203|\203C\203\223\203^\202\252\202\242\202\301\202\317\202\242\202\305\202\267\n");
 		return -1;
 	}
 
@@ -380,6 +390,7 @@ s32 Jaq_SetSeqData_Limit(seqp_* track, u8* sequenceData, u32 sequenceSize, u32 s
 	{
 		track->fileHandle = FAT_AllocateMemory(sequenceSize);
 		if (track->fileHandle == 0xffff) { // Isn't this literally impossible?
+			OSReport("Error:: No FAT Memory\n");
 			return -1;
 		}
 		FAT_StoreBlock(sequenceData, track->fileHandle, 0, sequenceSize);
@@ -434,11 +445,13 @@ BOOL Jaq_StartSeq(u32 trackId)
 	u8* pTrackState;
 
 	if (trackId == -1) {
+		OSReport("Jam/Seq::ROOT\202\252\212m\225\333\202\263\202\352\202\304\202\242\202\310\202\242\n"); // "ROOT is not allocated"
 		return FALSE;
 	}
 
 	track = rootseq[trackId];
 	if (!track) {
+		OSReport("Jam/Seq::SEQP\202\252\223o\230^\202\263\202\352\202\304\202\242\202\310\202\242\n"); // "SEQP is not registered"
 		return FALSE;
 	};
 
@@ -446,14 +459,17 @@ BOOL Jaq_StartSeq(u32 trackId)
 	switch (*(pTrackState = &track->trackState)) {
 	case 0:
 	{
+		OSReport("StartSeq:   \217\200\224\365\202\252\202\305\202\253\202\304\202\242\202\334\202\271\202\361\n"); // "not ready"
 		return FALSE;
 	}
 	case 1:
 	{
+		OSReport("StartSeq:   \212\371\202\311\223\256\215\354\222\206\202\305\202\267\n"); // "already running"
 		return FALSE;
 	}
 	case 3:
 	{
+		OSReport("StartSeq: \222\342\216~\222\206\202\305\202\267\n"); // "stopped"
 		return FALSE;
 	}
 	case 2:
@@ -484,8 +500,7 @@ s32 Jaq_OpenTrack(seqp_* track, u32 flags, u32 source)
 	seqp_* newChildTrack;
 	u8 childIndex;
 	u8 trackFlags;
-
-	u8* REF_index;
+	u32 depth;
 
 	childIndex = (flags & 0b00001111);
 	trackFlags = (flags & 0b11000000) >> 6;
@@ -497,8 +512,8 @@ s32 Jaq_OpenTrack(seqp_* track, u32 flags, u32 source)
 		childIndex = Jam_ReadRegDirect(track, childIndex);
 	}
 
-	REF_index = &childIndex;
 	if (childIndex >= 16) {
+		OSReport("\225s\220\263\202\310\203g\203\211\203b\203N\203i\203\223\203o %d\n", childIndex); // "invalid track number"
 		return -1;
 	}
 
@@ -509,12 +524,18 @@ s32 Jaq_OpenTrack(seqp_* track, u32 flags, u32 source)
 
 	newChildTrack = GetNewTrack();
 	if (!newChildTrack) {
+		OSReport("\203g\203\211\203b\203N\202\252\221\253\202\350\202\334\202\271\202\361\n"); // "not enough tracks"
 		return -1;
 	}
 
 	track->children[childIndex] = newChildTrack;
 
-	newChildTrack->trackId        = ((track->trackId << 4 | childIndex) & 0xFFFFFFF) | ((track->trackId & 0xF0000000) + 0x10000000);
+	depth = track->trackId & 0xF0000000;
+	if (depth >= 0x70000000) {
+		// "nesting went past 8 levels, an invalid track ID was made"
+		OSReport("\201\364Jam/Track/Init/Warn::\212K\221w\202\2528\222i\212K\202\360\222\264\202\246\202\304\202\265\202\334\202\242\201A\225s\220\263\202\310\203g\203\211\203b\203NID\202\252\220\266\220\254\202\263\202\352\202\334\202\265\202\275\n");
+	}
+	newChildTrack->trackId        = ((track->trackId << 4 | childIndex) & 0xFFFFFFF) | (depth + 0x10000000);
 	newChildTrack->connectionId   = 0;
 	newChildTrack->dataSourceMode = track->dataSourceMode;
 	newChildTrack->flags          = trackFlags;

@@ -31,8 +31,6 @@ int rand(void);
 void srand(unsigned int seed);
 double atan2(double y, double x);
 
-END_SCOPE_EXTERN_C
-
 // OSFastCast.h is not in BS2's SDK headers yet: the two JAudio uses
 #ifndef _DOLPHIN_OS_OSFASTCAST_H
 #define OS_GQR_U8  (0x0004)
@@ -73,6 +71,8 @@ static inline void OSf32tos8(register f32* in, register s8* out)
 #endif
 }
 #endif
+
+END_SCOPE_EXTERN_C
 
 #ifndef ALIGN_NEXT
 #define ALIGN_PREV(X, N) ((X) & ~((N) - 1))

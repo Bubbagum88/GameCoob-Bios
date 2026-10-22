@@ -11,6 +11,7 @@
 #include "jaudio/dummyprobe.h"
 #include "jaudio/dummyrom.h"
 #include "jaudio/dvdthread.h"
+#include "jaudio/neosthread.h"
 #include "jaudio/ja_calc.h"
 #include "jaudio/playercall.h"
 #include "jaudio/rate.h"
@@ -24,10 +25,12 @@ typedef struct Jac_AudioThread {
 } Jac_AudioThread;
 
 Jac_AudioThread jac_audioThread ATTRIBUTE_ALIGN(32);
-u8 jac_audioStack[AUDIO_STACK_SIZE];
 OSThread jac_neosThread;
 OSThread jac_dvdThread;
-u8 jac_dvdStack[AUDIO_STACK_SIZE] ATTRIBUTE_ALIGN(32);
+
+static u8 jac_audioStack[AUDIO_STACK_SIZE];
+static u8 jac_neosStack[AUDIO_STACK_SIZE];
+static u8 jac_dvdStack[AUDIO_STACK_SIZE];
 
 static OSMessageQueue audioproc_mq;
 static OSMessage msgbuf[AUDIOPROC_MQ_BUF_COUNT];
@@ -55,21 +58,14 @@ int DspSyncCountCheck()
 
 /**
  * @TODO: Documentation
- * @note UNUSED Size: 000008
- */
-void Jac_GetDacRate(void)
-{
-	TRAP_UNIMPLEMENTED;
-}
-
-/**
- * @TODO: Documentation
  * BS2: 81339260, size 0x5c (Pikmin 0x44)
  */
 static void DspSync()
 {
 	if (audioproc_mq_init) {
-		OSSendMessage(&audioproc_mq, AUDIOPROC_MESSAGE_DSP_SYNC, OS_MESSAGE_NOBLOCK);
+		if (OSSendMessage(&audioproc_mq, AUDIOPROC_MESSAGE_DSP_SYNC, OS_MESSAGE_NOBLOCK) == FALSE) {
+			OSReport("DSPSync:: SendMiss\n");
+		}
 	} else {
 		DSPReleaseHalt();
 	}
@@ -133,17 +129,21 @@ static void AudioSync()
 	first = FALSE;
 	Probe_Start(4, "UPDATE-DAC");
 	if (audioproc_mq_init) {
-		OSSendMessage(&audioproc_mq, AUDIOPROC_MESSAGE_UPDATE_DAC, OS_MESSAGE_NOBLOCK);
+		if (OSSendMessage(&audioproc_mq, AUDIOPROC_MESSAGE_UPDATE_DAC, OS_MESSAGE_NOBLOCK) == FALSE) {
+			OSReport("Miss Send AudioSync\n");
+		}
 	}
 }
 
 /**
  * @TODO: Documentation
- * @note UNUSED Size: 00003C
+ * BS2: 813393C0, size 0x3c
  */
 void NeosSync()
 {
-	TRAP_UNIMPLEMENTED;
+	if (audioproc_mq_init) {
+		OSSendMessage(&audioproc_mq, AUDIOPROC_MESSAGE_NEOS_SYNC, OS_MESSAGE_BLOCK);
+	}
 }
 
 /**
@@ -181,31 +181,26 @@ static void __DspReg()
  */
 static void* audioproc(void*)
 {
+	// "the audio thread has started"
+	OSReport("\n\201\364Jac/Thread/Proc:: \203I\201[\203f\203B\203I\203X\203\214\203b\203h\202\252\212J\216n\202\265\202\334\202\265\202\275\n");
 	OSInitFastCast();
 	OSInitMessageQueue(&audioproc_mq, msgbuf, AUDIOPROC_MQ_BUF_COUNT);
 	audioproc_mq_init = TRUE;
-#if defined(VERSION_GPIP01)
-	ResetPlayerCallback();
-	Jac_Init();
-	Jac_InitSinTable();
-#else
 	Jac_Init();
 	Jac_InitSinTable();
 	ResetPlayerCallback();
-#endif
 	DspbufProcess(DSPBUF_EVENT_INIT);
 	CpubufProcess(DSPBUF_EVENT_INIT);
-#if defined(VERSION_GPIP01)
-	DspBoot(DspSync2);
-	DSP_InitBuffer();
-#else
 	DspBoot();
 	DSP_InitBuffer();
 	__DspReg();
-#endif
 	AISetDSPSampleRate(JAC_AI_SETTING);
 	AIRegisterDMACallback(&AudioSync);
 	AIStartDMA();
+	// "audio system initialisation finished"
+	OSReport("\201\364Jac/Thread/Proc::\203I\201[\203f\203B\203I\203V\203X\203e\203\200\202\314\203C\203j\203V\203\203\203\213\202\252\217I\227\271\202\265\202\334\202\265\202\275\n");
+	// "from here on it loops"
+	OSReport("\t\t\t\t\t \202\261\202\261\202\251\202\347\202\315\203\213\201[\203v\202\311\202\310\202\350\202\334\202\267\n\n");
 
 	while (TRUE) {
 		OSMessage msg;
@@ -220,6 +215,8 @@ static void* audioproc(void*)
 		case (int)AUDIOPROC_MESSAGE_DSP_SYNC:
 		{
 			if (intcount == 0) {
+				// "spurious interrupt occurred..."
+				OSReport("\201\364Jac/thread/DSPSync:: \227]\225\252\202\310\212\204\202\350\215\236\202\335\202\252\224\255\220\266...\n");
 				return;
 			}
 
@@ -242,7 +239,11 @@ static void* audioproc(void*)
 		}
 		case (int)AUDIOPROC_MESSAGE_3:
 		{
+			// "ending the audio thread"
+			OSReport("\203I\201[\203f\203B\203I\203X\203\214\203b\203h\202\360\217I\227\271\202\265\202\334\202\267\n");
 			OSExitThread(NULL);
+			// "it's strange if this is displayed"
+			OSReport("\202\261\202\352\202\315\225\\\216\246\202\263\202\352\202\275\202\347\202\250\202\251\202\265\202\242\202\305\202\267\n");
 			break;
 		}
 		}
@@ -258,15 +259,7 @@ static volatile OSPriority pri3 = 0;
 
 /**
  * @TODO: Documentation
- * @note UNUSED Size: 000024
- */
-void SetAudioThreadPriority(void)
-{
-	TRAP_UNIMPLEMENTED;
-}
-
-/**
- * @TODO: Documentation
+ * BS2: 813396C0, size 0x1b8 (Pikmin 0x124)
  */
 void StartAudioThread(void* heap, s32 heapSize, u32 aramSize, u32 flags)
 {
@@ -278,35 +271,47 @@ void StartAudioThread(void* heap, s32 heapSize, u32 aramSize, u32 flags)
 		OSPriority p = pri;
 		pri3         = p + 1;
 		pri2         = p + 2;
+		// "using the default thread priority"
+		OSReport("\201\364Jac/Thread/Init:: \203f\203t\203H\203\213\203g\202\314\203X\203\214\203b\203h\203v\203\211\203C\203I\203\212\203e\203B\222l\202\360\216g\227p\202\265\202\334\202\267\n");
+	} else {
+		// "using the reserved thread priority"
+		OSReport("\201\364Jac/Thread/Init:: \227\\\226\361\215\317\202\335\202\314\203X\203\214\203b\203h\203v\203\211\203C\203I\203\212\203e\203B\222l\202\360\216g\227p\202\265\202\334\202\267\n");
 	}
 
 	u32 neos_flag;
 
+	// "starting the audio thread"
+	OSReport("\n\201\364Jac/Thread/Init:: \203I\201[\203f\203B\203I\203X\203\214\203b\203h\202\360\213N\223\256\202\265\202\334\202\267\n");
 	Jac_HeapSetup(heap, heapSize);
 	Jac_SetAudioARAMSize(aramSize);
 
 	neos_flag = flags & AUDIO_THREAD_FLAG_NEOS;
 	Jac_InitARAM(neos_flag);
+	// "thread priority is %d"
+	OSReport("\201\364Jac/Thread/Init:: \201@\203X\203\214\203b\203h\202\314\227D\220\346\217\207\210\312\202\315 %d  \202\305\202\267\n", pri);
 
-	Jac_StackInit(jac_audioStack, 0x200);
 	if ((flags & AUDIO_THREAD_FLAG_AUDIO)) {
-		// point to top of audioStack
-		u8* stack_p = jac_audioStack;
-		OSCreateThread(&jac_audioThread.thread, &audioproc, NULL, stack_p + AUDIO_STACK_SIZE, AUDIO_STACK_SIZE, pri, OS_THREAD_ATTR_DETACH);
+		OSCreateThread(&jac_audioThread.thread, &audioproc, NULL, jac_audioStack + AUDIO_STACK_SIZE, AUDIO_STACK_SIZE, pri, 0);
 		OSResumeThread(&jac_audioThread.thread);
+		// "audio thread started"
+		OSReport("\201\364Jac/Thread/Init:: \201@\203I\201[\203f\203B\203I\203X\203\214\203b\203h\202\360\213N\223\256\217I\227\271\202\265\202\334\202\265\202\275\n\n");
 	}
 
-	Jac_StackInit(jac_dvdStack, 0x200);
 	if ((flags & AUDIO_THREAD_FLAG_DVD)) {
 		jac_dvdproc_init();
-		// point to top of dvdStack
-		u8* stack_p = jac_dvdStack;
-		OSCreateThread(&jac_dvdThread, &jac_dvdproc, NULL, stack_p + AUDIO_STACK_SIZE, AUDIO_STACK_SIZE, pri3, OS_THREAD_ATTR_DETACH);
+		OSCreateThread(&jac_dvdThread, &jac_dvdproc, NULL, jac_dvdStack + AUDIO_STACK_SIZE, AUDIO_STACK_SIZE, pri3, 0);
 		OSResumeThread(&jac_dvdThread);
+		// "DVD thread started"
+		OSReport("\201\364Jac/Thread/Init:: \201@DVD\203X\203\214\203b\203h\202\360\213N\223\256\217I\227\271\202\265\202\334\202\265\202\275\n\n");
+	} else {
+		// "DVD thread not started"
+		OSReport("\201\364Jac/Thread/Init:: \201@DVD\203X\203\214\203b\203h\202\360\213N\223\256\202\265\202\334\202\271\202\361\202\305\202\265\202\275\n\n");
 	}
 
-	STACK_PAD_VAR(2);
+	if (neos_flag) {
+		OSCreateThread(&jac_neosThread, &neosproc, NULL, jac_neosStack + AUDIO_STACK_SIZE, AUDIO_STACK_SIZE, pri2, 0);
+		OSResumeThread(&jac_neosThread);
+		// "NEOS thread started"
+		OSReport("\201\364Jac/Thread/Init:: \201@NEOS\203X\203\214\203b\203h\202\360\213N\223\256\217I\227\271\202\265\202\334\202\265\202\275\n\n");
+	}
 }
-
-// IPL-only functions in this unit with no Pikmin counterpart, still assembly:
-//   fn_813393C0 (size 0x3c)

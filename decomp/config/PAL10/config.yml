@@ -11,8 +11,28 @@ detect_strings: true
 write_asm: true
 fill_gaps: true
 block_relocations:
+# word in the app's .data asset blob that only looks like a pointer into audiothread's stacks
+- source: .data:0x8145F484
+# word in the app's .data asset blob that only looks like a pointer into neosthread's task_buf
+- source: .data:0x8143442C
 # word in the app's .data asset blob that only looks like a pointer into parse_format
 - source: .data:0x81475984
+# word in the app's .data asset blob that only looks like a pointer into JAudio's bankp
+- source: .data:0x8145EF74
+# word in the app's .data asset blob that only looks like a pointer into JAudio's CHANNEL
+- source: .data:0x81411434
+# Shift-JIS text and asset bytes that only look like pointers into seqsetup's seq array
+- source: .data:0x8149217C
+- source: .rodata:0x8137F724
+- source: .data:0x813B827C
+- source: .data:0x813C94B0
+- source: .rodata:0x8137F5F4
+- source: .rodata:0x8137F0A4
+- source: .rodata:0x8137F14C
+- source: .rodata:0x8137FDB4
+- source: .rodata:0x8137FFD4
+- source: .rodata:0x81380004
+- source: .rodata:0x813800C0
 # word in the same asset data that only looks like a pointer into EXIIntrruptHandler
 - source: .data:0x8141EF04
 

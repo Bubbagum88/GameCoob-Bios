@@ -326,20 +326,37 @@ void DiplSec(u32 cmd)
 
 /**
  * @TODO: Documentation
+ * BS2: 8134D980, size 0x134 (Pikmin 0x3c): this build dumps the parameter block and output
  */
 void DagbSec(u32 cmd)
 {
+	u32 i;
+	u16* param = (u16*)cmd;
+	u16* out;
 	u32 commands[2];
-	s32 commandResult;
 
-	STACK_PAD_VAR(2);
+	OSReport("Parameter Input : %8x\n", param);
+	for (i = 0; i < 16; i++) {
+		OSReport("PARAM[%d] = %x[h]\n", i, param[i]);
+	}
+	param[0] = 0xCF93;
+	param[1] = 0xF888;
+	out      = (u16*)(param[8] << 16 | param[9]);
+	DCFlushRange(param, 32);
+
+	param = out;
+	OSReport("Output Buffer : %8x\n", param);
+	for (i = 0; i < 4; i++) {
+		OSReport("DECODE BEFORE[%d] = %x[h]\n", i, param[i]);
+	}
+	DCFlushRange(param, 32);
 
 	commands[0] = 0x8C000008;
 	commands[1] = cmd;
-
-	commandResult = DSPSendCommands(commands, ARRAY_SIZE(commands));
+	DSPSendCommands(commands, ARRAY_SIZE(commands));
 	DSPWaitFinish();
-}
 
-// IPL-only functions in this unit with no Pikmin counterpart, still assembly:
-//   fn_8134D980 (size 0x134)
+	for (i = 0; i < 4; i++) {
+		OSReport("DECODE AFTER[%d] = %x[h]\n", i, out[i]);
+	}
+}
