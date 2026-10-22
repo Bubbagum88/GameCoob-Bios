@@ -427,6 +427,13 @@ s32 Nas_LoadVoice(s32 bank_id, s32 instId, s32 drumId) {
 }
 
 s32 Nas_PreLoad_BG(s32 table_type, s32 id, s32 n_chunks, s32 ret_data, OSMesgQueue* ret_queue) {
+    s32* REF_table_type = &table_type;
+    s32* REF_id = &id;
+    s32* REF_n_chunks = &n_chunks;
+    s32* REF_ret_data = &ret_data;
+    OSMesgQueue** REF_ret_queue = &ret_queue;
+    STACK_PAD_VAR(4);
+
     if (__Load_Bank_BG(table_type, id, n_chunks, ret_data, ret_queue) == NULL) {
         Z_osSendMesg(ret_queue, (OSMesg)-1, OS_MESG_NOBLOCK);
     }
@@ -505,6 +512,8 @@ static s32 __Kill_Bank(s32 bank_id) {
 }
 
 void Nas_SetExtPointer(s32 table_type, s32 idx, s32 param_3, s32 data) {
+    s32* REF_table_type = &table_type;
+    s32* REF_idx = &idx;
     ArcHeader* header = __Get_ArcHeader(table_type);
 
     if (header->entries[idx].medium == MEDIUM_RAM_UNLOADED) {
@@ -581,6 +590,8 @@ static s32 __Nas_StartSeq(s32 group_idx, s32 seq_id, s32 param) {
 static u8* __Load_Seq(s32 seq_id) {
     s32 did_alloc;
     s32 link_id;
+    s32* REF_seq_id = &seq_id;
+    s32* REF_link_id = &link_id;
 
     link_id = __Link_BankNum(SEQUENCE_TABLE, seq_id);
     if (AG.sequence_load_status[link_id] == LOAD_STATUS_IN_PROGRESS) {
@@ -2115,10 +2126,14 @@ void MK_load(s32 table_type, s32 id, u8* done_p) {
 
 void MK_FrameWork(void) {
     s32 idx;
+    s32 res;
     u32 ret;
     u8* rmes;
+    u8** REF_rmes = &rmes;
+    s32* REF_res = &res;
 
-    if (Z_osRecvMesg(&MK_QUEUE, (OSMesg*)&ret, OS_MESG_NOBLOCK) != -1) {
+    res = Z_osRecvMesg(&MK_QUEUE, (OSMesg*)&ret, OS_MESG_NOBLOCK);
+    if (res != -1) {
         idx = ret >> 24;
         rmes = MK_RMES[idx];
 

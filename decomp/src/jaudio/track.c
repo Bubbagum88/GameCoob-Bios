@@ -535,7 +535,7 @@ static u16 Nas_ReadLengthData(macro* m) {
 
     if (Nas_LENGTH_IS_U16(data)) {
         data = (data << 8) & 0x7F00;
-        data = (*m->pc++) | data;
+        data = data | (*m->pc++);
     }
 
     return data;
@@ -1136,11 +1136,10 @@ static s32 __SetNote(note* n, s32 cmd) {
 }
 
 static void Nas_PriorityChanger(sub* subtrack, u8 prio) {
-    u8 prio0 = prio & 0xF;
     u8 prio1;
 
-    if (prio0) {
-        subtrack->note_priority = prio0;
+    if (prio & 0xF) {
+        subtrack->note_priority = prio & 0xF;
     }
 
     prio1 = (u8)(prio >> 4);

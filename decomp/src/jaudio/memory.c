@@ -356,7 +356,7 @@ void Nas_SzStayDelete(s32 a) {
  * Size:	000068
  */
 void Nas_SzHeapReset(u32 fixSize) {
-    OSReport("FixSIZE is %x\n", fixSize);
+    u32* REF_fixSize = &fixSize;
     Nas_HeapInit(&AG.init_heap, (u8*)AG.audio_heap_p, fixSize);
     Nas_HeapInit(&AG.session_heap, (u8*)AG.audio_heap_p + fixSize, AG.audio_heap_size - fixSize);
     AG.external_heap.base = NULL;
@@ -370,8 +370,6 @@ void Nas_SzHeapReset(u32 fixSize) {
 void Nas_SzHeapDivide(AudioHeapstrc* param_1) {
     AG.session_heap.current = AG.session_heap.base;
     Nas_HeapInit(&AG.misc_heap, (u8*)Nas_HeapAlloc(&AG.session_heap, param_1->misc_heap_size), param_1->misc_heap_size);
-    Nas_HeapInit(&AG.sz_data_heap, (u8*)Nas_HeapAlloc(&AG.session_heap, param_1->cache_heap_size),
-                 param_1->cache_heap_size);
 }
 
 /*
@@ -381,8 +379,6 @@ void Nas_SzHeapDivide(AudioHeapstrc* param_1) {
  */
 void Nas_SzDataDivide(DataHeapstrc* param_1) {
     AG.sz_data_heap.current = AG.sz_data_heap.base;
-    Nas_HeapInit(&AG.data_heap, (u8*)Nas_HeapAlloc(&AG.sz_data_heap, param_1->data_size), param_1->data_size);
-    Nas_HeapInit(&AG.sz_auto_heap, (u8*)Nas_HeapAlloc(&AG.sz_data_heap, param_1->auto_size), param_1->auto_size);
 }
 
 /*
@@ -1101,8 +1097,12 @@ void* EmemOnCheck(s32 tableType, s32 id) {
  * Size:	00007C
  */
 void* EmemAlloc(s32 tableType, s32 id, s32 size) {
-    u32 heapCount = AG.emem_heap.count;
-    u8* p = (u8*)Nas_HeapAlloc(&AG.emem_heap, size);
+    u32 heapCount;
+    u8* p;
+    s32* REF_size = &size;
+    STACK_PAD_VAR(1);
+    heapCount = AG.emem_heap.count;
+    p = (u8*)Nas_HeapAlloc(&AG.emem_heap, size);
     AG.emem_entries[heapCount].addr = p;
     if (p == NULL) {
         return NULL;

@@ -213,7 +213,9 @@ extern Acmd* Nas_smzAudioFrame(Acmd* cmdStart, s32* cmdCount, s16* aiStart, s32 
 
 void __Nas_WaveTerminateProcess(s32 updateIdx, s32 chanIdx) {
     commonch* common;
-    volatile s32 i;
+    s32 i;
+    s32* REF_chanIdx = &chanIdx;
+    s32* REF_i = &i;
 
     for (i = updateIdx + 1; i < AG.audio_params.updates_per_frame; i++) {
         common = &AG.common_channel[i * AG.num_channels + chanIdx];
@@ -406,6 +408,7 @@ Acmd* Nas_SendLine(Acmd* cmd, delay* del_p, s32 update_idx) {
 }
 
 Acmd* Nas_LoadAuxBuffer1(Acmd* cmd, s32 samples_per_update, delay* del_p, s16 update_idx) {
+    STACK_PAD_VAR(2);
     delayparam* param_p = &del_p->params[del_p->cur_frame][update_idx];
     
     cmd = __LoadAuxBuf(cmd, 0xC40, param_p->start_pos, param_p->size, del_p);
@@ -417,6 +420,7 @@ Acmd* Nas_LoadAuxBuffer1(Acmd* cmd, s32 samples_per_update, delay* del_p, s16 up
 }
 
 Acmd* Nas_LoadAuxBuffer1_B(Acmd* cmd, s32 samples_per_update, delay* del_p, s16 update_idx) {
+    STACK_PAD_VAR(2);
     delayparam* param_p = &del_p->sub_params[del_p->cur_frame][update_idx];
     
     cmd = __LoadAuxBuf(cmd, 0xC40, param_p->start_pos, param_p->size, del_p);

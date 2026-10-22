@@ -357,7 +357,7 @@ extern wtstr* NoteToVoice(voicetable* vtbl, s32 note) {
     wtstr* voice_p;
 
     if (note < vtbl->normal_range_low) {
-        voice_p = &vtbl->low_pitch_tuned_sample;
+        return &vtbl->low_pitch_tuned_sample;
     } else if (note <= vtbl->normal_range_high) {
         voice_p = &vtbl->normal_pitch_tuned_sample;
     } else {
@@ -818,19 +818,15 @@ extern void Nas_EntryTrack(channel* chan, note* n) {
 }
 
 static void __Nas_InterTrack(channel* chan, note* n) {
-    playbackch* playback = &chan->playback_ch;
-
-    Nas_Release_Channel_Force(playback->current_parent_note);
-    playback->wanted_parent_note = n;
+    Nas_Release_Channel_Force(chan->playback_ch.current_parent_note);
+    chan->playback_ch.wanted_parent_note = n;
 }
 
 static void __Nas_InterReleaseTrack(channel* chan, note* n) {
-    playbackch* playback = &chan->playback_ch;
-
-    playback->wanted_parent_note = n;
-    playback->priority = n->sub_track->note_priority;
-    playback->adsr_envp.fadeout_velocity = AG.audio_params.updates_per_frame_inverse;
-    playback->adsr_envp.state.flags.release = TRUE;
+    chan->playback_ch.wanted_parent_note = n;
+    chan->playback_ch.priority = n->sub_track->note_priority;
+    chan->playback_ch.adsr_envp.fadeout_velocity = AG.audio_params.updates_per_frame_inverse;
+    chan->playback_ch.adsr_envp.state.flags.release = TRUE;
 }
 
 static channel* __Nas_ChLookFree(chnode* node, note* n) {
