@@ -855,7 +855,7 @@ void __DownDelay(delay* unused) {
  * Size:	0000A0
  */
 void __Nas_DelayDown() {
-    int i;
+    volatile int i;
     int j;
     delay* delay_p;
     int c;

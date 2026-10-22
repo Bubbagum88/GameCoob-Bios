@@ -155,10 +155,10 @@ jaudio/system.c:
 	.text       start:0x813419E0 end:0x81345900 align:32
 
 jaudio/sub_sys.c:
-	.text       start:0x81345900 end:0x81346B80 align:32
+	.text       start:0x81345900 end:0x81346B20 align:32
 
 jaudio/os.c:
-	.text       start:0x81346B80 end:0x81346D00 align:32
+	.text       start:0x81346B20 end:0x81346D00 align:32
 
 jaudio/astest.c:
 	.text       start:0x81346D00 end:0x81346D40 align:32
