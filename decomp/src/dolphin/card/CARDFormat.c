@@ -44,6 +44,7 @@ error:
 	callback(channel, result);
 }
 
+#if OS_BUILD_VERSION >= 20011112L
 s32 __CARDFormatRegionAsync(s32 chan, u16 encode, CARDCallback callback)
 {
 	CARDControl* card;
@@ -120,6 +121,7 @@ s32 __CARDFormatRegionAsync(s32 chan, u16 encode, CARDCallback callback)
 		__CARDPutControlBlock(card, result);
 	return result;
 }
+#endif
 
 /**
  * @TODO: Documentation
