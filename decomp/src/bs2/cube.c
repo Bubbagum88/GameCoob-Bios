@@ -12,7 +12,7 @@
 
 u32 Pad_GetEasterEgg(void);                                /* 0x81302DE8 */
 void J3D_AnimateJoints(void *inst, f32 frame);             /* 0x813043BC */
-void MtxRotAxis(Mtx m, s32 axis, s16 angle);               /* 0x81307208 */
+void MtxRotAxis(Mtx m, char axis, s16 angle);              /* 0x81307208 */
 
 static CubePathStep sCubePath[] = {                        /* 0x81381160 */
     { 0, 1, 5 },    { 0, 1, 0xFF }, { 3, 1, 0xFF }, { 3, 1, 0xFF }, { 5, 1, 0xFF },
