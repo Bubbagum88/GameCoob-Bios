@@ -202,12 +202,17 @@ bs2/menu/calendar.c:
 	.sdata2     start:0x814AE068 end:0x814AE080
 	.bss        start:0x814DE600 end:0x814DE638
 
+bs2/menu/menu_fx_shape.c:
+	.text       start:0x81329890 end:0x81329B34
+	.sbss       start:0x814AD5C0 end:0x814AD5D0
+	.sdata2     start:0x814AE080 end:0x814AE0A8
+
 bs2/menu/menu_fx.c:
-	.text       start:0x81329890 end:0x81330F30
+	.text       start:0x81329B34 end:0x81330F30
 	.rodata     start:0x8137EF80 end:0x8137EF90
 	.data       start:0x81381520 end:0x813817E8
-	.sbss       start:0x814AD5C0 end:0x814AD600
-	.sdata2     start:0x814AE080 end:0x814AE140
+	.sbss       start:0x814AD5D0 end:0x814AD600
+	.sdata2     start:0x814AE0A8 end:0x814AE140
 	.bss        start:0x814DE638 end:0x814FE850
 
 bs2/menu/menu_fx_anim.c:

@@ -1,62 +1,30 @@
 // Partly matching.
 //
-// Mosaic text ("fx", PAL 1.0 BS2, 0x81329890..0x81330F30): the titles and
+// Mosaic text ("fx", PAL 1.0 BS2, 0x81329B34..0x81330F30): the titles and
 // items of the Game Play, Options and Calendar submenus are drawn with
 // small cubes. Every cube flies along a Hermite curve from a keyframe
-// table (res 37) to its place in a glyph shape (res 179..184); this unit
-// owns the cube pool, evaluates the curves and lays out the text of each
-// submenu. The glyph strings live in menu_fx_anim (0x81330F30..), the
+// table (res 37, see menu_fx_shape.c) to its place in a glyph shape
+// (res 179..184); this unit owns the cube pool and lays out the text of
+// each submenu. The glyph strings live in menu_fx_anim (0x81330F30..), the
 // per-screen cube effects in menu_fx_draw (0x81333030..).
 
 #include "bs2/menu.h"
 #include "string.h"
 #include "dolphin/os.h"
+#include "bs2/menu_fx.h"
 
-#define FX_MAX 0x861
-
-/* One cube target written by the layout code. */
-typedef struct FxItem {
-    u8 data[20];
-} FxItem;
-
-/* A placed cube, as handed to the renderer. */
-typedef struct FxCube {
-    Vec scale;      /* 0x00 */
-    s16 rot[3];     /* 0x0C */
-    Vec pos;        /* 0x14 */
-} FxCube;           /* 0x20 */
-
-/* Shape table (res 37): one entry per shape, then per-cube key lists. */
-typedef struct FxShape {
-    u16 count;      /* 0x0 cubes in the shape */
-    u16 nKeys;      /* 0x2 keyframes per cube */
-    s32 cubes;      /* 0x4 offset of the FxShapeCube list from this entry */
-} FxShape;
-
-typedef struct FxShapeCube {
-    u8 start;       /* 0x0 when the cube starts moving (0..255 -> 0..0.4) */
-    u8 end;         /* 0x1 when it arrives (0..255 -> 0.6..1.0) */
-    s32 keys;       /* 0x4 offset of the u16 key index list from this entry */
-} FxShapeCube;
-
-/* Curve key: a point and its incoming/outgoing tangents. */
-typedef struct FxKey {
-    Vec pos;        /* 0x00 */
-    Vec in;         /* 0x0C */
-    Vec out;        /* 0x18 */
-} FxKey;            /* 0x24 */
-
-typedef struct FxShapeFile {
-    u8 pad[8];
-    s32 keys;       /* 0x8 offset of the FxKey array */
-    s32 shapes;     /* 0xC offset of the FxShape array */
-} FxShapeFile;
-
+/* Per-cube animated values: v[2k] eases one step per frame toward v[2k+1]. */
 typedef struct FxPool {
-    FxItem item[FX_MAX];
+    s16 v[10][FX_MAX];
     s16 frame;      /* 0xA794 frames since the screen opened */
     s16 ready;      /* 0xA796 frame count at which input is accepted */
 } FxPool;
+
+typedef struct FxCursor {
+    s16 v[3];       /* 0x00 */
+    f32 f[3];       /* 0x08 */
+    u8 unk14[0x280];
+} FxCursor;         /* 0x294 */
 
 /* Which screen the mosaic shows and its sub-state (copied every frame). */
 typedef struct FxState {
@@ -76,11 +44,16 @@ void fn_8132B114(void);
 void fn_8132B678(void);
 void fn_8132BD00(void);
 void fn_8132BF20(void);
+void fn_8132BFF8(s16* v, s16 target);
 void fn_8132C024(void);
 void fn_8132C2FC(void);
 void fn_8132C5E0(void);
 void fn_8132C660(s16* digits, s32 value);
+f32 fn_8132CB88(u32 i);
+f32 fn_8132CC00(u32 i);
+f32 fn_8132CC78(u32 i);
 f32 fn_8132CCF4(void);
+f32 fn_8132CD5C(u32 i);
 void fn_8132CE3C(s32 i, s32 on);
 void fn_8132CF14(s32 i, s32 on);
 void fn_8132EEB0(s32 i, s32 on);
@@ -98,8 +71,10 @@ void fn_8132FFF0(void);
 void fn_81330374(FxCube* out, u32* count);
 void fn_813306C8(s32 lang);
 void fn_813307B4(void);
+void fn_81330518(GXColor* a, GXColor* b, GXColor* c, GXColor* out, f32 t, f32 u);
 
 void Fx_EmitSparks(FxCube* cubes);
+FxCube* fn_8133491C(void);
 u16* fn_8133166C(void);
 u16 fn_813316D4(void);
 u16* fn_81331858(void);
@@ -189,15 +164,12 @@ static FxState sFxState;
 static FxState sFxPrev;
 static FxCube sFxCube[FX_MAX];
 static u8 sFxAlpha[FX_MAX];
-static u8 lbl_814FA28C[0x2184];
-static u8 lbl_814FC410[0x2418];
+static GXColor sFxLightCol[FX_MAX];
+static GXColor sFxDarkCol[FX_MAX];
+static FxCursor sFxCursor;
 static s16 lbl_814FE828[6];
 static u8 sFxPad[0x1C];
 
-static FxShapeFile* sFxFile;
-static FxShape* sFxShapes;
-static FxKey* sFxKeys;
-static u32 sFxUnused;
 static u16 sFxBlink;
 static s32 sFxRand;
 static GXColor sFxLight0;
@@ -209,74 +181,6 @@ static GXColor sFxDark2;
 static u32 sFxCount;
 static s32 sFxLang;
 static s32 sFxUiLang;
-static u32 sFxUnused2;
-
-/* 0x81329890 */
-void Fx_SetShapes(FxShapeFile* file) {
-    sFxFile = file;
-    sFxShapes = (FxShape*)((u8*)file + file->shapes);
-    sFxKeys = (FxKey*)((u8*)file + file->keys);
-}
-
-/* 0x813298B0: place the cubes of shape n at time t (0..1). */
-void Fx_EvalShape(s32 n, FxCube* out, u32* count, f32 t) {
-    FxShapeCube* c;
-    FxShape* s;
-    f32 step;
-    u32 i;
-    u32 k;
-    Vec v;
-    f32 seg;
-    f32 u;
-    f32 hi;
-    f32 lo;
-
-    *count = sFxShapes[n].count;
-    s = &sFxShapes[n];
-    c = (FxShapeCube*)((u8*)sFxShapes + (n * 8 + s->cubes));
-    step = 1.0f / (s32)(s->nKeys - 1);
-    if (t < 0.0f) {
-        t = 0.0f;
-    }
-    if (t > 1.0f) {
-        t = 1.0f;
-    }
-    for (i = 0; i < *count; i++) {
-        u16* keys = (u16*)((u8*)c + c->keys);
-        FxKey* k0;
-        FxKey* k1;
-
-        hi = 0.6f + 0.4f * (1.0f - c->end / 255.0f);
-        lo = 0.4f * (1.0f - c->start / 255.0f);
-        u = (t - lo) / (hi - lo);
-        seg = u / step;
-        k = seg;
-        if ((u32)seg >= sFxShapes[n].nKeys) {
-            k = sFxShapes[n].nKeys - 1;
-        }
-        if (u < 0.0f) {
-            u = 0.0f;
-        }
-        if (u > 1.0f) {
-            u = 1.0f;
-        }
-        k1 = &sFxKeys[keys[k + 1]];
-        k0 = &sFxKeys[keys[k]];
-        VecHermite(&k0->pos, &k0->out, &k1->pos, &k1->in, &v, u, k * step, (k + 1) * step);
-        out->pos.x = v.x;
-        out->pos.y = v.y;
-        out->pos.z = v.z;
-        out->rot[0] = out->rot[1] = out->rot[2] = 0;
-        out->scale.x = out->scale.y = out->scale.z = Menu_Get()->fxCubeScale;
-        c++;
-        out++;
-    }
-}
-
-/* 0x81329B24 */
-u16 fn_81329B24(s32 n) {
-    return sFxShapes[n].count;
-}
 
 /* 0x81329B34 */
 FxCube* Fx_GetCubes(void) {
@@ -295,12 +199,12 @@ u32 Fx_GetCount(void) {
 
 /* 0x81329B54 */
 void* fn_81329B54(void) {
-    return lbl_814FA28C;
+    return sFxLightCol;
 }
 
 /* 0x81329B60 */
 void* fn_81329B60(void) {
-    return lbl_814FC410;
+    return sFxDarkCol;
 }
 
 /* 0x81329B6C */
@@ -855,4 +759,289 @@ void fn_8132B678(void) {
         list = fn_813311F4();
         FX_CELLS(fn_8132CE3C, list, fn_81331258(), 1)
     }
+}
+
+/* 0x8132BD00: fade, offset and tint every placed cube. */
+void fn_8132BD00(void) {
+    FxCube* ofs = fn_8133491C();
+    f32 t = fn_8132CCF4();
+    u32 i;
+
+    for (i = 0; i < sFxCount; i++) {
+        sFxAlpha[i] = 255.0f * (t * fn_8132CC00(i));
+        sFxCube[i].pos.x += ofs[i].pos.x * fn_8132CC78(i);
+        sFxCube[i].pos.y += ofs[i].pos.y * fn_8132CC78(i);
+        sFxCube[i].pos.z += ofs[i].pos.z * fn_8132CC78(i);
+        sFxCube[i].rot[0] = ofs[i].rot[0] * fn_8132CC78(i);
+        sFxCube[i].rot[1] = ofs[i].rot[1] * fn_8132CC78(i);
+        sFxCube[i].rot[2] = ofs[i].rot[2] * fn_8132CC78(i);
+        fn_81330518(&sFxLight1, &sFxLight2, &sFxLight0, &sFxLightCol[i], fn_8132CD5C(i), fn_8132CB88(i));
+        fn_81330518(&sFxDark1, &sFxDark2, &sFxDark0, &sFxDarkCol[i], fn_8132CD5C(i), fn_8132CB88(i));
+    }
+}
+
+/* 0x8132BF20: step every animated value one frame toward its target. */
+void fn_8132BF20(void) {
+    u32 i;
+
+    for (i = 0; i < sFxCount; i++) {
+        fn_8132BFF8(&sFxPool.v[0][i], sFxPool.v[1][i]);
+        fn_8132BFF8(&sFxPool.v[2][i], sFxPool.v[3][i]);
+        fn_8132BFF8(&sFxPool.v[4][i], sFxPool.v[5][i]);
+        fn_8132BFF8(&sFxPool.v[8][i], sFxPool.v[9][i]);
+        fn_8132BFF8(&sFxPool.v[6][i], sFxPool.v[7][i]);
+    }
+    fn_8132BFF8(&sFxPool.frame, sFxPool.ready);
+    fn_8132BFF8(&lbl_814FE828[0], 10);
+    fn_8132BFF8(&sFxCursor.v[2], 10);
+}
+
+/* 0x8132BFF8 */
+void fn_8132BFF8(s16* v, s16 target) {
+    if (*v > target) {
+        *v -= 1;
+    } else if (*v < target) {
+        *v += 1;
+    }
+}
+
+/* 0x8132C024: light the Options row that has the cursor. */
+void fn_8132C024(void) {
+    s32 i;
+
+    switch (sFxState.v[2]) {
+    case 1:
+        FX_CELLS(fn_8132CDD4, fn_81332C34(), fn_81332C9C(), 1)
+        FX_CELLS(fn_8132CDD4, fn_813327B8(), fn_81332820(), 0)
+        FX_CELLS(fn_8132CDD4, fn_81331008(), fn_81331070(), 0)
+        break;
+    case 2:
+        FX_CELLS(fn_8132CDD4, fn_81332C34(), fn_81332C9C(), 0)
+        FX_CELLS(fn_8132CDD4, fn_813327B8(), fn_81332820(), 1)
+        FX_CELLS(fn_8132CDD4, fn_81331008(), fn_81331070(), 0)
+        break;
+    case 3:
+        FX_CELLS(fn_8132CDD4, fn_81332C34(), fn_81332C9C(), 0)
+        FX_CELLS(fn_8132CDD4, fn_813327B8(), fn_81332820(), 0)
+        FX_CELLS(fn_8132CDD4, fn_81331008(), fn_81331070(), 1)
+        break;
+    default:
+        FX_CELLS(fn_8132CDD4, fn_81332C34(), fn_81332C9C(), 0)
+        FX_CELLS(fn_8132CDD4, fn_813327B8(), fn_81332820(), 0)
+        FX_CELLS(fn_8132CDD4, fn_81331008(), fn_81331070(), 0)
+        break;
+    }
+}
+
+/* 0x8132C2FC: blink the Options row that has the cursor. */
+void fn_8132C2FC(void) {
+    s32 i;
+
+    if (sFxState.v[2] == 0) {
+        switch (sFxState.v[3]) {
+        case 0:
+            FX_CELLS(fn_8132CEA4, fn_81332C34(), fn_81332C9C(), 1)
+            FX_CELLS(fn_8132CEA4, fn_813327B8(), fn_81332820(), 0)
+            FX_CELLS(fn_8132CEA4, fn_81331008(), fn_81331070(), 0)
+            break;
+        case 1:
+            FX_CELLS(fn_8132CEA4, fn_81332C34(), fn_81332C9C(), 0)
+            FX_CELLS(fn_8132CEA4, fn_813327B8(), fn_81332820(), 1)
+            FX_CELLS(fn_8132CEA4, fn_81331008(), fn_81331070(), 0)
+            break;
+        case 2:
+            FX_CELLS(fn_8132CEA4, fn_81332C34(), fn_81332C9C(), 0)
+            FX_CELLS(fn_8132CEA4, fn_813327B8(), fn_81332820(), 0)
+            FX_CELLS(fn_8132CEA4, fn_81331008(), fn_81331070(), 1)
+            break;
+        }
+    } else {
+        FX_CELLS(fn_8132CEA4, fn_81332C34(), fn_81332C9C(), 0)
+        FX_CELLS(fn_8132CEA4, fn_813327B8(), fn_81332820(), 0)
+        FX_CELLS(fn_8132CEA4, fn_81331008(), fn_81331070(), 0)
+    }
+}
+
+/* 0x8132C5E0: Game Play shows every cube, unlit and still. */
+void fn_8132C5E0(void) {
+    s32 i;
+
+    i = 0;
+    do {
+        fn_8132CEA4(i, 1);
+        fn_8132CE3C(i, 1);
+        fn_8132CDD4(i, 0);
+        fn_8132CF7C(i, 0);
+        i++;
+    } while (i < FX_MAX);
+    i = 0;
+    do {
+        fn_8132CF7C(i, 0);
+        i++;
+    } while (i < FX_MAX);
+}
+
+/* 0x8132C660: split 0..9999 into decimal digits, ones first. */
+void fn_8132C660(s16* digits, s32 value) {
+    if (value < 0 || value > 9999) {
+        digits[0] = 0;
+        digits[1] = 0;
+        digits[2] = 0;
+        digits[3] = 0;
+    }
+    if (value > 999) {
+        digits[3] = value / 1000;
+        value -= digits[3] * 1000;
+    } else {
+        digits[3] = 0;
+    }
+    if (value > 99) {
+        digits[2] = value / 100;
+        value -= digits[2] * 100;
+    } else {
+        digits[2] = 0;
+    }
+    if (value > 9) {
+        digits[1] = value / 10;
+        value -= digits[1] * 10;
+    } else {
+        digits[1] = 0;
+    }
+    digits[0] = value;
+}
+
+/* 0x8132C750: rotate a cube about (cx, cy, cz); out gets the offset. */
+void fn_8132C750(s16 rx, s16 ry, s16 rz, FxCube* in, FxCube* out, f32 cx, f32 cy, f32 cz) {
+    Mtx m;
+    Vec v;
+    Vec r;
+
+    MtxRot(rx, ry, rz, m);
+    v.x = in->pos.x - cx;
+    v.y = in->pos.y - cy;
+    v.z = in->pos.z - cz;
+    PSMTXMultVec(m, &v, &r);
+    out->pos.x = (r.x + cx) - in->pos.x;
+    out->pos.y = (r.y + cy) - in->pos.y;
+    out->pos.z = (r.z + cz) - in->pos.z;
+    out->rot[0] = rx;
+    out->rot[1] = ry;
+    out->rot[2] = rz;
+}
+
+/* 0x8132C830: centre of n cubes (all of them, or the ones idx names). */
+void fn_8132C830(Vec* out, FxCube* cubes, u16* idx, u32 n) {
+    f32 x, y, z;
+    s32 i;
+
+    x = y = z = 0.0f;
+    if (idx != NULL) {
+        for (i = 0; i < n; i++) {
+            FxCube* c = &cubes[*idx++];
+
+            x += c->pos.x;
+            y += c->pos.y;
+            z += c->pos.z;
+        }
+    } else {
+        for (i = 0; i < n; i++) {
+            x += cubes->pos.x;
+            y += cubes->pos.y;
+            z += cubes->pos.z;
+            cubes++;
+        }
+    }
+    {
+        Vec c = { 0.0f, 0.0f, 0.0f };
+
+        c.x = x / n;
+        c.y = y / n;
+        c.z = z / n;
+        *out = c;
+    }
+}
+
+/* 0x8132CB60: degrees to a 16-bit angle. */
+s32 fn_8132CB60(f32 deg) {
+    return 65535.0f * deg / 360.0f;
+}
+
+/* 0x8132CB88 */
+f32 fn_8132CB88(u32 i) {
+    return (f32)sFxPool.v[1][i] / (f32)Menu_Get()->fxFadeOut;
+}
+
+/* 0x8132CC00 */
+f32 fn_8132CC00(u32 i) {
+    return (f32)sFxPool.v[2][i] / (f32)Menu_Get()->fxFadeIn;
+}
+
+/* 0x8132CC78 */
+f32 fn_8132CC78(u32 i) {
+    return (f32)sFxPool.v[8][i] / (f32)Menu_Get()->fxFadeOut;
+}
+
+/* 0x8132CCF4: how far the screen has come in (0..1). */
+f32 fn_8132CCF4(void) {
+    return (f32)sFxPool.frame / (f32)Menu_Get()->fxReadyCount;
+}
+
+/* 0x8132CD5C */
+f32 fn_8132CD5C(u32 i) {
+    return (f32)sFxPool.v[6][i] / (f32)Menu_Get()->fxFadeIn;
+}
+
+/* 0x8132CDD4 */
+void fn_8132CDD4(s32 i, s32 on) {
+    if (on) {
+        sFxPool.v[1][i] = Menu_Get()->fxFadeOut;
+    } else {
+        sFxPool.v[1][i] = 0;
+    }
+}
+
+/* 0x8132CE3C */
+void fn_8132CE3C(s32 i, s32 on) {
+    if (on) {
+        sFxPool.v[5][i] = Menu_Get()->fxFadeIn;
+    } else {
+        sFxPool.v[5][i] = 0;
+    }
+}
+
+/* 0x8132CEA4 */
+void fn_8132CEA4(s32 i, s32 on) {
+    if (on) {
+        sFxPool.v[9][i] = Menu_Get()->fxFadeOut;
+    } else {
+        sFxPool.v[9][i] = 0;
+    }
+}
+
+/* 0x8132CF14 */
+void fn_8132CF14(s32 i, s32 on) {
+    if (on) {
+        sFxPool.v[7][i] = Menu_Get()->fxFadeIn;
+    } else {
+        sFxPool.v[7][i] = 0;
+    }
+}
+
+/* 0x8132CF7C */
+void fn_8132CF7C(s32 i, s32 on) {
+    if (on) {
+        sFxPool.v[2][i] = sFxPool.v[3][i] = Menu_Get()->fxFadeIn;
+    } else {
+        sFxPool.v[2][i] = sFxPool.v[3][i] = 0;
+    }
+}
+
+/* 0x8132CFE8 */
+FxState* fn_8132CFE8(void) {
+    return &sFxState;
+}
+
+/* 0x8132CFF4 */
+FxState* fn_8132CFF4(void) {
+    return &sFxPrev;
 }
