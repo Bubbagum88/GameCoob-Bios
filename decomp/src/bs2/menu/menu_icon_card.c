@@ -54,8 +54,10 @@ void CardIcon_InitGrid(void) {
         sCardIconFrame = 0;
     }
     for (i = 0; i < CARDICON_CUBES; i++) {
-        sCardCube[i].start = Rand() & 0x1F;
-        sCardCube[i].end = sCardCube[i].start + 20;
+        s32 start = (s16)(Rand() & 0x1F);
+
+        sCardCube[i].start = start;
+        sCardCube[i].end = start + 20;
     }
     for (i = 0; i < CARDICON_CUBES; i++) {
         sCardCube[i].spin = 0;
@@ -114,10 +116,15 @@ s16 CardIcon_Diagonal(s16 i) {
 }
 
 /* 0x81321C68: fly the cubes in and fade the outer ones up on the way. */
+static inline f32 CardIcon_Ease(f32 t, f32 t0, f32 p0, f32 t1, f32 p1) {
+    return Hermite(t, t0, p0, (p1 - p0) / (t1 - t0), t1, p1, 0.0f);
+}
+
 void CardIcon_UpdateFly(void) {
     s16 i;
     s16 start;
     s16 end;
+    f32 dur;
 
     for (i = 0; i < CARDICON_CUBES; i++) {
         if (sCardIconFrame <= sCardCube[i].start) {
@@ -134,12 +141,15 @@ void CardIcon_UpdateFly(void) {
         if (sCardIconFrame > start) {
             end = sCardCube[i].end;
             if (sCardIconFrame < end) {
-                sCardCube[i].pos[0] = Hermite(sCardIconFrame, start, sCardCube[i].from[0],
-                                              (f32)(sCardCube[i].to[0] - sCardCube[i].from[0]) / (end - start),
-                                              end, sCardCube[i].to[0], 0.0f);
-                sCardCube[i].pos[1] = Hermite(sCardIconFrame, start, sCardCube[i].from[1],
-                                              (f32)(sCardCube[i].to[1] - sCardCube[i].from[1]) / (end - start),
-                                              end, sCardCube[i].to[1], 0.0f);
+                f32 x0 = sCardCube[i].from[0];
+                f32 y0 = sCardCube[i].from[1];
+                f32 x1 = sCardCube[i].to[0];
+                f32 y1 = sCardCube[i].to[1];
+                f32 t0 = start;
+                f32 t1 = end;
+                dur = t1 - t0;
+                sCardCube[i].pos[0] = Hermite(sCardIconFrame, t0, x0, (x1 - x0) / dur, t1, x1, 0.0f);
+                sCardCube[i].pos[1] = Hermite(sCardIconFrame, t0, y0, (y1 - y0) / dur, t1, y1, 0.0f);
                 sCardCube[i].pos[2] = 0;
             }
         }
@@ -215,18 +225,27 @@ void CardIcon_FadeInner(BOOL in) {
     }
 }
 
-/* 0x81322434: swing the grid around its vertical axis and back. */
 void CardIcon_SpinY(s32 t) {
+    s32 t0;
+    s32 t1;
+
     if (t < 50) {
-        sCardIconRotY = Hermite(t, 0.0f, 0.0f, 0.0f, 50.0f, -8000.0f, 0.0f);
+        t1 = 50;
+        sCardIconRotY = Hermite(t, 0.0f, 0.0f, 0.0f, t1, -8000.0f, 0.0f);
     } else if (t < 90) {
-        sCardIconRotY = Hermite(t, 50.0f, -8000.0f, 0.0f, 90.0f, 32768.0f, 0.0f);
+        t1 = 90;
+        t0 = 50;
+        sCardIconRotY = Hermite(t, t0, -8000.0f, 0.0f, t1, 32768.0f, 0.0f);
     } else if (t < 140) {
         sCardIconRotY = -0x8000;
     } else if (t < 190) {
-        sCardIconRotY = Hermite(t, 140.0f, 32768.0f, 0.0f, 190.0f, 40768.0f, 0.0f);
+        t1 = 190;
+        t0 = 140;
+        sCardIconRotY = Hermite(t, t0, 32768.0f, 0.0f, t1, 40768.0f, 0.0f);
     } else if (t < 230) {
-        sCardIconRotY = Hermite(t, 190.0f, 40768.0f, 0.0f, 230.0f, 0.0f, 0.0f);
+        t1 = 230;
+        t0 = 190;
+        sCardIconRotY = Hermite(t, t0, 40768.0f, 0.0f, t1, 0.0f, 0.0f);
     } else if (t < 280) {
         sCardIconRotY = 0;
     }
@@ -342,62 +361,57 @@ void CardIcon_Draw(void) {
 /* 0x81322D58: fade every cube out while the submenu closes. */
 void CardIcon_UpdateHide(void) {
     s32 i;
+    s32 hidden = 0; /* counted, but never used */
 
     for (i = 0; i < CARDICON_CUBES; i++) {
         sCardIconInst[i].alpha -= 10;
         if (sCardIconInst[i].alpha < 0) {
             sCardIconInst[i].alpha = 0;
+            hidden++;
         }
     }
     sCardIconFrame = 0;
     sCardIconRotY = 0;
 }
 
-static s16 CardIcon_Shrink(s16 v) {
-    CardParams* p = Card_GetParams();
-
-    if (v > 0) {
-        v -= p->collapseSpeed;
-        if (v < 0) {
-            v = 0;
-        }
-    } else if (v < 0) {
-        v += p->collapseSpeed;
-        if (v > 0) {
-            v = 0;
-        }
-    }
-    return v;
-}
-
-static BOOL CardIcon_IsZero(s16 v) {
-    return v == 0 ? TRUE : FALSE;
-}
-
 /* 0x81322EE8: pull every cube back to the centre of the grid. */
 void CardIcon_UpdateEnter(void) {
+    s32 i;
     s32 settled = 0;
     CardParams* p = Card_GetParams();
-    s32 i;
+    s16 v;
+
+#define CARD_SHRINK(n)                                                  \
+    v = sCardCube[i].pos[n];                                            \
+    p2 = Card_GetParams();                                              \
+    if (v > 0) {                                                        \
+        v -= p2->collapseSpeed;                                         \
+        if (v < 0) {                                                    \
+            v = 0;                                                      \
+        }                                                               \
+    } else if (v < 0) {                                                 \
+        v += p2->collapseSpeed;                                         \
+        if (v > 0) {                                                    \
+            v = 0;                                                      \
+        }                                                               \
+    }                                                                   \
+    sCardCube[i].pos[n] = v;                                            \
+    if ((v == 0 ? TRUE : FALSE) && sCardIconInst[i].alpha == 0) {       \
+        settled++;                                                      \
+    }
 
     for (i = 0; i < CARDICON_CUBES; i++) {
+        CardParams* p2;
+
         sCardIconInst[i].alpha -= p->fadeOutSpeed;
         if (sCardIconInst[i].alpha < 0) {
             sCardIconInst[i].alpha = 0;
         }
-        sCardCube[i].pos[0] = CardIcon_Shrink(sCardCube[i].pos[0]);
-        if (CardIcon_IsZero(sCardCube[i].pos[0]) && sCardIconInst[i].alpha == 0) {
-            settled++;
-        }
-        sCardCube[i].pos[1] = CardIcon_Shrink(sCardCube[i].pos[1]);
-        if (CardIcon_IsZero(sCardCube[i].pos[1]) && sCardIconInst[i].alpha == 0) {
-            settled++;
-        }
-        sCardCube[i].pos[2] = CardIcon_Shrink(sCardCube[i].pos[2]);
-        if (CardIcon_IsZero(sCardCube[i].pos[2]) && sCardIconInst[i].alpha == 0) {
-            settled++;
-        }
+        CARD_SHRINK(0)
+        CARD_SHRINK(1)
+        CARD_SHRINK(2)
     }
+#undef CARD_SHRINK
     if (settled == CARDICON_CUBES * 3) {
         sCardIconSettled = TRUE;
     } else {

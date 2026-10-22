@@ -10,6 +10,71 @@ Sections:
 	.sdata2     type:rodata align:16
 	.bss        type:bss align:32
 
+bs2/BS2.c:
+	.text       start:0x813003A0 end:0x81300598
+	.data       start:0x81380DE0 end:0x81380E08
+	.sdata      start:0x814ACFC0 end:0x814ACFC8
+	.sbss       start:0x814AD260 end:0x814AD268
+
+bs2/BS2Mach.c:
+	.text       start:0x81300598 end:0x81300F50
+	.data       start:0x81380E08 end:0x81380FD0
+	.sbss       start:0x814AD268 end:0x814AD2A8
+	.bss        start:0x814AE6E0 end:0x814AE750
+
+bs2/bs2main.c:
+	.text       start:0x81300F50 end:0x81301190
+	.data       start:0x81380FD0 end:0x81381010
+	.sbss       start:0x814AD2A8 end:0x814AD2B0
+	.sdata2     start:0x814ADB20 end:0x814ADB58
+	.bss        start:0x814AE750 end:0x814AEBA0
+
+bs2/gInit.c:
+	.text       start:0x81301190 end:0x81302688
+	.rodata     start:0x8137EAE0 end:0x8137EB28
+	.data       start:0x81381010 end:0x81381050
+	.sdata      start:0x814ACFC8 end:0x814ACFD8
+	.sbss       start:0x814AD2B0 end:0x814AD300
+	.sdata2     start:0x814ADB58 end:0x814ADB78
+	.bss        start:0x814AEBA0 end:0x814AF5A0
+
+bs2/pad.c:
+	.text       start:0x81302688 end:0x81302DF0
+	.data       start:0x81381050 end:0x81381060
+	.sbss       start:0x814AD300 end:0x814AD318
+	.sdata2     start:0x814ADB78 end:0x814ADBB0
+	.bss        start:0x814AF5A0 end:0x814AF630
+
+bs2/camera.c:
+	.text       start:0x81302DF0 end:0x81303204
+	.rodata     start:0x8137EB28 end:0x8137EBA8
+	.sdata2     start:0x814ADBB0 end:0x814ADBD0
+	.bss        start:0x814AF630 end:0x814AF6C0
+
+bs2/gMRbuild.c:
+	.text       start:0x81303204 end:0x81303CAC
+	.data       start:0x81381060 end:0x813810A0
+
+bs2/gMRdraw.c:
+	.text       start:0x81303CAC end:0x813053F8
+	.sdata      start:0x814ACFD8 end:0x814ACFE0
+	.sbss       start:0x814AD318 end:0x814AD320
+	.sdata2     start:0x814ADBD0 end:0x814ADBF0
+
+bs2/gMRshape.c:
+	.text       start:0x813053F8 end:0x81305824
+	.data       start:0x813810A0 end:0x813810E8
+
+bs2/gMRtexture.c:
+	.text       start:0x81305824 end:0x81306A3C
+	.sbss       start:0x814AD320 end:0x814AD330
+	.sdata2     start:0x814ADBF0 end:0x814ADC18
+
+bs2/gMRanim.c:
+	.text       start:0x81306A3C end:0x81307208
+	.sbss       start:0x814AD330 end:0x814AD338
+	.sdata2     start:0x814ADC18 end:0x814ADC30
+
 bs2/mtx.c:
 	.text       start:0x81307208 end:0x81307D08
 	.sbss       start:0x814AD338 end:0x814AD348
@@ -86,6 +151,13 @@ bs2/cube_draw.c:
 	.sdata2     start:0x814ADDB0 end:0x814ADDB8
 	.bss        start:0x814B5DF0 end:0x814B5EA0
 
+bs2/menu/memcard_card.c:
+	.text       start:0x8131BF6C end:0x8131ECC4
+	.data       start:0x81381290 end:0x813813C0
+	.sbss       start:0x814AD4B0 end:0x814AD4E8
+	.sdata2     start:0x814ADF40 end:0x814ADF48
+	.bss        start:0x814B7280 end:0x814C4E20
+
 bs2/menu/menu_icon_card.c:
 	.text       start:0x813218C8 end:0x813230F0
 	.rodata     start:0x8137EE18 end:0x8137EE30
@@ -139,6 +211,11 @@ bs2/menu/calendar.c:
 	.sbss       start:0x814AD5A0 end:0x814AD5C0
 	.sdata2     start:0x814AE068 end:0x814AE080
 	.bss        start:0x814DE600 end:0x814DE638
+
+bs2/menu/menu_fx_anim.c:
+	.text       start:0x81330F30 end:0x81332FB8
+	.data       start:0x813817E8 end:0x81381810
+	.bss        start:0x814FE850 end:0x814FE868
 
 jaudio/dummyprobe.c:
 	.text       start:0x813376A0 end:0x81337740 align:32
