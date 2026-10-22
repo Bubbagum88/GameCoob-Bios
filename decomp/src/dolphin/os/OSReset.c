@@ -41,13 +41,14 @@ void OSRegisterResetFunction(OSResetFunctionInfo* info) {
     tmp->next = info;
 }
 
+// The IPL build has this function unoptimized
+#pragma push
+#pragma optimization_level 0
+#pragma peephole off
 u32 OSGetResetCode(void) {
-    u32 code;
-
     if (*(u8*)0x800030E2) {
-        code = OS_RESETCODE_RESTART;
-    } else {
-        code = (__PIRegs[9] & ~7) >> 3;
+        return OS_RESETCODE_RESTART;
     }
-    return code;
+    return ((__PIRegs[PI_RESETCODE] & ~7) >> 3);
 }
+#pragma pop

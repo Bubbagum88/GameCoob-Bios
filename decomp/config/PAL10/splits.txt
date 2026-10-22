@@ -384,6 +384,12 @@ dolphin/os/OSRtc.c:
 	.text       start:0x81360264 end:0x81360FDC
 	.bss        start:0x815D41A0 end:0x815D41F8
 
+dolphin/si/SIBios.c:
+	.text       start:0x81360FDC end:0x813626D8
+	.data       start:0x814ABF08 end:0x814ABFC0
+	.sbss       start:0x814AD8B8 end:0x814AD8D0
+	.bss        start:0x815D41F8 end:0x815D43E8
+
 dolphin/os/OSSync.c:
 	.text       start:0x813626D8 end:0x8136275C
 
@@ -450,6 +456,12 @@ dolphin/dvd/fstload.c:
 	.sdata      start:0x814AD198 end:0x814AD1A8
 	.sbss       start:0x814AD9A0 end:0x814AD9B0
 	.bss        start:0x815D4F98 end:0x815D5008
+
+dolphin/vi/vi.c:
+	.text       start:0x81368D54 end:0x8136A7CC
+	.data       start:0x814AC5F0 end:0x814AC758
+	.sbss       start:0x814AD9B0 end:0x814AD9F8
+	.bss        start:0x815D5008 end:0x815D5150
 
 dolphin/pad/Padclamp.c:
 	.text       start:0x8136A7CC end:0x8136AA04

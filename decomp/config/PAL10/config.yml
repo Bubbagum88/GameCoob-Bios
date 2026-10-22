@@ -33,6 +33,8 @@ block_relocations:
 - source: .rodata:0x8137FFD4
 - source: .rodata:0x81380004
 - source: .rodata:0x813800C0
+# word in the same asset data that only looks like a pointer into EXIIntrruptHandler
+- source: .data:0x8141EF04
 
 # Data extracted at build time into build/PAL10/include (never committed)
 extract:
