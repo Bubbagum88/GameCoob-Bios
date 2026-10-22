@@ -211,7 +211,8 @@ typedef struct MenuWork {
     f32 fxReadyRatio;      /* 0x0D8 0.9 */
     s16 fxDC, fxDE;        /* 0x0DC 200, 200 */
     f32 fxE0, fxE4, fxE8;  /* 0x0E0 200, 200, 200 */
-    s32 fxBlinkPeriod;     /* 0x0EC 25 */
+    s16 fxBlinkPeriod;     /* 0x0EC 25: frames per cursor blink */
+    s16 fxEE;              /* 0x0EE */
     f32 fxF0;              /* 0x0F0 10 */
     f32 fxSel[8];          /* 0x0F4 selection bar ends (x0,y0,x1,y1) x2 */
     f32 fxSel2[4];         /* 0x114 (-50, 13, 50, 13) */
