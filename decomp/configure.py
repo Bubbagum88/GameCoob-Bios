@@ -592,7 +592,7 @@ config.libs = [
         "objects": [
             Object(Matching, "bs2/BS2.c", extra_cflags=["-inline noauto"]),
             Object(NonMatching, "bs2/dvdload.c"),
-            Object(NonMatching, "bs2/bs2main.c"),
+            Object(Matching, "bs2/bs2main.c"),
             Object(Matching, "bs2/gInit.c"),
             Object(Matching, "bs2/pad.c", extra_cflags=["-fp_contract off"]),
             Object(NonMatching, "bs2/camera.c"),
