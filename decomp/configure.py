@@ -594,7 +594,7 @@ config.libs = [
             Object(NonMatching, "bs2/dvdload.c"),
             Object(NonMatching, "bs2/bs2main.c"),
             Object(Matching, "bs2/gInit.c"),
-            Object(NonMatching, "bs2/pad.c"),
+            Object(Matching, "bs2/pad.c", extra_cflags=["-fp_contract off"]),
             Object(NonMatching, "bs2/camera.c"),
             Object(Matching, "bs2/gMRbuild.c"),
             Object(NonMatching, "bs2/gMRdraw.c"),
