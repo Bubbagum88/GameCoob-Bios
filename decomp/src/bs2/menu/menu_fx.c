@@ -20,6 +20,13 @@ typedef struct FxPool {
     s16 ready;      /* 0xA796 frame count at which input is accepted */
 } FxPool;
 
+/* A value easing from 'from' to 'to' over 10 frames. */
+typedef struct FxSlide {
+    s16 t;
+    f32 from;
+    f32 to;
+} FxSlide;
+
 typedef struct FxCursor {
     s16 v[3];       /* 0x00 */
     f32 f[3];       /* 0x08 */
@@ -64,12 +71,14 @@ void fn_8132D000(void);
 void fn_8132D084(s16 starting, s16 discMsg);
 void fn_8132D194(s16 sub, s16 row, s16 dateField, s16 timeField, ClockEdit* e);
 void fn_8132D234(void);
+f32 fn_8132DE98(void);
 void fn_8132DEFC(void);
 void fn_8132EC54(void);
 void fn_8132F010(void);
 void fn_8132FFF0(void);
 void fn_81330374(FxCube* out, u32* count);
 void fn_813306C8(s32 lang);
+void fn_813306FC(s32 from, s32 to);
 void fn_813307B4(void);
 void fn_81330518(GXColor* a, GXColor* b, GXColor* c, GXColor* out, f32 t, f32 u);
 
@@ -167,7 +176,7 @@ static u8 sFxAlpha[FX_MAX];
 static GXColor sFxLightCol[FX_MAX];
 static GXColor sFxDarkCol[FX_MAX];
 static FxCursor sFxCursor;
-static s16 lbl_814FE828[6];
+static FxSlide sFxSlide;
 static u8 sFxPad[0x1C];
 
 static u16 sFxBlink;
@@ -219,7 +228,7 @@ u32 Fx_IsReady(s32 margin) {
 void Fx_Init(void* keys, void* curves) {
     memset(&sFxState, 0, sizeof(FxState));
     memset(&sFxPool, 0, sizeof(FxPool));
-    memset(lbl_814FE828, 0, sizeof(lbl_814FE828));
+    memset(&sFxSlide, 0, sizeof(FxSlide));
     sFxState.screen = 0;
     sFxPrev = sFxState;
     fn_81330F30(keys);
@@ -230,7 +239,7 @@ void Fx_Init(void* keys, void* curves) {
 void Fx_Clear(void) {
     fn_8132D000();
     memset(&sFxPool, 0, sizeof(FxPool));
-    memset(lbl_814FE828, 0, sizeof(lbl_814FE828));
+    memset(&sFxSlide, 0, sizeof(FxSlide));
 }
 
 #define FX_SET_COLORS(c)                                                \
@@ -283,7 +292,7 @@ void FxOption_Update(s32 sub, s16 row, s16 offset, s16 sound) {
         fn_81333344();
         fn_8133370C();
         memset(&sFxPool, 0, sizeof(FxPool));
-        memset(lbl_814FE828, 0, sizeof(lbl_814FE828));
+        memset(&sFxSlide, 0, sizeof(FxSlide));
         sFxPool.ready = Menu_Get()->fxReadyCount;
         sFxBlink = 0;
         sFxLang = Option_GetLang();
@@ -334,7 +343,7 @@ void FxClock_Update(s32 sub, s32 row, s32 dateField, s32 timeField, ClockEdit* e
     fn_8132D194(sub, row, dateField, timeField, e);
     if (sFxPrev.screen != 2) {
         memset(&sFxPool, 0, sizeof(FxPool));
-        memset(lbl_814FE828, 0, sizeof(lbl_814FE828));
+        memset(&sFxSlide, 0, sizeof(FxSlide));
         sFxPool.ready = Menu_Get()->fxReadyCount;
         fn_8133370C();
     }
@@ -364,7 +373,7 @@ void FxGame_Update(s32 starting, s32 discMsg) {
     fn_8132D084(starting, discMsg);
     if (sFxPrev.screen != 3) {
         memset(&sFxPool, 0, sizeof(FxPool));
-        memset(lbl_814FE828, 0, sizeof(lbl_814FE828));
+        memset(&sFxSlide, 0, sizeof(FxSlide));
         i = 0;
         a = sFxAlpha;
         do {
@@ -792,7 +801,7 @@ void fn_8132BF20(void) {
         fn_8132BFF8(&sFxPool.v[6][i], sFxPool.v[7][i]);
     }
     fn_8132BFF8(&sFxPool.frame, sFxPool.ready);
-    fn_8132BFF8(&lbl_814FE828[0], 10);
+    fn_8132BFF8(&sFxSlide.t, 10);
     fn_8132BFF8(&sFxCursor.v[2], 10);
 }
 
@@ -1044,4 +1053,201 @@ FxState* fn_8132CFE8(void) {
 /* 0x8132CFF4 */
 FxState* fn_8132CFF4(void) {
     return &sFxPrev;
+}
+
+/* 0x8132D000: close the mosaic. */
+void fn_8132D000(void) {
+    sFxPrev = sFxState;
+    sFxState.screen = 0;
+    sFxState.v[1] = 0x7F;
+    sFxState.v[2] = 0x7F;
+    sFxState.v[3] = 0x7F;
+    sFxState.v[4] = 0x7F;
+    sFxState.v[5] = 0x7F;
+    sFxState.v[6] = 0x7F;
+    sFxState.v[7] = 0x7F;
+    sFxState.v[8] = 0x7F;
+    sFxState.v[9] = 0x7F;
+    sFxState.v[10] = 0x7F;
+    sFxState.v[11] = 0x7F;
+    sFxState.v[12] = 0x7F;
+}
+
+/* 0x8132D084 */
+void fn_8132D084(s16 starting, s16 discMsg) {
+    sFxPrev = sFxState;
+    sFxState.screen = 3;
+    sFxState.v[0] = starting;
+    sFxState.v[1] = discMsg;
+    sFxState.v[2] = 0x7F;
+    sFxState.v[3] = 0x7F;
+    sFxState.v[4] = 0x7F;
+    sFxState.v[5] = 0x7F;
+    sFxState.v[6] = 0x7F;
+    sFxState.v[7] = 0x7F;
+    sFxState.v[8] = 0x7F;
+    sFxState.v[9] = 0x7F;
+    sFxState.v[10] = 0x7F;
+    sFxState.v[11] = 0x7F;
+    sFxState.v[12] = 0x7F;
+}
+
+/* 0x8132D10C */
+void FxOption_SetState(s16 sub, s16 row, s16 offset, s16 sound) {
+    sFxPrev = sFxState;
+    sFxState.screen = 1;
+    sFxState.v[0] = 0x7F;
+    sFxState.v[1] = 0x7F;
+    sFxState.v[2] = sub;
+    sFxState.v[3] = row;
+    sFxState.v[4] = offset;
+    sFxState.v[5] = sound;
+    sFxState.v[6] = 0x7F;
+    sFxState.v[7] = 0x7F;
+    sFxState.v[8] = 0x7F;
+    sFxState.v[9] = 0x7F;
+    sFxState.v[10] = 0x7F;
+    sFxState.v[11] = 0x7F;
+    sFxState.v[12] = 0x7F;
+}
+
+/* 0x8132D194 */
+void fn_8132D194(s16 sub, s16 row, s16 dateField, s16 timeField, ClockEdit* e) {
+    sFxPrev = sFxState;
+    sFxState.screen = 2;
+    sFxState.v[0] = 0x7F;
+    sFxState.v[1] = 0x7F;
+    sFxState.v[2] = 0x7F;
+    sFxState.v[3] = 0x7F;
+    sFxState.v[4] = 0x7F;
+    sFxState.v[5] = 0x7F;
+    sFxState.v[6] = sub;
+    sFxState.v[7] = row;
+    sFxState.v[8] = dateField;
+    sFxState.v[9] = timeField;
+    sFxState.v[10] = e->value[0];
+    sFxState.v[11] = e->value[1];
+    sFxState.v[12] = e->value[2];
+}
+
+/* fn_8132CCF4, inlined. */
+static inline f32 Fx_Progress(void) {
+    return (f32)sFxPool.frame / (f32)Menu_Get()->fxReadyCount;
+}
+
+static inline f32 Fx_Lit(u32 i) {
+    return (f32)sFxPool.v[0][i] / (f32)Menu_Get()->fxFadeOut;
+}
+
+/* Scale a cube's offset from o and its size. */
+static inline void Fx_ScaleAbout(Vec* o, f32 sx, f32 sy, f32 sz, FxCube* c) {
+    f32 ox = o->x;
+    f32 oz = o->z;
+    f32 oy = o->y;
+
+    c->pos.x = ox + sx * (c->pos.x - ox);
+    c->pos.y = oy + sy * (c->pos.y - oy);
+    c->pos.z = oz + sz * (c->pos.z - oz);
+    c->scale.x *= sx;
+    c->scale.y *= sy;
+    c->scale.z *= sz;
+}
+
+/* Place a text line: slide it in from its offset and scale it about its centre. */
+#define FX_PLACE_LINE(listFn, countFn, line)                                          \
+    list = listFn();                                                                \
+    fn_8132C830(&o, sFxCube, list, countFn());                                      \
+    for (i = 0; i < countFn(); i++) {                                               \
+        sFxCube[list[i]].pos.x += Menu_Get()->fxTitle[line].x * Fx_Progress();      \
+        sFxCube[list[i]].pos.y += Menu_Get()->fxTitle[line].y * Fx_Progress();      \
+        Fx_ScaleAbout(&o, Menu_Get()->fxTitle[line].scale, Menu_Get()->fxTitle[line].scale, \
+                      Menu_Get()->fxTitle[line].scale, &sFxCube[list[i]]);          \
+    }
+
+/* Grow the lit cells of a text line. */
+#define FX_GROW_LINE(listFn, countFn, line)                                           \
+    list = listFn();                                                                \
+    fn_8132C830(&o, sFxCube, list, countFn());                                      \
+    for (i = 0; i < countFn(); i++) {                                               \
+        Fx_ScaleAbout(&o,                                                           \
+                      1.0f + Fx_Lit(list[i]) * Menu_Get()->fxTitle[line].spacing,   \
+                      1.0f + Fx_Lit(list[i]) * Menu_Get()->fxTitle[line].spacing,   \
+                      1.0f + Fx_Lit(list[i]) * Menu_Get()->fxTitle[line].spacing,   \
+                      &sFxCube[list[i]]);                                           \
+        LAST                                                                        \
+    }
+
+/* 0x8132D234: lay out the three Options text lines. */
+void fn_8132D234(void) {
+    s32 i;
+    u16* list;
+    Vec o;
+    f32 t;
+
+    o.x = o.y = o.z = 0.0f;
+    FX_PLACE_LINE(fn_81332C34, fn_81332C9C, 0)
+    FX_PLACE_LINE(fn_813327B8, fn_81332820, 1)
+    list = fn_81331008();
+    fn_8132C830(&o, sFxCube, list, fn_81331070());
+    o.x = 5.0f;
+    o.y = -135.0f;
+    for (i = 0; i < fn_81331070(); i++) {
+        sFxCube[list[i]].pos.x += Menu_Get()->fxTitle[2].x * Fx_Progress();
+        sFxCube[list[i]].pos.y += Menu_Get()->fxTitle[2].y * Fx_Progress();
+        Fx_ScaleAbout(&o, Menu_Get()->fxTitle[2].scale, Menu_Get()->fxTitle[2].scale,
+                      Menu_Get()->fxTitle[2].scale, &sFxCube[list[i]]);
+    }
+#define LAST
+    FX_GROW_LINE(fn_81332C34, fn_81332C9C, 0)
+    FX_GROW_LINE(fn_813327B8, fn_81332820, 1)
+#undef LAST
+#define LAST                                                                        \
+    t = (Fx_Progress() - 0.9f) / (1.0f - 0.9f);                                     \
+    if (t < 0.0f) {                                                                 \
+        t = 0.0f;                                                                   \
+    } else if (t > 1.0f) {                                                          \
+        t = 1.0f;                                                                   \
+    }                                                                               \
+    sFxCube[list[i]].pos.x += t * (-271.0 + (271.0 / 296.0) * fn_8132DE98());
+    FX_GROW_LINE(fn_81331008, fn_81331070, 2)
+#undef LAST
+}
+
+/* 0x8132DD84: slide the language list to the row of the new language. */
+void FxOption_ChangeLang(s32 from, s32 to) {
+    s32 ofs;
+
+    switch (to) {
+    case 0:
+        ofs = Menu_Get()->fxLineOfs[0];
+        break;
+    case 1:
+        ofs = Menu_Get()->fxLineOfs[1];
+        break;
+    case 2:
+        ofs = Menu_Get()->fxLineOfs[2];
+        break;
+    case 3:
+        ofs = Menu_Get()->fxLineOfs[3];
+        break;
+    case 4:
+        ofs = Menu_Get()->fxLineOfs[4];
+        break;
+    case 5:
+        ofs = Menu_Get()->fxLineOfs[5];
+        break;
+    }
+    sFxSlide.from = fn_8132DE98();
+    sFxSlide.to = ofs + Option_GetLangRow();
+    sFxSlide.t = 0;
+    fn_813306FC(from, to);
+}
+
+/* 0x8132DE94 */
+void FxOption_ChangeUiLang(s32 from, s32 to) {
+}
+
+/* 0x8132DE98: current position of the language list. */
+f32 fn_8132DE98(void) {
+    return Hermite(sFxSlide.t, 0.0f, sFxSlide.from, 0.0f, 10.0f, sFxSlide.to, 0.0f);
 }
