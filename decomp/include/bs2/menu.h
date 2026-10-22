@@ -495,6 +495,13 @@ void CardIcon_UpdateEnter(void);  /* 0x81322EE8 */
 void CardIcon_UpdateHide(void);   /* 0x81322D58 */
 void CardIcon_CalcMtx(void);      /* 0x81322A18 */
 void CardIcon_ResetFiles(void);   /* 0x813207C8 */
+void CardIcon_InitGrid(void);     /* 0x813219F4 */
+BOOL CardIcon_IsInner(s16 i);     /* 0x81321B98 */
+s16 CardIcon_Diagonal(s16 i);     /* 0x81321BE4 */
+void CardIcon_UpdateFly(void);    /* 0x81321C68 */
+void CardIcon_FadeInner(BOOL in); /* 0x81321F60 */
+void CardIcon_SpinY(s32 t);       /* 0x81322434 */
+BOOL CardIcon_IsSettled(void);    /* 0x813230E8 */
 void GameIcon_InitRing(void);     /* 0x813231F8 */
 void GameIcon_UpdateFace(void);   /* 0x813233C8 */
 void GameIcon_UpdateEnter(void);  /* 0x813239E4 */
