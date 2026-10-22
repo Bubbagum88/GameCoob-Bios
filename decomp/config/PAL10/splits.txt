@@ -16,7 +16,7 @@ bs2/BS2.c:
 	.sdata      start:0x814ACFC0 end:0x814ACFC8
 	.sbss       start:0x814AD260 end:0x814AD268
 
-bs2/dvdload.c:
+bs2/BS2Mach.c:
 	.text       start:0x81300598 end:0x81300F50
 	.data       start:0x81380E08 end:0x81380FD0
 	.sbss       start:0x814AD268 end:0x814AD2A8
