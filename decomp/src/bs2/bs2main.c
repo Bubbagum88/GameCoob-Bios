@@ -47,14 +47,14 @@ void fn_813025A4(void);
 void __CARDSetDiskID(void* id);
 void CardThread_Init(void);
 void DEMOPadInit(void);
-void fn_81308208(s32);
+void Font_Load(s32);
 void RandInit(void);                  /* 0x81307EB8 */
 void fn_813022F4(void);
 void Sound_SetOutputMode(u32);
 void DEMOPadRead(void);
 void InitDVDLoader(void);
 void DEMOBeforeRender(void);
-void fn_8130903C(void);
+void Font_StepPulse(void);
 void fn_81302DF0(void);
 void fn_81302FA0(void);
 void fn_813022C4(void);
@@ -132,7 +132,7 @@ void BS2Main(void) {
     __CARDSetDiskID(NULL);
     CardThread_Init();
     DEMOPadInit();
-    fn_81308208(0);
+    Font_Load(0);
     SinTableInit(12);
     RandInit();
     fn_813022F4();
@@ -143,7 +143,7 @@ void BS2Main(void) {
         DEMOPadRead();
         InitDVDLoader();
         DEMOBeforeRender();
-        fn_8130903C();
+        Font_StepPulse();
         fn_81302DF0();
         fn_81302FA0();
         Scene_Update();

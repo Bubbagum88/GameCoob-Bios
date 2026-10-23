@@ -604,6 +604,8 @@ config.libs = [
             Object(NonMatching, "bs2/mtx.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
             Object(Matching, "bs2/gBase.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
             Object(Matching, "bs2/rnd.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
+            Object(NonMatching, "bs2/font.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
+            Object(NonMatching, "bs2/glh.c", extra_cflags=["-fp_contract off"]),
             Object(NonMatching, "bs2/fader.c"),
             Object(NonMatching, "bs2/backdrop.c", extra_cflags=["-fp_contract off"]),
             Object(NonMatching, "bs2/lang.c", extra_cflags=["-inline noauto", "-fp_contract off"]),

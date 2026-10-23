@@ -90,6 +90,16 @@ bs2/rnd.c:
 	.text       start:0x81307EB8 end:0x81307FB8
 	.sbss       start:0x814AD350 end:0x814AD360
 
+bs2/font.c:
+	.text       start:0x81307FB8 end:0x81309620
+	.sbss       start:0x814AD360 end:0x814AD380
+	.sdata2     start:0x814ADC58 end:0x814ADC60
+	.bss        start:0x814AF6C0 end:0x814AF710
+
+bs2/glh.c:
+	.text       start:0x81309620 end:0x8130A86C
+	.sbss       start:0x814AD380 end:0x814AD388
+
 bs2/fader.c:
 	.text       start:0x8130A86C end:0x8130AB14
 
