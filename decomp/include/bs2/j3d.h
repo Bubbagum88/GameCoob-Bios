@@ -7,9 +7,12 @@
 /* BS2's own small model loader (J3D_* at 0x813034E4..). Only the fields the
    decompiled code touches are named. */
 typedef struct J3DMaterial {
-    u8 pad0[0x30];
+    u8 pad0[0x8];
+    u16 flags;             /* 0x08 */
+    u8 padA[0x30 - 0xA];
     void* tevColor;        /* 0x30 GXColorS10 used by the TEV stage */
     void* tevColor2;       /* 0x34 second TEV colour (GXColorS10) */
+    u8 pad38[0xD8 - 0x38];
 } J3DMaterial;
 
 /* scene graph node built from INF1 (0x18) */

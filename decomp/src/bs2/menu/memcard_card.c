@@ -94,7 +94,7 @@ void CardThread_DoMount(u8 slot);
 void CardThread_DoFormat(u8 slot);
 void CardThread_DoCopyMove(u8 slot, s16 file, s32 cmd);
 void CardThread_DoErase(u8 slot, s16 file);
-void fn_8131ECC4(void);
+void CardThread_DoRefresh(void);
 s32 CardThread_FindInOther(u8 slot, s16 file);
 
 static void CardThread_Send(u32 msg) {
@@ -427,7 +427,7 @@ void* CardThread_Main(void* arg) {
                 CardThread_DoErase(CARD_MSG_SLOT((u32)msg), CARD_MSG_FILE((u32)msg));
                 break;
             case CARD_CMD_REFRESH:
-                fn_8131ECC4();
+                CardThread_DoRefresh();
                 break;
             }
         } else {
@@ -441,7 +441,7 @@ void* CardThread_Main(void* arg) {
                 CardThread_SetEnabled(CARD_MSG_CMD((u32)msg), FALSE);
                 break;
             case CARD_CMD_REFRESH:
-                fn_8131ECC4();
+                CardThread_DoRefresh();
                 break;
             default:
                 CardThread_Fail(CARD_MSG_SLOT((u32)msg), CARD_MSG_CMD((u32)msg), CARD_RESULT_NOCARD);
@@ -1248,4 +1248,34 @@ void CardThread_DoErase(u8 slot, s16 file) {
     CardThread_UpdateSlot(slot);
     CardThread_MarkConflicts();
     OSSendMessage(&sCardReplyQueue, (OSMessage)CARD_MSG(CARD_CMD_ERASE, 0, slot, file), OS_MESSAGE_BLOCK);
+}
+
+/* 0x8131ECC4: count the blocks used by the running game's own files */
+void CardThread_DoRefresh(void) {
+    CARDDir dir;
+    s32 slot;
+    s32 file;
+    s32 blocks;
+    s32 result;
+    u8* id = (u8*)0x80000000;
+
+    for (slot = 0; slot < 2; slot++) {
+        if (sCardMounted[slot]) {
+            blocks = 0;
+            for (file = 0; file < CARD_MAX_FILES; file++) {
+                result = __CARDGetStatusEx(slot, file, &dir);
+                if (result < 0 && result != CARD_RESULT_NOFILE) {
+                    blocks = -1;
+                    break;
+                }
+                if (result == CARD_RESULT_READY && memcmp(dir.gameName, id, 4) == 0 &&
+                    memcmp(dir.company, id + 4, 2) == 0) {
+                    blocks += dir.length;
+                }
+            }
+            gCardSlots[slot].totalBlocks = (s16)blocks;
+        }
+    }
+    CardThread_MarkConflicts();
+    OSSendMessage(&sCardReplyQueue, (OSMessage)CARD_CMD_REFRESH, OS_MESSAGE_BLOCK);
 }
