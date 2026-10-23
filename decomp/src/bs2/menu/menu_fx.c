@@ -1063,12 +1063,14 @@ void fn_8132C830(Vec* out, FxCube* cubes, u16* idx, u32 n) {
     }
     {
         Vec c = { 0.0f, 0.0f, 0.0f };
+        Vec *o = out;
 
         c.x = x / n;
         c.y = y / n;
         c.z = z / n;
-        *out = c;
+        *o = c;
     }
+
 }
 
 /* 0x8132CB60: degrees to a 16-bit angle. */
@@ -1278,6 +1280,17 @@ static inline void Fx_ScaleAbout(Vec* o, f32 sx, f32 sy, f32 sz, FxCube* c) {
         LAST                                                                        \
     }
 
+static inline f32 FxSlideOff(void) {
+    f32 t = (Fx_Progress() - 0.9f) / (1.0f - 0.9f);
+
+    if (t < 0.0f) {
+        t = 0.0f;
+    } else if (t > 1.0f) {
+        t = 1.0f;
+    }
+    return t * (-271.0 + (271.0 / 296.0) * fn_8132DE98());
+}
+
 /* 0x8132D234: lay out the three Options text lines. */
 void fn_8132D234(void) {
     s32 i;
@@ -1303,13 +1316,8 @@ void fn_8132D234(void) {
     FX_GROW_LINE(fn_813327B8, fn_81332820, 1)
 #undef LAST
 #define LAST                                                                        \
-    t = (Fx_Progress() - 0.9f) / (1.0f - 0.9f);                                     \
-    if (t < 0.0f) {                                                                 \
-        t = 0.0f;                                                                   \
-    } else if (t > 1.0f) {                                                          \
-        t = 1.0f;                                                                   \
-    }                                                                               \
-    sFxCube[list[i]].pos.x += t * (-271.0 + (271.0 / 296.0) * fn_8132DE98());
+    t = FxSlideOff();                                                               \
+    sFxCube[list[i]].pos.x += t;
     FX_GROW_LINE(fn_81331008, fn_81331070, 2)
 #undef LAST
 }
