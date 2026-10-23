@@ -380,6 +380,7 @@ extern voicetable* ProgToVp(s32 prog, s32 inst) {
     s32* REF_prog = &prog;
     s32* REF_inst = &inst;
     voicetable* vtbl;
+    STACK_PAD_VAR(5);
 
     if (prog == 0xFF) {
         return NULL;
@@ -975,8 +976,7 @@ extern channel* Nas_AllocationOnRequest(note* n) {
     STACK_PAD_VAR(4);
 
     if (policy & 1) {
-        chan = n->channel;
-        if (chan != NULL && chan->playback_ch.previous_parent_note == n &&
+        if ((chan = n->channel) != NULL && chan->playback_ch.previous_parent_note == n &&
             chan->playback_ch.wanted_parent_note == NA_NO_NOTE) {
             __Nas_InterReleaseTrack(chan, n);
             Nas_CutList(&chan->link);
