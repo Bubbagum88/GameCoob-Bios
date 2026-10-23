@@ -1390,8 +1390,7 @@ void fn_8132DEFC(void) {
 
     FX_PLACE_ITEM(fn_813315C8, fn_81331630, 0)
     FX_PLACE_ITEM(fn_813311F4, fn_81331258, 1)
-    switch (sFxState.v[6]) {
-    case 1:
+    if (sFxState.v[6] == 1) {
         switch (sFxState.v[8]) {
         case 0:
             FX_GROW_ITEM(fn_81332008, fn_81332070, 0)
@@ -1403,8 +1402,7 @@ void fn_8132DEFC(void) {
             FX_GROW_ITEM(fn_8133166C, fn_813316D4, 0)
             break;
         }
-        break;
-    case 2:
+    } else if (sFxState.v[6] == 2) {
         switch (sFxState.v[9]) {
         case 0:
             FX_GROW_ITEM(fn_81331858, fn_813318C0, 1)
@@ -1416,7 +1414,6 @@ void fn_8132DEFC(void) {
             FX_GROW_ITEM(fn_81331E1C, fn_81331E84, 1)
             break;
         }
-        break;
     }
 }
 
