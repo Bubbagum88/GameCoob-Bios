@@ -639,7 +639,7 @@ config.libs = [
         "progress_category": "jaudio",
         "objects": [
             Object(Matching, "jaudio/dummyprobe.c"),
-            Object(NonMatching, "jaudio/ipl_81337740.c"),  # IPL-only, no source yet
+            Object(NonMatching, "jaudio/rspsim.c", extra_cflags=["-i include/neos", "-D_LANGUAGE_C"]),  # from AC jaudio_NES
             Object(NonMatching, "jaudio/aictrl.c"),
             Object(Matching, "jaudio/sample.c"),
             Object(Matching, "jaudio/dummyrom.c"),
