@@ -70,7 +70,7 @@ void Nas_CpuFX(s32 chunkLen, s32 updateIdx, s32 reverbIdx) {
     s32 sample;
     s32 n;
     s32 s;
-    STACK_PAD_VAR(6);
+    STACK_PAD_VAR(1);
 
     del_p = &AG.synth_delay[reverbIdx];
     param_p = &del_p->params[del_p->cur_frame][updateIdx];
@@ -703,6 +703,7 @@ Acmd* Nas_SaveAuxBuffer_B(Acmd* cmd, delay* del_p, s16 update_idx) {
 
 extern Acmd* Nas_DriveRsp(s16* aiBuf, s32 aiBufLen, Acmd* cmd, s32 updateIndex) {
     s32 size = aiBufLen * SAMPLE_SIZE;
+    u8 pad[20];
     u8 noteIndices[64];
     s32 noteCount = 0;
     s32 reverbIndex;
@@ -756,8 +757,8 @@ extern Acmd* Nas_DriveRsp(s16* aiBuf, s32 aiBufLen, Acmd* cmd, s32 updateIndex) 
             // So this is essentially a DMEMmove from DMEM_WET_LEFT_CH to DMEM_LEFT_CH
             aMix(cmd++, DMEM_2CH_SIZE >> 4, reverb->volume, DMEM_WET_LEFT_CH, DMEM_LEFT_CH);
 
-            subDelay = reverb->sub_delay;
-            if (subDelay != 0) {
+            subDelay = (s32)reverb->sub_delay;
+            if (subDelay) {
                 aDMEMMove(cmd++, DMEM_WET_LEFT_CH, DMEM_WET_TEMP, DMEM_2CH_SIZE);
             }
 
