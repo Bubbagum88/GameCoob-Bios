@@ -3,7 +3,7 @@
 
 #include "bs2/menu.h"
 
-/* Shared by the mosaic text units (menu_fx_shape.c, menu_fx.c, menu_fx_draw.c). */
+/* Shared by the mosaic text units (menu_fx_shape.c, menu_fx.c, menu_fx_draw.c and the cube units in menu_fx_cube.h). */
 
 #define FX_MAX 0x861
 

@@ -35,6 +35,30 @@ block_relocations:
 - source: .rodata:0x8137FFD4
 - source: .rodata:0x81380004
 - source: .rodata:0x813800C0
+# asset words in .data that only look like pointers into menu_fx_draw's bss arrays
+- source: .data:0x8138D6E0
+- source: .data:0x8139A770
+- source: .data:0x8139F1B8
+- source: .data:0x813A2114
+- source: .data:0x813C548C
+- source: .data:0x8140AE80
+- source: .data:0x814317D0
+- source: .data:0x8143FD08
+- source: .data:0x8144C3EC
+- source: .data:0x81456474
+- source: .data:0x81459174
+- source: .data:0x8145C0D4
+- source: .data:0x8145E29C
+- source: .data:0x81473ECC
+- source: .data:0x81476B44
+- source: .data:0x81479F9C
+- source: .data:0x81486848
+- source: .data:0x8148E7B8
+- source: .data:0x8148FD3C
+- source: .data:0x814913FC
+- source: .data:0x8149625C
+- source: .data:0x814AABCC
+- source: .data:0x814AAC58
 # word in the same asset data that only looks like a pointer into EXIIntrruptHandler
 - source: .data:0x8141EF04
 
