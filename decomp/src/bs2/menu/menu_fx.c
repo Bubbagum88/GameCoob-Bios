@@ -1280,6 +1280,19 @@ static inline void Fx_ScaleAbout(Vec* o, f32 sx, f32 sy, f32 sz, FxCube* c) {
         LAST                                                                        \
     }
 
+/* Out-of-line slide-in weight; nothing calls it, so the linker strips it,
+   but its constants stay in .sdata2 ahead of fn_8132D234's. */
+f32 Fx_SlideT(void) {
+    f32 t = (Fx_Progress() - 0.9f) / (1.0f - 0.9f);
+
+    if (t < 0.0f) {
+        t = 0.0f;
+    } else if (t > 1.0f) {
+        t = 1.0f;
+    }
+    return t;
+}
+
 static inline f32 FxSlideOff(void) {
     f32 t = (Fx_Progress() - 0.9f) / (1.0f - 0.9f);
 
@@ -1608,6 +1621,16 @@ void fn_8132FFF0(void) {
 
 /* Squash factor of the fade-out's first tenth. */
 static inline f32 Fx_Squash(f32 t) {
+    if (t < 0.1f) {
+        return 1.0f - 0.05f * Hermite(t, 0.0f, 0.0f, 0.0f, 0.1f, 1.0f, 0.0f);
+    } else {
+        return 1.0f - 0.05f * Hermite(t, 0.1f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f);
+    }
+}
+
+/* Out-of-line copy of Fx_Squash; nothing calls it, so the linker strips it,
+   but its constants stay in .sdata2. */
+f32 Fx_SquashOut(f32 t) {
     if (t < 0.1f) {
         return 1.0f - 0.05f * Hermite(t, 0.0f, 0.0f, 0.0f, 0.1f, 1.0f, 0.0f);
     } else {
