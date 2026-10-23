@@ -151,12 +151,38 @@ bs2/cube_draw.c:
 	.sdata2     start:0x814ADDB0 end:0x814ADDB8
 	.bss        start:0x814B5DF0 end:0x814B5EA0
 
+bs2/menu/menu.c:
+	.text       start:0x81310F58 end:0x81315724
+	.rodata     start:0x8137EC28 end:0x8137ECF8
+	.data       start:0x813811E8 end:0x81381290
+	.sdata      start:0x814AD000 end:0x814AD008
+	.sbss       start:0x814AD3F0 end:0x814AD440
+	.sdata2     start:0x814ADDB8 end:0x814ADED8
+	.bss        start:0x814B5EA0 end:0x814B6360
+
+bs2/menu/game_params.c:
+	.text       start:0x81315724 end:0x813157B8
+	.sbss       start:0x814AD440 end:0x814AD448
+	.sdata2     start:0x814ADED8 end:0x814ADEE0
+	.bss        start:0x814B6360 end:0x814B6380
+
 bs2/menu/memcard_card.c:
 	.text       start:0x8131BF6C end:0x8131ECC4
 	.data       start:0x81381290 end:0x813813C0
 	.sbss       start:0x814AD4B0 end:0x814AD4E8
 	.sdata2     start:0x814ADF40 end:0x814ADF48
 	.bss        start:0x814B7280 end:0x814C4E20
+
+bs2/menu/option_params.c:
+	.text       start:0x81321730 end:0x813217F0
+	.sbss       start:0x814AD510 end:0x814AD518
+	.sdata2     start:0x814ADF88 end:0x814ADFA0
+	.bss        start:0x814D9F00 end:0x814D9F38
+
+bs2/menu/clock_params.c:
+	.text       start:0x813217F0 end:0x813218C8
+	.sbss       start:0x814AD518 end:0x814AD520
+	.bss        start:0x814D9F38 end:0x814D9F60
 
 bs2/menu/menu_icon_card.c:
 	.text       start:0x813218C8 end:0x813230F0

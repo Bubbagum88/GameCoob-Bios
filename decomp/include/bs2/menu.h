@@ -171,7 +171,7 @@ typedef struct GlhHeader {
 enum { SUBFADE_OPTION = 0, SUBFADE_CARD = 1, SUBFADE_CLOCK = 2, SUBFADE_GAME = 3 };
 
 /* ------------------------------------------------------------------ */
-/* Menu work area (0x814B5EA0, 0x4BC bytes); pointer at 0x814AD3F0.    */
+/* Menu parameters (0x814B5EA0, 0x1B8 bytes); pointer at 0x814AD3F0.   */
 /* Defaults are set by Menu_SetDefaults (0x81311464).                  */
 /* ------------------------------------------------------------------ */
 typedef struct FxTextLine {
@@ -208,7 +208,8 @@ typedef struct MenuWork {
     s16 fxFadeIn;          /* 0x0A8 10 */
     s16 fxFadeOut;         /* 0x0AA 10 */
     f32 fxCubeScale;       /* 0x0AC 1.0 */
-    s32 fxB0;              /* 0x0B0 100 */
+    s16 fxB0;              /* 0x0B0 100 */
+    s16 fxB2;
     f32 fxB4, fxB8, fxBC, fxC0, fxC4; /* 0x0B4 2, 5, 30, 3, 0.45 (particle flight) */
     s16 fxC8;              /* 0x0C8 spark cycle length in frames */
     s16 fxCA;
@@ -242,20 +243,7 @@ typedef struct MenuWork {
     s16 guideColorA[3];    /* 0x1A4 (0, 200, 140) A button glyph */
     s16 guideColorB[3];    /* 0x1AA (210, 0, 70)  B button glyph */
     s16 subFadeDelay[3];   /* 0x1B0 (0, 20, 70) delays of the 3 submenu faders */
-    Mtx cubeMtx;           /* 0x1B8 menu cube model matrix */
-    J3DModel iconModel;    /* 0x1E8 small cube for the submenu icons (res 178) */
-    void *guideSth[6];     /* 0x220 button guide strings for each language (res 116..121) */
-    void *digitTex[10];    /* 0x238 digit textures 0..9 (res 91..100) */
-    void *weekdayTex[7];   /* 0x260 weekday name textures (current language) */
-    Fader guideIcon[6];    /* 0x27C button glyph groups (see Menu_UpdateGuide) */
-    Fader guideText[8];    /* 0x2DC button guide labels */
-    Fader subFade[4][3];   /* 0x35C submenu fade-ins: [SUBFADE_*][0..2] */
-    Fader discBanner;      /* 0x41C Game face: disc with banner */
-    Fader discNone;        /* 0x42C Game face: "no disc" */
-    Fader discUnknown;     /* 0x43C Game face: disc without banner */
-    Fader errorMsg;        /* 0x44C fatal disc error text (string 4) */
-    Fader langGuide[6];    /* 0x45C cross-fade of the guide text between languages */
-} MenuWork;                /* 0x4BC bytes */
+} MenuWork;                /* 0x1B8 bytes */
 
 /* Button guide label indices (STH0 res 116..121) */
 enum {
@@ -425,7 +413,7 @@ void Menu_Init(BOOL first);
 s32 Menu_Update(void);
 MtxPtr Menu_GetCubeMtx(void);
 MenuWork *Menu_Get(void);
-void Menu_SetGuideLang(s16 lang);
+void Menu_SetGuideLang(s32 lang);
 
 /* menu_draw.c */
 void Menu_DrawSpinOutFace(Mtx m, u8 alpha);
