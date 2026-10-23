@@ -1700,12 +1700,17 @@ void fn_813306FC(s32 from, s32 to) {
     }
 }
 
+static inline f32 FxCursorT(void) {
+    return sFxCursor.v[2] / 10.0f;
+}
+
 /* 0x813307B4: cross-fade the cursor glyph between its old and new row. */
 void fn_813307B4(void) {
     u16* fromList;
     u16 fromCount;
-    u16* toList;
     u16 toCount;
+    u16* toList;
+
     s32 i;
 
     switch (sFxState.v[5]) {
@@ -1726,23 +1731,18 @@ void fn_813307B4(void) {
         sFxAlpha[fn_81332C34()[i]] = 0;
     }
     for (i = 0; i < fromCount; i++) {
-        f32 t;
-
         sFxCube[sFxCount + i] = sFxCube[fromList[i]];
-        t = sFxCursor.v[2] / 10.0f;
-        sFxCube[sFxCount + i].pos.x -= 0.2 * (sFxCursor.f[0] * (sFxCursor.unk14[i] * t));
-        sFxAlpha[sFxCount + i] = 255.0f * (1.0f - t);
+        sFxCube[sFxCount + i].pos.x -= 0.2 * (sFxCursor.f[0] * (sFxCursor.unk14[i] * FxCursorT()));
+        sFxAlpha[sFxCount + i] = 255.0f * (1.0f - FxCursorT());
         sFxLightCol[sFxCount + i] = sFxLight2;
         sFxDarkCol[sFxCount + i] = sFxDark2;
     }
     sFxCount += fromCount;
     for (i = 0; i < toCount; i++) {
-        f32 t;
-
         sFxCube[sFxCount + i] = sFxCube[toList[i]];
-        t = sFxCursor.v[2] / 10.0f;
-        sFxCube[sFxCount + i].pos.x += 0.2 * (sFxCursor.f[0] * (sFxCursor.unk14[fromCount + i] * (1.0f - t)));
-        sFxAlpha[sFxCount + i] = 255.0f * t;
+        sFxCube[sFxCount + i].pos.x += 0.2 * (sFxCursor.f[0] * (sFxCursor.unk14[fromCount + i] * (1.0f - FxCursorT())));
+        sFxAlpha[sFxCount + i] = 255.0f * FxCursorT();
+
         sFxLightCol[sFxCount + i] = sFxLight2;
         sFxDarkCol[sFxCount + i] = sFxDark2;
     }
@@ -1759,22 +1759,17 @@ void fn_81330B7C(void) {
     list = fn_813327B8();
     n = fn_81332820();
     for (i = 0; i < n; i++) {
-        f32 t;
-
         sFxCube[sFxCount + i] = sFxCube[list[i]];
-        t = sFxCursor.v[2] / 10.0f;
-        sFxCube[sFxCount + i].pos.x -= 0.2 * (sFxCursor.f[0] * (sFxCursor.unk14[i] * t));
-        sFxAlpha[sFxCount + i] = sFxAlpha[list[i]] * (1.0f - t);
+        sFxCube[sFxCount + i].pos.x -= 0.2 * (sFxCursor.f[0] * (sFxCursor.unk14[i] * FxCursorT()));
+        sFxAlpha[sFxCount + i] = sFxAlpha[list[i]] * (1.0f - FxCursorT());
+
         sFxLightCol[sFxCount + i] = sFxLightCol[list[i]];
         sFxDarkCol[sFxCount + i] = sFxDarkCol[list[i]];
     }
     sFxCount += n;
     for (i = 0; i < n; i++) {
-        f32 t;
+        sFxCube[list[i]].pos.x += 0.2 * (sFxCursor.f[0] * (sFxCursor.unk14[i] * (1.0f - FxCursorT())));
+        sFxAlpha[list[i]] = sFxAlpha[list[i]] * FxCursorT();
 
-        t = sFxCursor.v[2] / 10.0f;
-        sFxCube[list[i]].pos.x += 0.2 * (sFxCursor.f[0] * (sFxCursor.unk14[i] * (1.0f - t)));
-        t = sFxCursor.v[2] / 10.0f;
-        sFxAlpha[list[i]] = sFxAlpha[list[i]] * t;
     }
 }

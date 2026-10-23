@@ -37,20 +37,16 @@ void fn_81336988(void) {
 }
 
 /* Start the wipe along -x / +x from the old text to the new one. */
-static inline void FxWipeTabLeft(void) {
-    Vec *d;
+static inline void FxWipeTabLeft(FxCube *src) {
     Vec dir = { -1.0f, 0.0f, 0.0f };
 
-    d = &dir;
-    fn_8133758C(*d, fn_8132CFF4()->tab, fn_8132CFE8()->tab);
+    fn_8133758C(*(Vec *)&dir, fn_8132CFF4()->tab, fn_8132CFE8()->tab);
 }
 
-static inline void FxWipeTabRight(void) {
-    Vec *d;
+static inline void FxWipeTabRight(FxCube *src) {
     Vec dir = { 1.0f, 0.0f, 0.0f };
 
-    d = &dir;
-    fn_8133758C(*d, fn_8132CFF4()->tab, fn_8132CFE8()->tab);
+    fn_8133758C(*(Vec *)&dir, fn_8132CFF4()->tab, fn_8132CFE8()->tab);
 }
 
 static inline void FxWipeGameLeft(void) {
@@ -123,9 +119,10 @@ void fn_813369B0(FxCube *src) {
         sFxWipeAlpha[n1 + i] = 255.0f * fn_81337530();
     }
     if (fn_8132CFE8()->tab != 0) {
-        FxWipeTabLeft();
+        FxWipeTabLeft(src);
     } else {
-        FxWipeTabRight();
+        FxWipeTabRight(src);
+
     }
     if (sFxWipeFrame < Menu_Get()->fxD4) {
         sFxWipeFrame++;
