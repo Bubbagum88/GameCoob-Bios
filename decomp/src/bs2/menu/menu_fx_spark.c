@@ -2,7 +2,7 @@
 // glyph cubes spin around the centre of their glyph and drift on an eased
 // path, looping every fxC8 frames.
 
-#include "bs2/menu_fx.h"
+#include "bs2/menu_fx_cube.h"
 #include <string.h>
 
 static FxCube sFxSpark[FX_MAX_CUBES];

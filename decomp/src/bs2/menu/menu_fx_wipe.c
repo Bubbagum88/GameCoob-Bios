@@ -2,7 +2,7 @@
 // Options tab or the Game screen item changes, the old text's cubes fly out
 // one way and the new text's cubes fly in from the other.
 
-#include "bs2/menu_fx.h"
+#include "bs2/menu_fx_cube.h"
 
 #define FX_WIPE_CUBES 1430
 

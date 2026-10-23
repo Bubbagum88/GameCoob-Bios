@@ -2,7 +2,7 @@
 // when the Options / Calendar cursor moves, the cubes of the old item fly
 // out and the new item's cubes fly in.
 
-#include "bs2/menu_fx.h"
+#include "bs2/menu_fx_cube.h"
 
 /* Cubes that fly out of the old item and into the new one when the
    Options / Calendar cursor moves: 4 blocks of n cubes (old rows, new rows,

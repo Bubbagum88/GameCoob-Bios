@@ -90,6 +90,16 @@ bs2/rnd.c:
 	.text       start:0x81307EB8 end:0x81307FB8
 	.sbss       start:0x814AD350 end:0x814AD360
 
+bs2/font.c:
+	.text       start:0x81307FB8 end:0x81309620
+	.sbss       start:0x814AD360 end:0x814AD380
+	.sdata2     start:0x814ADC58 end:0x814ADC60
+	.bss        start:0x814AF6C0 end:0x814AF710
+
+bs2/glh.c:
+	.text       start:0x81309620 end:0x8130A86C
+	.sbss       start:0x814AD380 end:0x814AD388
+
 bs2/fader.c:
 	.text       start:0x8130A86C end:0x8130AB14
 
@@ -202,6 +212,19 @@ bs2/menu/calendar.c:
 	.sdata2     start:0x814AE068 end:0x814AE080
 	.bss        start:0x814DE600 end:0x814DE638
 
+bs2/menu/menu_fx_shape.c:
+	.text       start:0x81329890 end:0x81329B34
+	.sbss       start:0x814AD5C0 end:0x814AD5D0
+	.sdata2     start:0x814AE080 end:0x814AE0A8
+
+bs2/menu/menu_fx.c:
+	.text       start:0x81329B34 end:0x81330F30
+	.rodata     start:0x8137EF80 end:0x8137EF90
+	.data       start:0x81381520 end:0x813817E8
+	.sbss       start:0x814AD5D0 end:0x814AD600
+	.sdata2     start:0x814AE0A8 end:0x814AE140
+	.bss        start:0x814DE638 end:0x814FE850
+
 bs2/menu/menu_fx_anim.c:
 	.text       start:0x81330F30 end:0x81332FB8
 	.data       start:0x813817E8 end:0x81381810
@@ -212,7 +235,7 @@ bs2/menu/menu_fx_draw.c:
 	.sbss       start:0x814AD600 end:0x814AD608
 	.bss        start:0x814FE868 end:0x81541920
 
-bs2/menu/menu_fx_shape.c:
+bs2/menu/menu_fx_morph.c:
 	.text       start:0x81333344 end:0x8133370C
 	.sbss       start:0x814AD608 end:0x814AD610
 	.sdata2     start:0x814AE140 end:0x814AE160

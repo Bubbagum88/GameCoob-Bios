@@ -2,7 +2,7 @@
 // the cube model and its 2145 instances, their per-frame matrices and the
 // instanced draw.
 
-#include "bs2/menu_fx.h"
+#include "bs2/menu_fx_cube.h"
 
 static J3DModel sFxCubeModel;
 static J3DModelInstance sFxCubeInst[FX_MAX_CUBES];
