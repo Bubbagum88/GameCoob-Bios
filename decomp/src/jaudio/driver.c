@@ -70,7 +70,7 @@ void Nas_CpuFX(s32 chunkLen, s32 updateIdx, s32 reverbIdx) {
     s32 sample;
     s32 n;
     s32 s;
-    STACK_PAD_VAR(1);
+    STACK_PAD_VAR(5);
 
     del_p = &AG.synth_delay[reverbIdx];
     param_p = &del_p->params[del_p->cur_frame][updateIdx];
@@ -145,15 +145,15 @@ void Nas_CpuFX(s32 chunkLen, s32 updateIdx, s32 reverbIdx) {
 
         param_p = del_p->sub_params[del_p->cur_frame] + updateIdx;
         t2 = chunkLen / del_p->downsample_rate;
-        t3 = idx + t2 - t;
+        t = idx + t2 - t;
 
-        if (t3 < 0) {
+        if (t < 0) {
             param_p->size = t2 * SAMPLE_SIZE;
             param_p->wrapped_size = 0;
             param_p->start_pos = idx;
         } else {
-            param_p->size = (t2 - t3) * SAMPLE_SIZE;
-            param_p->wrapped_size = t3 * SAMPLE_SIZE;
+            param_p->size = (t2 - t) * SAMPLE_SIZE;
+            param_p->wrapped_size = t * SAMPLE_SIZE;
             param_p->start_pos = idx;
         }
 
