@@ -772,34 +772,48 @@ static void Scene_DrawList(GlhTextBox *boxes, SthEntry *entries, u16 first, u16 
 }
 
 /* 0x8130DB58: the language list (strings 12..17) in a frame. */
+/* Frames `count` strings from entry `first`: measures them (their height
+   goes to *h), draws the pane behind them and returns the frame's top. */
+static inline u16 Scene_DrawListFrame(DispSettings *disp, GlhTextBox *boxes, SthEntry *entries, GlhPane *panes,
+                                      u16 first, u16 count, u16 *h, GXColor *c) {
+    u16 maxW = 0;
+    u16 w = 0;
+    u16 i;
+    u32 ofs = first * 8;
+    GlhTextBox *box;
+    GlhPane *pane;
+    u16 fw;
+    u16 fh;
+    u16 y;
+
+    for (i = 0; i < count; i++) {
+        SthEntry *e = &entries[first + i];
+        Glh_MeasureString(&boxes[((SthEntry *)((u8 *)entries + ofs))->box], (char *)e + e->ofs, &w, h);
+        if (maxW < w) {
+            maxW = w;
+        }
+        ofs += 8;
+    }
+    box = &boxes[entries[first].box];
+    pane = &panes[box->pane];
+    fw = maxW + (disp->textPad << 5);
+    fh = *h + box->spacing * 80 + (disp->textPad << 5);
+    y = pane->y - fh / 2;
+    Glh_DrawPaneRect(boxes[entries[first].box].pane, sDialogGlh, c, (u16)(pane->x - fw / 2), y, fw, fh);
+    return y;
+}
+
 static void Scene_DrawLanguageList(Scene *s) {
     DispSettings *disp = Disp_GetSettings();
-    u16 maxW = 0;
     u16 h = 0;
-    u16 i;
     SthEntry *entries = (SthEntry *)((u8 *)sDialogSth + 8);
     GlhTextBox *boxes = (GlhTextBox *)((u8 *)sDialogGlh + ((u32 *)sDialogGlh)[2]);
     GlhPane *panes = (GlhPane *)((u8 *)sDialogGlh + ((u32 *)sDialogGlh)[3]);
     GXColor c = { 255, 255, 255, 255 };
-    u16 w;
-    GlhTextBox *box;
-    GlhPane *pane;
     u16 y;
 
     c.a = s->langFade;
-    for (i = 0; i < 6; i++) {
-        Glh_MeasureString(&boxes[entries[12 + i].box], (char *)&entries[12 + i] + entries[12 + i].ofs,
-                          &w, &h);
-        if (maxW < w) {
-            maxW = w;
-        }
-    }
-    box = &boxes[entries[12].box];
-    pane = &panes[box->pane];
-    w = maxW + (disp->textPad << 5);
-    h = h + box->spacing * 80 + (disp->textPad << 5);
-    y = pane->y - h / 2;
-    Glh_DrawPaneRect(boxes[entries[12].box].pane, sDialogGlh, &c, (u16)(pane->x - w / 2), y, w, h);
+    y = Scene_DrawListFrame(disp, boxes, entries, panes, 12, 6, &h, &c);
     Scene_DrawList(boxes, entries, 12, 6, y, h, s->lang, s->langFade);
 }
 

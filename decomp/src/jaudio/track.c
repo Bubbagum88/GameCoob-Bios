@@ -637,12 +637,11 @@ static s32 __Command_Seq(note* n) {
     macro* m = &n->macro_player;
     sub* subtrack = n->sub_track;
     group* grp = subtrack->group;
-    sweep* port_sweep;
-    u8 cmd;
     u8 cmdArgU8;
-    u32 tmp;
     u16 cmdArgU16;
     u16 velocity;
+    u8 cmd;
+    sweep* port_sweep;
     u8* REF_cmd = &cmd;
 
     while (TRUE) {
@@ -680,12 +679,12 @@ static s32 __Command_Seq(note* n) {
                 if (cmd == NOTE_CMD_SET_GATE_TIME) {
                     n->gate_time = cmdArgU8;
                 } else {
-                    n->transposition = cmdArgU8;
+                    n->transposition = (s16)(s32)cmdArgU8;
                 }
                 break;
             case NOTE_CMD_CONTINUOUS_ON:
             case NOTE_CMD_CONTINUOUS_OFF:
-                n->continuous = cmd == NOTE_CMD_CONTINUOUS_ON;
+                n->continuous = cmd == NOTE_CMD_CONTINUOUS_ON ? TRUE : FALSE;
                 n->continuous_channel_released = FALSE;
                 Nas_Release_Channel(n);
                 break;
@@ -748,7 +747,8 @@ static s32 __Command_Seq(note* n) {
                 n->portamento_sweep.mode = PORTAMENTO_MODE_OFF;
                 break;
             case NOTE_CMD_SET_ADSR_ENVELOPE_DECAY_IDX:
-                n->adsr_env.envelope = (envdat*)(grp->seq_data + (Nas_ReadWordData(m) & 0xFFFF));
+                cmdArgU16 = Nas_ReadWordData(m);
+                n->adsr_env.envelope = (envdat*)(grp->seq_data + cmdArgU16);
                 // fallthrough 0xCB -> 0xCF
             case NOTE_CMD_SET_ADSR_DECAY_IDX:
                 n->adsr_env.decay_idx = Nas_ReadByteData(m);
@@ -787,6 +787,7 @@ static s32 __Command_Seq(note* n) {
 }
 
 static s32 __SetVoice(note* n, s32 arg) {
+    perctable* percussion;
     u8 semitone;
     s32 same_sample;
     s32 inst_or_wave;
@@ -795,7 +796,6 @@ static s32 __SetVoice(note* n, s32 arg) {
     f32 freq_scale2;
     wtstr* tuned_sample;
     voicetable* instrument;
-    perctable* percussion;
     percvoicetable* effect;
     sub* subtrack;
     group* grp;
@@ -810,6 +810,10 @@ static s32 __SetVoice(note* n, s32 arg) {
     f32 freq0;
     f32 freq1;
     f32 time;
+    u8* REF_semitone = &semitone;
+    perctable** REF_percussion = &percussion;
+    percvoicetable** REF_effect = &effect;
+    f32* REF_time = &time;
 
     semitone = arg;
     same_sample = TRUE;
@@ -1041,7 +1045,7 @@ static s32 __SetNote(note* n, s32 cmd) {
     group* grp = subtrack->group;
     s32 int_delta;
     f32 float_delta;
-    u16* REF_delay = &delay;
+    s32* REF_velocity = &velocity;
 
     if (cmd == 0xC0) {
         n->delay = Nas_ReadLengthData(m);
@@ -1194,7 +1198,7 @@ static void Nas_SubVoiceSet(sub* subtrack, u8 inst_id) {
         subtrack->inst_or_wave = VOICE_TYPE_SOUND_EFF;
         subtrack->voicetable = (voicetable*)2;
     } else {
-        u8 inst_or_wave;
+        s16 inst_or_wave;
 
         /* instrument */
         inst_or_wave = Nas_ProgramChanger(subtrack, inst_id, &subtrack->voicetable, &subtrack->adsr_env);
@@ -1216,20 +1220,25 @@ static void Nas_SubVolumeSet(sub* subtrack, u8 volume) {
 static void Nas_SubSeq(sub* subtrack) {
     sub** REF_subtrack = &subtrack;
     u8 cmd;
+    u8 lo_bits;
+    u16 cmdArgU16;
+    u32 cmdArgs[3];
     u8 cmdArgU8;
     s32 i;
     u8* data;
     group* grp;
     macro* m;
     s16 temp1;
-    u16 cmdArgU16;
-    u32 cmdArgs[3];
     s8 cmdArgS8;
-    u8 lo_bits;
     u8 hi_bits;
     u8* seq_data;
     u32 new_var2;
     s32 new_var3;
+    u8* REF_cmd = &cmd;
+    u8* REF_lo = &lo_bits;
+    u16* REF_a16 = &cmdArgU16;
+    u8 pad[64];
+    (void)&pad;
 
     if (subtrack->stop_script == FALSE) {
         grp = subtrack->group;
@@ -1285,7 +1294,8 @@ static void Nas_SubSeq(sub* subtrack) {
                                 Nas_DeAllocAllVoices(&subtrack->channel_node);
                                 break;
                             case SUBTRACK_CMD_SET_DYNTBL: // set dynamic table
-                                subtrack->dyn_tbl = (unsigned char(*)[][2])&grp->seq_data[(u16)cmdArgs[0]];
+                                cmdArgU16 = cmdArgs[0];
+                                subtrack->dyn_tbl = (unsigned char(*)[][2])&grp->seq_data[cmdArgU16];
                                 break;
                             case SUBTRACK_CMD_JMP_DYNTBL: // jump to entry in dynamic table
                                 if (m->value != -1) {
@@ -1417,9 +1427,7 @@ static void Nas_SubSeq(sub* subtrack) {
                                 break;
                             case SUBTRACK_CMD_WRITE_GROUP_SEQ: // write to sequence script
                                 cmdArgU8 = (u8)cmdArgs[0];
-                                cmdArgU16 = (u16)cmdArgs[1];
-                                seq_data = &grp->seq_data[cmdArgU16];
-                                seq_data[0] = (u8)m->value + cmdArgU8;
+                                grp->seq_data[(u16)cmdArgs[1]] = (u8)m->value + cmdArgU8;
                                 break;
                             case SUBTRACK_CMD_MACRO_SUBTRACT: // subtract macro value
                             case SUBTRACK_CMD_MACRO_SET: // set macro value
@@ -1464,7 +1472,8 @@ static void Nas_SubSeq(sub* subtrack) {
                                     subtrack->stereo_effects = FALSE;
                                 }
 
-                                *(u8*)&subtrack->stereo_phase = cmdArgU8 & 0x7F;
+                                // byte store at stereo_phase (0xE8) without taking its address
+                                ((u8*)subtrack)[0xE8] = cmdArgU8 & 0x7F;
                                 break;
                             case SUBTRACK_CMD_SET_NOTE_ALLOC_POLICY: // set note allocation policy
                                 cmdArgU8 = (u8)cmdArgs[0];
@@ -1494,14 +1503,14 @@ static void Nas_SubSeq(sub* subtrack) {
                             case SUBTRACK_CMD_SET_ENV_PARAMS_FROM_GROUP_SEQ: //
                                 cmdArgU16 = (u16)cmdArgs[0];
                                 data = &grp->seq_data[cmdArgU16];
-                                subtrack->mute_flags = data[0];
-                                subtrack->note_alloc_policy = data[1];
-                                Nas_PriorityChanger(subtrack, data[2]);
-                                subtrack->transposition = (s8)data[3];
-                                subtrack->new_pan = data[4];
-                                subtrack->pan_channel_weight = data[5];
-                                subtrack->target_reverb_vol = data[6];
-                                subtrack->reverb_idx = data[7];
+                                subtrack->mute_flags = *data++;
+                                subtrack->note_alloc_policy = *data++;
+                                Nas_PriorityChanger(subtrack, *data++);
+                                subtrack->transposition = (s8)*data++;
+                                subtrack->new_pan = *data++;
+                                subtrack->pan_channel_weight = *data++;
+                                subtrack->target_reverb_vol = *data++;
+                                subtrack->reverb_idx = *data++;
                                 /* @BUG - didn't update reverb state as changed */
                                 subtrack->changes.flags.pan = TRUE;
                                 break;
@@ -1583,7 +1592,7 @@ static void Nas_SubSeq(sub* subtrack) {
                                 break;
                             case SUBTRACK_CMD_MACRO_RANDOM_VAL: // macro register random value
                                 if (cmdArgs[0] == 0) {
-                                    m->value = Nap_GetRandom();
+                                    m->value = (u8)Nap_GetRandom();
                                 } else {
                                     m->value = Nap_GetRandom() % cmdArgs[0];
                                 }
@@ -1607,7 +1616,7 @@ static void Nas_SubSeq(sub* subtrack) {
                                 break;
                             case SUBTRACK_CMD_DYNVAL_SPECIAL: // Dynamic value bit shift & negate (when s16), differs from OoT and MM
                                 new_var2 = (subtrack->dynamic_value & 0x7F);
-                                new_var2 |= 0x8000 | ((subtrack->dynamic_value & 0x7FC0) << 1);
+                                new_var2 |= 0x8000 | ((subtrack->dynamic_value << 1) & ~0x7F);
                                 subtrack->dynamic_value = new_var2;
                                 break;
                             case SUBTRACK_CMD_SET_SAMPLE_START_POS: // set sample start pos
@@ -1617,7 +1626,7 @@ static void Nas_SubSeq(sub* subtrack) {
                                 if (cmdArgs[0] <= 4) {
                                     if (AG.seq_callbacks[cmdArgs[0]] != nullptr) {
                                         NA_CALLBACK = AG.seq_callbacks[cmdArgs[0]];
-                                        m->value = (*NA_CALLBACK)(m->value, subtrack);
+                                        m->value = (u8)(*NA_CALLBACK)(m->value, subtrack);
                                     }
                                 }
                                 break;
@@ -1794,12 +1803,12 @@ note_seq:
 static void Nas_GroupSeq(group* grp) {
     group** REF_grp = &grp;
     u8 cmd;
+    s32 value;
+    u16 temp;
     u8 cmd_lo_bits;
     macro* m;
     s16 tempS;
-    u16 temp;
     s32 i;
-    s32 value;
     u8* data1;
     u8* data2;
     u8* data3;
@@ -1812,6 +1821,11 @@ static void Nas_GroupSeq(group* grp) {
     s8 argS8;
     s16 argS16;
     u8 argU8;
+    u8* REF_cmd = &cmd;
+    s32* REF_value = &value;
+    u16* REF_temp = &temp;
+    u8 pad[40];
+    (void)&pad;
 
     if (grp->flags.enabled) {
         if (Nas_CheckIDseq(grp->seq_id) == FALSE || Nas_CheckIDbank(grp->bank_id) == FALSE) {
@@ -1854,8 +1868,8 @@ static void Nas_GroupSeq(group* grp) {
                 while (TRUE) {
                     cmd = Nas_ReadByteData(m);
                     if (cmd >= COMMON_CMD_BRANCH_REL_NOT_EQ_ZERO) {
-                        u16 arg = Convert_Com(m, cmd);
-                        delay = Common_Com(grp, m, cmd, arg);
+                        temp = Convert_Com(m, cmd);
+                        delay = Common_Com(grp, m, cmd, temp);
 
                         if (delay != 0) {
                             /* Group is on delay or script has exited */
@@ -2100,9 +2114,9 @@ static void Nas_GroupSeq(group* grp) {
                                 break;
                             // [0x60, 0x67] @BUG - ([0x68, 0x6F] end here but would result in undefined behavior)
                             case GRP_CMD_ASYNC_LOAD_MASK: // async load
-                                cmd = (u8)Nas_ReadByteData(m);
+                                value = (u8)Nas_ReadByteData(m);
                                 argU8 = Nas_ReadByteData(m);
-                                MK_load(cmd, argU8, (u8*)&grp->port[cmd_lo_bits]);
+                                MK_load(value, argU8, (u8*)&grp->port[cmd_lo_bits]);
                                 break;
                         }
                     }
