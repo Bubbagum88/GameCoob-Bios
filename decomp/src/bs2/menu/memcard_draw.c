@@ -66,14 +66,14 @@ static s16 sWobble;
 
 s32 Card_GetSlot(void);
 s32 Card_GetSelectedFile(void);
-BOOL CardDraw_IconFrameCount(u8 slot, s32 file);
+BOOL CardDraw_IconFrameCount(s32 slot, s32 file);
 void CardBlock_Init(CardBlock* b);
 void CardBlock_Rewind(CardBlock* b);
 void CardBlock_Finish(CardBlock* b);
 void CardBlock_CalcMtx(void);
 void CardBlock_CalcBurst(s32 i);
 BOOL fn_81320ABC(void);
-GXColorS10* CardBlock_Color(u32 size, s32 kind);
+GXColorS10* CardBlock_Color(u32 size, s32 kind, s32 slot);
 void CardBlock_DrawFile(J3DModelInstance* inst, u8 slot, s32 file);
 void CardBlock_DrawEmpty(J3DModelInstance* inst, u8 slot, s32 file);
 void CardBlock_DrawBurst(J3DModelInstance* inst);
@@ -86,6 +86,17 @@ void CardBlock_DrawSlot(u8 slot, u8 alpha);
         v_.y = Y;                          \
         v_.z = Z;                          \
         dst = v_;                          \
+    } while (0)
+
+/* same, but the result goes through a pointer (keeps the extra copy) */
+#define VEC_SETP(dst, X, Y, Z)             \
+    do {                                   \
+        Vec v_ = {0.0f, 0.0f, 0.0f};       \
+        Vec* d_ = &v_;                     \
+        d_->x = X;                         \
+        d_->y = Y;                         \
+        d_->z = Z;                         \
+        dst = *d_;                         \
     } while (0)
 
 /* 0x8131EDBC */
@@ -150,16 +161,17 @@ void fn_8131EEC4(BOOL first, s16 (*gridX)[16], s16 (*gridY)[16]) {
 
 /* 0x8131F048 */
 void CardBlock_CalcMtx(void) {
-    SRT srt = {1.0f, 1.0f, 1.0f, 0, 0, 0, 0, -292.0f, 224.0f, 0.0f};
+    Mtx m;
     Mtx base;
     Mtx rot;
-    Mtx m;
+    SRT srt;
     Vec scale;
     Vec pos;
     f32 t;
     MenuWork* menu;
     CardParams* params;
     CardFile* files;
+    CardFile* f;
     CardBlock* b;
     int slot;
     int i;
@@ -167,21 +179,28 @@ void CardBlock_CalcMtx(void) {
 
     menu = Menu_Get();
     params = Card_GetParams();
+    {
+        SRT s_ = {1.0f, 1.0f, 1.0f, 0, 0, 0, 0, -292.0f, 224.0f, 0.0f};
+        SRT* d_;
+        d_ = &s_;
+        srt = *d_;
+    }
     files = CardThread_GetFiles();
     w = sWobble;
     MtxFromSRT(&srt, base);
+    f = files;
     for (slot = 0; slot < 2; slot++) {
-        for (i = 0; i < CARD_MAX_FILES; i++) {
+        for (i = 0; i < CARD_MAX_FILES; i++, f++) {
             b = &sBlocks[slot][i];
-            VEC_SET(scale, b->zoom, b->zoom, b->zoom);
+            VEC_SETP(scale, b->zoom, b->zoom, b->zoom);
             if (slot == sOpSlot && i == sOpFile && sFlying) {
                 if (!sErasing) {
                     t = (sFly.zoom - sFly.zoomMin) / (sFly.zoomMax - sFly.zoomMin);
-                    VEC_SET(pos, sFly.pos.x * 0.0625f, -sFly.pos.y * 0.0625f, 2.0f * t);
+                    VEC_SETP(pos, sFly.pos.x / 16.0f, -sFly.pos.y / 16.0f, 2.0f * t);
                 }
             } else {
                 t = (b->zoom - b->zoomMin) / (b->zoomMax - b->zoomMin);
-                VEC_SET(pos, b->pos.x * 0.0625f, -b->pos.y * 0.0625f, 2.0f * t);
+                VEC_SET(pos, b->pos.x / 16.0f, -b->pos.y / 16.0f, 2.0f * t);
             }
             MtxRot(t * menu->wobbleAmp[0] * CosS(w * 70), t * menu->wobbleAmp[1] * CosS(menu->wobblePhaseRY + w * 35),
                    t * menu->wobbleAmp[2] * CosS(w * 35), rot);
@@ -189,7 +208,7 @@ void CardBlock_CalcMtx(void) {
                        pos.y - t * params->f68_ * SinS(w * 70), pos.z);
             PSMTXConcat(m, base, m);
             PSMTXConcat(m, rot, m);
-            if (files[slot * CARD_MAX_FILES + i].used) {
+            if (f->used) {
                 J3D_SetModelMtx(&sFileInst[slot][i], m, scale);
                 J3D_SetViewMtx(&sFileInst[slot][i], fn_81302F94());
                 J3D_CalcJoints(&sFileInst[slot][i]);
@@ -201,9 +220,9 @@ void CardBlock_CalcMtx(void) {
         }
     }
     if (sErasing) {
-        VEC_SET(scale, sFly.zoom, sFly.zoom, sFly.zoom);
+        VEC_SETP(scale, sFly.zoom, sFly.zoom, sFly.zoom);
         t = (sFly.zoom - sFly.zoomMin) / (sFly.zoomMax - sFly.zoomMin);
-        VEC_SET(pos, sFly.pos.x * 0.0625f, -sFly.pos.y * 0.0625f, 2.0f * t);
+        VEC_SETP(pos, sFly.pos.x / 16.0f, -sFly.pos.y / 16.0f, 2.0f * t);
         MtxRot(t * menu->wobbleAmp[0] * CosS(w * 70), t * menu->wobbleAmp[1] * CosS(menu->wobblePhaseRY + w * 35),
                t * menu->wobbleAmp[2] * CosS(w * 35), rot);
         PSMTXTrans(m, pos.x + t * params->f64_ * SinS(menu->wobblePhaseTX + w * 35),
@@ -663,7 +682,7 @@ BOOL fn_81320ABC(void) {
 }
 
 /* 0x81320DD0: block tint by card size; kind 0/1: file (chosen / not), 2/3: empty */
-GXColorS10* CardBlock_Color(u32 size, s32 kind) {
+GXColorS10* CardBlock_Color(u32 size, s32 kind, s32 slot) {
     static GXColorS10 c59_3 = {0, 20, 60, 255};
     static GXColorS10 c59_2 = {30, 80, 100, 255};
     static GXColorS10 c59_1 = {20, 50, 200, 255};
@@ -803,11 +822,11 @@ void CardBlock_DrawFile(J3DModelInstance* inst, u8 slot, s32 file) {
         save0 = inst->model->material[0].tevColor;
         save2 = inst->model->material[2].tevColor;
         if (slot == Card_GetSlot() && file == Card_GetSelectedFile() && !sEntering) {
-            inst->model->material[0].tevColor = CardBlock_Color(cards[slot].sectorSize, 0);
-            inst->model->material[2].tevColor = CardBlock_Color(cards[slot].sectorSize, 0);
+            inst->model->material[0].tevColor = CardBlock_Color(cards[slot].sectorSize, 0, slot);
+            inst->model->material[2].tevColor = CardBlock_Color(cards[slot].sectorSize, 0, slot);
         } else {
-            inst->model->material[0].tevColor = CardBlock_Color(cards[slot].sectorSize, 1);
-            inst->model->material[2].tevColor = CardBlock_Color(cards[slot].sectorSize, 1);
+            inst->model->material[0].tevColor = CardBlock_Color(cards[slot].sectorSize, 1, slot);
+            inst->model->material[2].tevColor = CardBlock_Color(cards[slot].sectorSize, 1, slot);
         }
         J3D_DrawPacket(inst, inst->model->packets + 0x30);
         J3D_DrawPacket(inst, inst->model->packets + 0xF0);
@@ -833,11 +852,11 @@ void CardBlock_DrawEmpty(J3DModelInstance* inst, u8 slot, s32 file) {
         save0 = inst->model->material[0].tevColor;
         save1 = inst->model->material[1].tevColor;
         if (slot == Card_GetSlot() && file == Card_GetSelectedFile() && !sEntering) {
-            inst->model->material[0].tevColor = CardBlock_Color(cards[slot].sectorSize, 2);
-            inst->model->material[1].tevColor = CardBlock_Color(cards[slot].sectorSize, 2);
+            inst->model->material[0].tevColor = CardBlock_Color(cards[slot].sectorSize, 2, slot);
+            inst->model->material[1].tevColor = CardBlock_Color(cards[slot].sectorSize, 2, slot);
         } else {
-            inst->model->material[0].tevColor = CardBlock_Color(cards[slot].sectorSize, 3);
-            inst->model->material[1].tevColor = CardBlock_Color(cards[slot].sectorSize, 3);
+            inst->model->material[0].tevColor = CardBlock_Color(cards[slot].sectorSize, 3, slot);
+            inst->model->material[1].tevColor = CardBlock_Color(cards[slot].sectorSize, 3, slot);
         }
         J3D_Draw(inst);
         inst->model->material[0].tevColor = save0;
@@ -855,8 +874,8 @@ void CardBlock_DrawBurst(J3DModelInstance* inst) {
     if (inst->alpha > 0) {
         save0 = inst->model->material[0].tevColor;
         save2 = inst->model->material[2].tevColor;
-        inst->model->material[0].tevColor = CardBlock_Color(cards[sOpSlot].sectorSize, 1);
-        inst->model->material[2].tevColor = CardBlock_Color(cards[sOpSlot].sectorSize, 1);
+        inst->model->material[0].tevColor = CardBlock_Color(cards[sOpSlot].sectorSize, 1, sOpSlot);
+        inst->model->material[2].tevColor = CardBlock_Color(cards[sOpSlot].sectorSize, 1, sOpSlot);
         J3D_DrawPacket(inst, inst->model->packets + 0x30);
         J3D_DrawPacket(inst, inst->model->packets + 0xF0);
         inst->model->material[0].tevColor = save0;
@@ -866,21 +885,20 @@ void CardBlock_DrawBurst(J3DModelInstance* inst) {
 
 /* 0x81321378: one slot's blocks; the chosen one and the flying one last */
 void CardBlock_DrawSlot(u8 slot, u8 alpha) {
-    CardFile* files;
-    CardBlock* b;
-    J3DModelInstance* fileInst;
     J3DModelInstance* emptyInst;
     CardFile* f;
+    CardFile (*files)[CARD_MAX_FILES];
+    J3DModelInstance* fileInst;
+    CardBlock* b;
     int i;
     u8 a;
     s32 sel;
-    u8 selSlot;
 
     files = CardThread_GetFiles();
     fileInst = sFileInst[slot];
     emptyInst = sEmptyInst[slot];
     b = sBlocks[slot];
-    f = &files[slot * CARD_MAX_FILES];
+    f = files[slot];
     for (i = 0; i < CARD_MAX_FILES; i++, fileInst++, b++, emptyInst++, f++) {
         if (slot == sOpSlot && i == sOpFile && sFlying) {
             fileInst->alpha = 0;
@@ -897,16 +915,19 @@ void CardBlock_DrawSlot(u8 slot, u8 alpha) {
         }
     }
     if (sFlying) {
-        if (!sErasing && files[sOpSlot * CARD_MAX_FILES + sOpFile].used) {
-            sFileInst[sOpSlot][sOpFile].alpha = (u8)((sFly.alpha * alpha) / 255);
-            CardBlock_DrawFile(&sFileInst[sOpSlot][sOpFile], sOpSlot, sOpFile);
+        if (!sErasing) {
+            slot = sOpSlot;
+            if (files[slot][sOpFile].used) {
+                sFileInst[slot][sOpFile].alpha = (u8)((sFly.alpha * alpha) / 255);
+                CardBlock_DrawFile(&sFileInst[slot][sOpFile], slot, sOpFile);
+            }
         }
     } else if (!sEntering) {
-        selSlot = Card_GetSlot();
+        slot = Card_GetSlot();
         sel = Card_GetSelectedFile();
-        if (files[selSlot * CARD_MAX_FILES + sel].used) {
-            sFileInst[selSlot][sel].alpha = (u8)((alpha * sBlocks[selSlot][sel].alpha) / 255);
-            CardBlock_DrawFile(&sFileInst[selSlot][sel], selSlot, sel);
+        if (files[slot][sel].used) {
+            sFileInst[slot][sel].alpha = (u8)((alpha * sBlocks[slot][sel].alpha) / 255);
+            CardBlock_DrawFile(&sFileInst[slot][sel], slot, sel);
         }
     }
     if (sErasing) {
