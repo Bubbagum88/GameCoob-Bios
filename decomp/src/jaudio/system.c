@@ -568,14 +568,19 @@ s32 Nas_StartSeq_Skip(s32 group_idx, s32 seq_id, s32 skip_ticks) {
 static s32 __Nas_StartSeq(s32 group_idx, s32 seq_id, s32 param) {
     s32* REF_seq_id = &seq_id;
     s32* REF_group_idx = &group_idx;
+    s32 i;
+    s32* REF_i = &i;
     STACK_PAD_VAR(6);
-    group* group = AG.groups_p[group_idx];
+    group* group;
     u8* seq_p;
     s32 bank_id;
-    s32 i;
     s32 idx;
-    s32* REF_i = &i;
 
+    if (seq_id >= AG.num_sequences) {
+        return 0;
+    }
+
+    group = AG.groups_p[group_idx];
     Nas_ReleaseGroup(group);
     bank_id = 0xFF;
     idx =  ((u16*)AG.map_header)[seq_id];
@@ -605,7 +610,7 @@ static s32 __Nas_StartSeq(s32 group_idx, s32 seq_id, s32 param) {
     group->delay = 0;
     group->flags.enabled = TRUE;
     group->flags.finished = FALSE;
-    group->group_idx = group_idx;
+    group->group_idx = (u8)group_idx;
 
     return 0;
 }
@@ -1073,12 +1078,13 @@ void EmemLoad(s32 table_type, s32 id) {
 }
 
 static u8* __Load_Bank_BG(s32 table_type, s32 id, s32 n_chunks, s32 ret_data, OSMesgQueue* ret_queue) {
+    u8* ramAddr;
+    u8** REF_ramAddr = &ramAddr;
     s32* REF_table_type = &table_type;
     s32* REF_id = &id;
     STACK_PAD_VAR(1);
     u32 size;
     ArcHeader* header;
-    u8* ramAddr;
     s32 medium;
     u32 devAddr;
     s32 loadStatus;
@@ -1086,8 +1092,6 @@ static u8* __Load_Bank_BG(s32 table_type, s32 id, s32 n_chunks, s32 ret_data, OS
     s32 asyncLoadStatus;
     s32 link_id = __Link_BankNum(table_type, id);
     voiceinfo* vinfo;
-    u32* REF_devAddr = &devAddr;
-    ArcHeader** REF_header = &header;
 
     switch (table_type) {
         case SEQUENCE_TABLE:
@@ -1109,8 +1113,7 @@ static u8* __Load_Bank_BG(s32 table_type, s32 id, s32 n_chunks, s32 ret_data, OS
             break;
     }
 
-    ramAddr = (u8*)__Check_Cache(table_type, link_id);
-    if (ramAddr != NULL) {
+    if ((ramAddr = (u8*)__Check_Cache(table_type, link_id)) != NULL) {
         loadStatus = LOAD_STATUS_COMPLETE;
         Z_osSendMesg(ret_queue, (OSMesg)MK_BGLOAD_MSG(ret_data, SEQUENCE_TABLE, 0, LOAD_STATUS_NOT_LOADED),
                      OS_MESG_NOBLOCK);
