@@ -251,7 +251,7 @@
 <rect x="556.1" y="44.0" width="279.4" height="250.0" fill="#21262d" stroke="#0d1117"/>
 <text x="560.1" y="56.0" font-size="11" fill="#e6edf3">bs2</text>
 </g>
-<g><title>bs2/scene_intro: 9404 bytes, 26.2% matched, 94.4% fuzzy, 13/27 functions</title>
+<g><title>bs2/scene_intro: 9404 bytes, 26.2% matched, 95.0% fuzzy, 13/27 functions</title>
 <rect x="558.1" y="60.0" width="87.9" height="99.7" fill="#a79b2b" stroke="#0d1117" stroke-width="1"/>
 <text x="561.1" y="72.0" font-size="10" fill="#0d1117">scene_intro</text>
 </g>
