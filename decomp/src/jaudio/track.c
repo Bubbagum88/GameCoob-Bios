@@ -1220,20 +1220,25 @@ static void Nas_SubVolumeSet(sub* subtrack, u8 volume) {
 static void Nas_SubSeq(sub* subtrack) {
     sub** REF_subtrack = &subtrack;
     u8 cmd;
+    u8 lo_bits;
+    u16 cmdArgU16;
+    u32 cmdArgs[3];
     u8 cmdArgU8;
     s32 i;
     u8* data;
     group* grp;
     macro* m;
     s16 temp1;
-    u16 cmdArgU16;
-    u32 cmdArgs[3];
     s8 cmdArgS8;
-    u8 lo_bits;
     u8 hi_bits;
     u8* seq_data;
     u32 new_var2;
     s32 new_var3;
+    u8* REF_cmd = &cmd;
+    u8* REF_lo = &lo_bits;
+    u16* REF_a16 = &cmdArgU16;
+    u8 pad[64];
+    (void)&pad;
 
     if (subtrack->stop_script == FALSE) {
         grp = subtrack->group;
@@ -1289,7 +1294,8 @@ static void Nas_SubSeq(sub* subtrack) {
                                 Nas_DeAllocAllVoices(&subtrack->channel_node);
                                 break;
                             case SUBTRACK_CMD_SET_DYNTBL: // set dynamic table
-                                subtrack->dyn_tbl = (unsigned char(*)[][2])&grp->seq_data[(u16)cmdArgs[0]];
+                                cmdArgU16 = cmdArgs[0];
+                                subtrack->dyn_tbl = (unsigned char(*)[][2])&grp->seq_data[cmdArgU16];
                                 break;
                             case SUBTRACK_CMD_JMP_DYNTBL: // jump to entry in dynamic table
                                 if (m->value != -1) {
@@ -1421,9 +1427,7 @@ static void Nas_SubSeq(sub* subtrack) {
                                 break;
                             case SUBTRACK_CMD_WRITE_GROUP_SEQ: // write to sequence script
                                 cmdArgU8 = (u8)cmdArgs[0];
-                                cmdArgU16 = (u16)cmdArgs[1];
-                                seq_data = &grp->seq_data[cmdArgU16];
-                                seq_data[0] = (u8)m->value + cmdArgU8;
+                                grp->seq_data[(u16)cmdArgs[1]] = (u8)m->value + cmdArgU8;
                                 break;
                             case SUBTRACK_CMD_MACRO_SUBTRACT: // subtract macro value
                             case SUBTRACK_CMD_MACRO_SET: // set macro value
@@ -1468,7 +1472,8 @@ static void Nas_SubSeq(sub* subtrack) {
                                     subtrack->stereo_effects = FALSE;
                                 }
 
-                                *(u8*)&subtrack->stereo_phase = cmdArgU8 & 0x7F;
+                                // byte store at stereo_phase (0xE8) without taking its address
+                                ((u8*)subtrack)[0xE8] = cmdArgU8 & 0x7F;
                                 break;
                             case SUBTRACK_CMD_SET_NOTE_ALLOC_POLICY: // set note allocation policy
                                 cmdArgU8 = (u8)cmdArgs[0];
@@ -1498,14 +1503,14 @@ static void Nas_SubSeq(sub* subtrack) {
                             case SUBTRACK_CMD_SET_ENV_PARAMS_FROM_GROUP_SEQ: //
                                 cmdArgU16 = (u16)cmdArgs[0];
                                 data = &grp->seq_data[cmdArgU16];
-                                subtrack->mute_flags = data[0];
-                                subtrack->note_alloc_policy = data[1];
-                                Nas_PriorityChanger(subtrack, data[2]);
-                                subtrack->transposition = (s8)data[3];
-                                subtrack->new_pan = data[4];
-                                subtrack->pan_channel_weight = data[5];
-                                subtrack->target_reverb_vol = data[6];
-                                subtrack->reverb_idx = data[7];
+                                subtrack->mute_flags = *data++;
+                                subtrack->note_alloc_policy = *data++;
+                                Nas_PriorityChanger(subtrack, *data++);
+                                subtrack->transposition = (s8)*data++;
+                                subtrack->new_pan = *data++;
+                                subtrack->pan_channel_weight = *data++;
+                                subtrack->target_reverb_vol = *data++;
+                                subtrack->reverb_idx = *data++;
                                 /* @BUG - didn't update reverb state as changed */
                                 subtrack->changes.flags.pan = TRUE;
                                 break;
@@ -1587,7 +1592,7 @@ static void Nas_SubSeq(sub* subtrack) {
                                 break;
                             case SUBTRACK_CMD_MACRO_RANDOM_VAL: // macro register random value
                                 if (cmdArgs[0] == 0) {
-                                    m->value = Nap_GetRandom();
+                                    m->value = (u8)Nap_GetRandom();
                                 } else {
                                     m->value = Nap_GetRandom() % cmdArgs[0];
                                 }
@@ -1611,7 +1616,7 @@ static void Nas_SubSeq(sub* subtrack) {
                                 break;
                             case SUBTRACK_CMD_DYNVAL_SPECIAL: // Dynamic value bit shift & negate (when s16), differs from OoT and MM
                                 new_var2 = (subtrack->dynamic_value & 0x7F);
-                                new_var2 |= 0x8000 | ((subtrack->dynamic_value & 0x7FC0) << 1);
+                                new_var2 |= 0x8000 | ((subtrack->dynamic_value << 1) & ~0x7F);
                                 subtrack->dynamic_value = new_var2;
                                 break;
                             case SUBTRACK_CMD_SET_SAMPLE_START_POS: // set sample start pos
@@ -1621,7 +1626,7 @@ static void Nas_SubSeq(sub* subtrack) {
                                 if (cmdArgs[0] <= 4) {
                                     if (AG.seq_callbacks[cmdArgs[0]] != nullptr) {
                                         NA_CALLBACK = AG.seq_callbacks[cmdArgs[0]];
-                                        m->value = (*NA_CALLBACK)(m->value, subtrack);
+                                        m->value = (u8)(*NA_CALLBACK)(m->value, subtrack);
                                     }
                                 }
                                 break;
