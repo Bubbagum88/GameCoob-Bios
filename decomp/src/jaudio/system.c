@@ -1804,13 +1804,14 @@ s32 Nas_BankOfsToAddr(s32 bank_id, u8* ctrl_p, WaveMedia* wave_media, s32 async)
     u8* wave_ram_p = NULL;
     s32 preloading = FALSE;
     static ALHeap awheap;
+    STACK_PAD_VAR(1);
     s32 i;
     s8 medium = 0;
     
     // u8 __stack_pad[12];
     // s32* i_p = &i; // this feels wrong but w/e
-    Bgloadreq** REF_top_preload = &top_preload;
-    s32* REF_async = &async;
+    s32* REF_i = &i;
+    STACK_PAD_VAR(1);
 
     
     if (AG.num_requested_samples != 0) {
@@ -1837,15 +1838,14 @@ s32 Nas_BankOfsToAddr(s32 bank_id, u8* ctrl_p, WaveMedia* wave_media, s32 async)
 
         switch (async) {
             case FALSE: {
-                u8 medium = wavetable->medium;
                 if (wavetable->medium == wave_media->wave0_media) {
                     wave_ram_p = (u8*)Nas_Alloc_Single(wavetable->size, wave_media->wave0_bank_id, wavetable->sample,
-                        (s8)(wavetable->medium & 0xFF), CACHE_PERSISTENT);
+                        wavetable->medium, CACHE_PERSISTENT);
                 } else if (wavetable->medium == wave_media->wave1_media) {
                     wave_ram_p = (u8*)Nas_Alloc_Single(wavetable->size, wave_media->wave1_bank_id, wavetable->sample,
-                        (s8)(wavetable->medium & 0xFF), CACHE_PERSISTENT);
+                        wavetable->medium, CACHE_PERSISTENT);
                 } else if (wavetable->medium == MEDIUM_DISK_DRIVE) {
-                    wave_ram_p = (u8*)Nas_Alloc_Single(wavetable->size, 0xFE, wavetable->sample, (s8)(wavetable->medium & 0xFF),
+                    wave_ram_p = (u8*)Nas_Alloc_Single(wavetable->size, 0xFE, wavetable->sample, wavetable->medium,
                                                        CACHE_PERSISTENT);
                 }
             } break;
