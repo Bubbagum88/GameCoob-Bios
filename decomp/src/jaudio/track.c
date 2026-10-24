@@ -1041,7 +1041,7 @@ static s32 __SetNote(note* n, s32 cmd) {
     group* grp = subtrack->group;
     s32 int_delta;
     f32 float_delta;
-    u16* REF_delay = &delay;
+    s32* REF_velocity = &velocity;
 
     if (cmd == 0xC0) {
         n->delay = Nas_ReadLengthData(m);
@@ -1194,7 +1194,7 @@ static void Nas_SubVoiceSet(sub* subtrack, u8 inst_id) {
         subtrack->inst_or_wave = VOICE_TYPE_SOUND_EFF;
         subtrack->voicetable = (voicetable*)2;
     } else {
-        u8 inst_or_wave;
+        s16 inst_or_wave;
 
         /* instrument */
         inst_or_wave = Nas_ProgramChanger(subtrack, inst_id, &subtrack->voicetable, &subtrack->adsr_env);
