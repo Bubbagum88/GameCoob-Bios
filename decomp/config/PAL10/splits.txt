@@ -429,11 +429,8 @@ jaudio/random.c:
 	.sdata      start:0x814AD138 end:0x814AD140
 	.sdata2     start:0x814AE3A0 end:0x814AE3B0
 
-jaudio/ipl_81352A80.c:
-	.text       start:0x81352A80 end:0x81352AA0 align:32
-
 jaudio/aramcall.c:
-	.text       start:0x81352AA0 end:0x81352DA0 align:32
+	.text       start:0x81352A80 end:0x81352DA0 align:32
 	.data       start:0x813F6A48 end:0x813F6A88
 	.sdata      start:0x814AD140 end:0x814AD148
 	.sbss       start:0x814AD7C0 end:0x814AD7C8
