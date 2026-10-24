@@ -124,19 +124,15 @@ void fn_81334928(void) {
 
 static inline f32 FxMod(f32 x, f32 y) {
     f32 m = y;
-    f32 r;
     u64 n;
     s64 k;
 
     if (__fabs(m) > __fabs(x)) {
-        r = x;
-    } else {
-        n = x / m;
-        k = n;
-        r = x - m * k;
+        return x;
     }
-    return r;
-
+    n = x / m;
+    k = n;
+    return x - m * k;
 }
 
 /* 0x8133498C: spark flight offsets and spin angles at time t (0..1). */

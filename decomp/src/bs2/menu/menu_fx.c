@@ -1528,6 +1528,10 @@ f32 fn_8132FF6C(void);
 /* Selection bar: slide a line's cells by the title offset and scale them about o. */
 #define FX_SEL_PLACE(listFn, countFn, o, line)                                        \
     list = listFn();                                                                \
+    FX_SEL_MOVE(countFn, o, line)
+
+/* Move the selection bar cells with their title line. */
+#define FX_SEL_MOVE(countFn, o, line)                                                 \
     for (i = 0; i < countFn(); i++) {                                               \
         sFxCube[list[i]].pos.x += Menu_Get()->fxTitle[line].x;                      \
         sFxCube[list[i]].pos.y += Menu_Get()->fxTitle[line].y;                      \
@@ -1553,6 +1557,7 @@ void fn_8132F010(void) {
     Vec o0;
     Vec o1;
     Vec o2;
+    u16* sel;
 
     list = fn_81332C34();
     fn_8132C830(&o0, sFxCube, list, fn_81332C9C());
@@ -1567,7 +1572,9 @@ void fn_8132F010(void) {
     o2.x += Menu_Get()->fxTitle[2].x;
     o2.y += Menu_Get()->fxTitle[2].y;
 
-    FX_SEL_PLACE(fn_813329A4, fn_81332A0C, o0, 0)
+    sel = fn_813329A4();
+    list = sel;
+    FX_SEL_MOVE(fn_81332A0C, o0, 0)
     FX_SEL_GROW(fn_81332A0C, o0, 0, -=,
                 sFxCube[list[i]].pos.x += Menu_Get()->fxSel[0];, Menu_Get()->fxSel[1])
     FX_SEL_PLACE(fn_81332A48, fn_81332AB0, o0, 0)
