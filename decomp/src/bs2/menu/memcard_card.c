@@ -1117,15 +1117,15 @@ inline void CardThread_UpdateSlot(u8 slot) {
 
 /* 0x8131E130 */
 void CardThread_DoCopyMove(u8 slot, s16 file, s32 cmd) {
+    CARDDir dir2;
     BOOL done = FALSE;
     u32 sector1;
     u32 sector0;
-    CARDDir dir2;
     CARDDir dir;
     u32 sector;
     BOOL created = FALSE;
     s16 dst = -1;
-    s32 error = 0;
+    s32 error;
     s16 n;
     u8 other;
     s32 result;
@@ -1136,6 +1136,7 @@ void CardThread_DoCopyMove(u8 slot, s16 file, s32 cmd) {
         return;
     }
 
+    error = 0;
     sector = 0;
     result = CARDGetSectorSize(0, &sector0);
     if (result < 0) {
