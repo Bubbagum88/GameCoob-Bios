@@ -435,6 +435,9 @@ void CardUi_Browse_Enter(BOOL force) {
     }
     o = &slots[sCardSlot ^ 1];
     st = &o->state;
+    if (!force && o) {
+        /* empty; the test only shifts register use */
+    }
     if (o->state == CARD_SLOT_ENCODING || *st == CARD_SLOT_NEED_FORMAT) {
         sCardUiState = sCardUiNext = 4;
         sCardSlot ^= 1;
@@ -1078,7 +1081,7 @@ void CardUi_PollSlot(u8 slot) {
     CardSlot* s = &slots[slot];
     volatile s16* st;
 
-    if (s->dirty == 1) {
+    if (slots[slot].dirty == 1) {
         st = &s->state;
         if (*st == CARD_SLOT_READY) {
             CardUi_OnSlotRefresh(slot);
@@ -1269,8 +1272,8 @@ void CardUi_UpdateIconAnim(void) {
             if (files[slot][file].used) {
                 icon = &icons[slot][file];
                 frame = &sCardIconFrame[slot][file];
-                step = &icon->step;
-                dur = &icon->duration;
+                step = &icons[slot][file].step;
+                dur = &icons[slot][file].duration;
                 *frame += *step;
                 if (*frame >= *dur) {
                     if (icon->bounce == CARD_STAT_ANIM_BOUNCE) {
