@@ -2088,6 +2088,7 @@ void CardDraw_TextBox(u8 slot, CardSlotFade* f, void* sth, void* glh, GXColor* c
     a[1] /= 2;
     a[0] /= 2;
     for (i = 0, str = 2; i < 3; str++, i++) {
+        entries = ((Sth*)sth)->entry;
         if (i <= 1) {
             u8 k;
             CardParams* p2;
@@ -2159,6 +2160,7 @@ void CardDraw_TextLines(CardSlotFade* f, void* sth, void* glh, GXColor* c, s32 x
     for (i = 0, str = 5; i < 2; str++, i++) {
         fn_81309554(&col, &col);
         fn_813095A0(&glow, &glow);
+        entries = ((Sth*)sth)->entry;
         if (sCardYesNo == i) {
             fn_813090A4(&box, STH_STRING(&entries[str]));
         } else {
