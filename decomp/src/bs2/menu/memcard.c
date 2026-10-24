@@ -53,18 +53,19 @@ typedef struct CardSlotFade {
     u16 h3;                /* 0x1E op menu height when fully open */
 } CardSlotFade;
 
-/* Icon and banner of one file, filled in by the card thread (0x40 bytes) */
+/* Icon and banner of one file, filled in by the card thread (0x40 bytes).
+   The format and speed fields are volatile: every read reloads them. */
 typedef struct CardIconInfo {
     u8 hasBanner;          /* 0x00 */
     u8 hasIcon;            /* 0x01 */
     u8 frames;             /* 0x02 */
-    u8 bannerFormat;       /* 0x03 9: CI8, 5: RGB5A3 */
+    volatile u8 bannerFormat; /* 0x03 9: CI8, 5: RGB5A3 */
     s8 step;               /* 0x04 +1 / -1 while the icon animates */
     u8 bounce;             /* 0x05 CARD_STAT_ANIM_BOUNCE */
     u8 firstSpeed;         /* 0x06 */
     u8 lastSpeed;          /* 0x07 */
-    u8 format[8];          /* 0x08 per frame, 9: CI8, 5: RGB5A3 */
-    u16 speeds;            /* 0x10 CARDDir.iconSpeed */
+    volatile u8 format[8]; /* 0x08 per frame, 9: CI8, 5: RGB5A3 */
+    volatile u16 speeds;   /* 0x10 CARDDir.iconSpeed */
     s16 duration;          /* 0x12 */
     u8* banner;            /* 0x14 */
     u8* bannerTlut;        /* 0x18 */
@@ -1639,7 +1640,7 @@ void CardDraw_LoadTexture(s32 x, s32 y, s32 n) {
 }
 
 /* 0x81319858: loads frame `frame` of a file's icon into GX_TEXMAP0. */
-BOOL CardDraw_SetIconFrame(s32 slot, s32 file, u8 frame) {
+BOOL CardDraw_SetIconFrame(s32 slot, s32 file, s32 frame) {
     CardIconInfo(*icons)[CARD_MAX_FILES] = CardThread_GetIcons();
     CardIconInfo* icon = &icons[slot][file];
     u8* image = (u8*)icon + (u32)icons[slot][file].image[frame];
@@ -1668,10 +1669,12 @@ BOOL CardDraw_SetIconFrame(s32 slot, s32 file, u8 frame) {
         J3D_LoadTexture(0, &tex);
         return TRUE;
     } else if (icons[slot][file].format[frame] == GX_TF_C8) {
+        u8* tlut = (u8*)icon + (u32)icons[slot][file].tlut;
+
         tex.indexed = 1;
         tex.tlutFormat = GX_TL_RGB5A3;
         tex.tlutCount = 256;
-        tex.tlutOffset = ((u8*)icon + (u32)icons[slot][file].tlut) - (u8*)&tex;
+        tex.tlutOffset = tlut - (u8*)&tex;
         tex.imageOffset = image - (u8*)&tex;
         J3D_LoadTexture(0, &tex);
         return TRUE;
@@ -1695,7 +1698,7 @@ BOOL CardDraw_IconFrameCount(s32 slot, s32 file) {
         t += ((icons[slot][file].speeds >> (n * 2)) & 3) * 4;
         n++;
     } while (sCardIconFrame[slot][file] > t && n <= 8);
-    return CardDraw_SetIconFrame(slot, file, n - 1);
+    return CardDraw_SetIconFrame(slot, file, (u8)(n - 1));
 }
 
 /* white with alpha a */
@@ -1708,7 +1711,7 @@ static inline GXColor CardDraw_White(u8 a) {
 
 /* 0x81319A8C: icon of grid cell `pos`; the selected file without a */
 /* banner also gets the 'ic00' pane. */
-void CardDraw_Icon(u8 slot, s16 pos, s32 frame, u8 alpha) {
+void CardDraw_Icon(u8 slot, s16 pos, u8 frame, u8 alpha) {
     CardIconInfo(*icons)[CARD_MAX_FILES] = CardThread_GetIcons();
     GXColor color = CardDraw_White(alpha);
     u32 file;
@@ -1784,8 +1787,9 @@ void CardDraw_FileBanner(u8 slot, CardSlot* slots, GXColor* c) {
 }
 
 /* animation frame of a file's icon */
-static inline s16 Card_IconFrame(u8 slot, u32 file) {
+static inline u8 Card_IconFrame(u8 slot, s16 pos) {
     CardIconInfo(*icons)[CARD_MAX_FILES] = CardThread_GetIcons();
+    u32 file = sCardSort[slot][pos + sCardTop[slot] * 4].file;
     s16 n = 0;
     s32 t = 0;
 
@@ -1799,7 +1803,9 @@ static inline s16 Card_IconFrame(u8 slot, u32 file) {
 /* 0x81319FC8: the 4x4 icon grid of a slot. */
 void CardDraw_FileGrid(u8 slot, u8 alpha) {
     CardFile(*files)[CARD_MAX_FILES] = CardThread_GetFiles();
+    s16 unused[2];
     s16 a;
+    s16 unused2[2];
     s16 i;
 
     Fader_GetAlpha(&sCardFadeA[slot], &a, NULL);
@@ -1807,7 +1813,7 @@ void CardDraw_FileGrid(u8 slot, u8 alpha) {
     GX_Setup2DTex();
     for (i = 0; i < 16; i++) {
         if (files[slot][sCardSort[slot][i + sCardTop[slot] * 4].file].used) {
-            CardDraw_Icon(slot, i, Card_IconFrame(slot, sCardSort[slot][i + sCardTop[slot] * 4].file), alpha);
+            CardDraw_Icon(slot, i, Card_IconFrame(slot, i), alpha);
         }
     }
 }
@@ -2229,7 +2235,6 @@ u32 CardDraw_LoadFileIcon(void) {
     CardIconInfo* icon;
     u8* image;
     s16 unused[4];
-    u8* fmt;
     TexHeader tex;
 
     if (files[sCardSlot][file].used == 0) {
@@ -2249,7 +2254,6 @@ u32 CardDraw_LoadFileIcon(void) {
     tex.wrapS = GX_CLAMP;
     tex.wrapT = GX_CLAMP;
     tex.format = icons[sCardSlot][file].bannerFormat;
-    fmt = &icons[sCardSlot][file].bannerFormat;
     tex.minFilter = GX_LINEAR;
     tex.magFilter = GX_LINEAR;
     tex.minLod = 0;
@@ -2260,11 +2264,13 @@ u32 CardDraw_LoadFileIcon(void) {
         tex.imageOffset = image - (u8*)&tex;
         J3D_LoadTexture(0, &tex);
         return TRUE;
-    } else if (*fmt == GX_TF_C8) {
+    } else if (icons[sCardSlot][file].bannerFormat == GX_TF_C8) {
+        u8* tlut = (u8*)icon + (u32)icons[sCardSlot][file].bannerTlut;
+
         tex.indexed = 1;
         tex.tlutFormat = GX_TL_RGB5A3;
         tex.tlutCount = 256;
-        tex.tlutOffset = ((u8*)icon + (u32)icons[sCardSlot][file].bannerTlut) - (u8*)&tex;
+        tex.tlutOffset = tlut - (u8*)&tex;
         tex.imageOffset = image - (u8*)&tex;
         J3D_LoadTexture(0, &tex);
         return TRUE;
