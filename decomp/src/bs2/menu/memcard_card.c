@@ -671,25 +671,24 @@ s32 CardThread_ReadIcon(u8 slot, s16 file, CARDDir* dir, CARDFileInfo* fi) {
 
 /* 0x8131D408: read the two comment lines of a file. */
 s32 CardThread_ReadComment(u8 slot, s16 file, CARDDir* dir, CARDFileInfo* fi) {
+    s32 result;
     u32 addr = dir->commentAddr;
     s32 base = addr & ~0x1FF;
-    s32 len = ((addr + CARD_COMMENT_SIZE + 0x1FF) & ~0x1FF) - base;
+    s32 ofs = addr - base;
     u32 sector;
-    u32 limit;
-    s32 result;
+    s32 len = ((addr + CARD_COMMENT_SIZE + 0x1FF) & ~0x1FF) - base;
 
     result = CARDGetSectorSize(slot, &sector);
     if (result >= 0) {
-        limit = dir->length * sector;
-        if (base < 0 || (u32)base > limit) {
+        if (base < 0 || (u32)base > dir->length * sector) {
             result = 0;
-        } else if (base + len < 0 || (u32)(base + len) > limit) {
+        } else if (base + len < 0 || (u32)(base + len) > dir->length * sector) {
             result = 0;
         } else {
             result = CARDRead(fi, sCardCommentRead, len, base);
             if (result >= 0) {
                 memset(sCardComment[slot][file], 0, CARD_COMMENT_SIZE);
-                memcpy(sCardComment[slot][file], sCardCommentRead + (addr - base), CARD_COMMENT_SIZE);
+                memcpy(sCardComment[slot][file], sCardCommentRead + ofs, CARD_COMMENT_SIZE);
                 return 0;
             }
         }
