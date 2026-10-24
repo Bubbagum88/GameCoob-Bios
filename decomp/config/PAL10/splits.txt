@@ -645,6 +645,17 @@ dolphin/os/OSTime.c:
 	.text       start:0x81363764 end:0x81363F00
 	.data       start:0x814ABFC0 end:0x814AC020
 
+dolphin/os/OSUartExi.c:
+	.text       start:0x81363F00 end:0x81364150
+	.sbss       start:0x814AD8E0 end:0x814AD8E8
+
+dolphin/os/__start.c:
+	.init       start:0x81300000 end:0x81300174
+
+dolphin/os/__ppc_eabi_init.cpp:
+	.init       start:0x81300174 end:0x813001C8
+	.text       start:0x81364150 end:0x813641E4
+
 dolphin/db/db.c:
 	.text       start:0x813641E4 end:0x813642D0
 	.data       start:0x814AC020 end:0x814AC038
@@ -951,3 +962,6 @@ MSL_C/PPCEABI/bare/H/common_float_tables.c:
 TRK_MINNOW_DOLPHIN/dolphin_trk_glue.c:
 	.text       start:0x8137EA4C end:0x8137EA9C
 	.data       start:0x814ACF98 end:0x814ACFB4
+
+Runtime/PPCEABI/H/__mem.c:
+	.init       start:0x813001C8 end:0x8130030C
