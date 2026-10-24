@@ -86,7 +86,7 @@ OSMessageQueue* CardThread_CmdQueue(void);
 OSMessageQueue* CardThread_ReplyQueue(void);
 void* CardThread_Main(void* arg);
 void CardThread_MarkConflicts(void);
-void CardThread_SetEnabled(u8 cmd, BOOL enabled);
+void CardThread_SetEnabled(s8 cmd, BOOL enabled);
 s32 CardThread_Fail(u8 slot, s32 cmd, s32 result);
 void CardThread_ClearFiles(u8 slot);
 void CardThread_DoUnmount(u8 slot);
@@ -152,7 +152,8 @@ void CardThread_Copy(u8 slot, s16 file) {
     sCardResult = CARD_UI_OK;
     sCardDestResult = CARD_UI_OK;
     sCardCmd = CARD_CMD_COPY;
-    msg = (file << 24) | ((slot << 16) & 0x10000) | CARD_CMD_COPY;
+    msg = file;
+    msg = (msg << 24) | ((slot << 16) & 0x10000) | CARD_CMD_COPY;
     OSSendMessage(CardThread_CmdQueue(), (OSMessage)msg, OS_MESSAGE_NOBLOCK);
 }
 
@@ -164,7 +165,8 @@ void CardThread_Move(u8 slot, s16 file) {
     sCardResult = CARD_UI_OK;
     sCardDestResult = CARD_UI_OK;
     sCardCmd = CARD_CMD_MOVE;
-    msg = (file << 24) | ((slot << 16) & 0x10000) | CARD_CMD_MOVE;
+    msg = file;
+    msg = (msg << 24) | ((slot << 16) & 0x10000) | CARD_CMD_MOVE;
     OSSendMessage(CardThread_CmdQueue(), (OSMessage)msg, OS_MESSAGE_NOBLOCK);
 }
 
@@ -176,7 +178,8 @@ void CardThread_Erase(u8 slot, s16 file) {
     sCardResult = CARD_UI_OK;
     sCardDestResult = CARD_UI_OK;
     sCardCmd = CARD_CMD_ERASE;
-    msg = (file << 24) | ((slot << 16) & 0x10000) | CARD_CMD_ERASE;
+    msg = file;
+    msg = (msg << 24) | ((slot << 16) & 0x10000) | CARD_CMD_ERASE;
     OSSendMessage(CardThread_CmdQueue(), (OSMessage)msg, OS_MESSAGE_NOBLOCK);
 }
 
@@ -474,10 +477,10 @@ void CardThread_MarkConflicts(void) {
 }
 
 /* 0x8131CC10 */
-void CardThread_SetEnabled(u8 cmd, BOOL enabled) {
+void CardThread_SetEnabled(s8 cmd, BOOL enabled) {
     u32 msg;
 
-    msg = ((enabled << 8) & 0xFF00) | cmd;
+    msg = ((enabled << 8) & 0xFF00) | (u8)cmd;
     OSSendMessage(&sCardReplyQueue, (OSMessage)msg, OS_MESSAGE_BLOCK);
 }
 
