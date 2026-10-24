@@ -36,6 +36,26 @@ void CardIcon_Init(J3DModel* model, BOOL first) {
 }
 
 /* 0x813219F4: cube i flies from the centre to its place in the 6 x 6 grid. */
+/* each cube starts flying out at a random frame 0..31 and takes 20 frames */
+static inline void CardIcon_RandomStarts(void) {
+    s16 i;
+    s16 s;
+
+    for (i = 0; i < CARDICON_CUBES; i++) {
+        s = (s16)(s32)(Rand() & 0x1F);
+        sCardCube[i].start = s;
+        sCardCube[i].end = s + 20;
+    }
+}
+
+static inline void CardIcon_ResetSpin(void) {
+    s16 i;
+
+    for (i = 0; i < CARDICON_CUBES; i++) {
+        sCardCube[i].spin = 0;
+    }
+}
+
 void CardIcon_InitGrid(void) {
     s16 i;
 
@@ -53,15 +73,8 @@ void CardIcon_InitGrid(void) {
         sCardCube[i].pos[2] = sCardCube[i].from[2];
         sCardIconFrame = 0;
     }
-    for (i = 0; i < CARDICON_CUBES; i++) {
-        s32 start = (s16)(Rand() & 0x1F);
-
-        sCardCube[i].start = start;
-        sCardCube[i].end = start + 20;
-    }
-    for (i = 0; i < CARDICON_CUBES; i++) {
-        sCardCube[i].spin = 0;
-    }
+    CardIcon_RandomStarts();
+    CardIcon_ResetSpin();
 }
 
 /* 0x81321B98: the 4 x 3 block in the middle of the grid. */
@@ -123,7 +136,6 @@ static inline f32 CardIcon_Ease(f32 t, f32 t0, f32 p0, f32 t1, f32 p1) {
 void CardIcon_UpdateFly(void) {
     s16 i;
     s16 start;
-    s16 end;
     f32 dur;
 
     for (i = 0; i < CARDICON_CUBES; i++) {
@@ -137,16 +149,14 @@ void CardIcon_UpdateFly(void) {
             sCardCube[i].pos[1] = sCardCube[i].to[1];
             sCardCube[i].pos[2] = sCardCube[i].to[2];
         }
-        start = sCardCube[i].start;
-        if (sCardIconFrame > start) {
-            end = sCardCube[i].end;
-            if (sCardIconFrame < end) {
+        if (sCardIconFrame > sCardCube[i].start) {
+            if (sCardIconFrame < sCardCube[i].end) {
                 f32 x0 = sCardCube[i].from[0];
                 f32 y0 = sCardCube[i].from[1];
                 f32 x1 = sCardCube[i].to[0];
                 f32 y1 = sCardCube[i].to[1];
-                f32 t0 = start;
-                f32 t1 = end;
+                f32 t0 = sCardCube[i].start;
+                f32 t1 = sCardCube[i].end;
                 dur = t1 - t0;
                 sCardCube[i].pos[0] = Hermite(sCardIconFrame, t0, x0, (x1 - x0) / dur, t1, x1, 0.0f);
                 sCardCube[i].pos[1] = Hermite(sCardIconFrame, t0, y0, (y1 - y0) / dur, t1, y1, 0.0f);
@@ -157,9 +167,8 @@ void CardIcon_UpdateFly(void) {
     for (i = 0; i < CARDICON_CUBES; i++) {
         if (!CardIcon_IsInner(i)) {
             start = sCardCube[i].start;
-            end = sCardCube[i].end;
-            if (sCardIconFrame > start && sCardIconFrame < end) {
-                sCardIconInst[i].alpha = (sCardIconFrame - start) * 255 / (end - start);
+            if (sCardIconFrame > start && sCardIconFrame < sCardCube[i].end) {
+                sCardIconInst[i].alpha = (sCardIconFrame - start) * 255 / (sCardCube[i].end - start);
             } else if (sCardIconFrame <= start) {
                 sCardIconInst[i].alpha = 0;
             } else if (sCardIconFrame >= sCardCube[i].end) {
@@ -169,7 +178,7 @@ void CardIcon_UpdateFly(void) {
     }
 }
 
-static void CardIcon_AddAlpha(s16 i, s16 step) {
+static inline void CardIcon_AddAlpha(s16 i, s16 step) {
     s16 alpha;
 
     sCardIconInst[i].alpha += step;
@@ -251,7 +260,7 @@ void CardIcon_SpinY(s32 t) {
     }
 }
 
-static void CardIcon_Flip(s32 t) {
+static inline void CardIcon_Flip(s32 t) {
     s16 i;
 
     for (i = 0; i < CARDICON_CUBES; i++) {
@@ -262,15 +271,13 @@ static void CardIcon_Flip(s32 t) {
 }
 
 /* 0x81322650 */
+
 void CardIcon_UpdateFace(void) {
     s16 i;
 
     Card_GetParams();
     if (sCardIconFrame == 0) {
-        for (i = 0; i < CARDICON_CUBES; i++) {
-            sCardCube[i].start = Rand() & 0x1F;
-            sCardCube[i].end = sCardCube[i].start + 20;
-        }
+        CardIcon_RandomStarts();
     }
     if (sCardIconFrame <= 113) {
         CardIcon_UpdateFly();
@@ -282,9 +289,7 @@ void CardIcon_UpdateFace(void) {
     } else if (sCardIconFrame >= 440 && sCardIconFrame <= 485) {
         CardIcon_Flip(sCardIconFrame - 430);
     } else {
-        for (i = 0; i < CARDICON_CUBES; i++) {
-            sCardCube[i].spin = 0;
-        }
+        CardIcon_ResetSpin();
     }
     if (sCardIconFrame >= 340) {
         CardIcon_FadeInner(TRUE);
@@ -318,18 +323,22 @@ void CardIcon_CalcMtx(void) {
         PSMTXConcat(Menu_GetCubeMtx(), m, m);
         if (CardIcon_IsInner(i)) {
             Vec scale = { 0.0f, 0.0f, 0.0f };
+            Vec *d;
 
             scale.x = p->cubeScale * 0.5f;
             scale.y = p->cubeScale * 0.5f;
             scale.z = p->cubeScale * 0.5f;
-            J3D_SetModelMtx(&sCardIconInst[i], m, scale);
+            d = &scale;
+            J3D_SetModelMtx(&sCardIconInst[i], m, *d);
         } else {
             Vec scale = { 0.0f, 0.0f, 0.0f };
+            Vec *d;
 
             scale.x = p->cubeScale;
             scale.y = p->cubeScale;
             scale.z = p->cubeScale;
-            J3D_SetModelMtx(&sCardIconInst[i], m, scale);
+            d = &scale;
+            J3D_SetModelMtx(&sCardIconInst[i], m, *d);
         }
         J3D_SetViewMtx(&sCardIconInst[i], Camera_GetView());
         J3D_CalcJoints(&sCardIconInst[i]);
@@ -339,8 +348,8 @@ void CardIcon_CalcMtx(void) {
 /* 0x81322C8C */
 void CardIcon_Draw(void) {
     CardParams* p = Card_GetParams();
-    void* tev;
     s16 i;
+    void* tev;
 
     sCardIconTint.r = p->tint[0];
     sCardIconTint.g = p->tint[1];

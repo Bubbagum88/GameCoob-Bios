@@ -69,6 +69,7 @@ void OptionIcon_Init(J3DModel* model, BOOL first) {
 void OptionIcon_ResetShape(void) {
     s16 i;
     s16 k = 0;
+    u8 unused[4]; /* never used, but still takes a stack slot */
 
     for (i = 0; i < OPT_RING; i++) {
         if (i >= 1 && i <= 6) {
@@ -345,6 +346,7 @@ void OptionIcon_UpdateFace(void) {
     s16 i;
     s16 r;
     f32 x;
+    u8 unused[4];
 
     p = Option_GetParams();
     if (sOptFrame == 0) {

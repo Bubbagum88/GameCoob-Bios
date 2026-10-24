@@ -1,5 +1,5 @@
 // Partly matching: Option_Init, Option_Update and Option_DrawText differ only in
-// register numbering; Option_GetLangRow still to check.
+// register numbering.
 //
 // "Options" submenu (PAL 1.0 BS2, 0x81327EE4..0x81328CA4): sound mode,
 // screen position and language.
@@ -39,7 +39,6 @@ static Fader sOptLangName[6];   /* 'lan1'..'lan6' panes: full when chosen, half 
 static Fader sOptLangText[6];   /* the item texts in each language (cross-fade) */
 static s16 sOptLangY[6];        /* y of the 'lan1'..'lan6' panes (pixels) */
 
-static const GXColor sOptWhite = { 255, 255, 255, 255 };
 
 /* 0x81327EE4: called after a language change. */
 void Option_LoadLangRes(void) {
@@ -49,9 +48,10 @@ void Option_LoadLangRes(void) {
 /* 0x81327F08 */
 void Option_Init(BOOL first) {
     s32 i;
+    GlhAnchor* anchor;
+    u32 tag;
     s32 j;
     GlhAnchor* base;
-    GlhAnchor* anchor;
     OSSram* sram;
 
     if (first) {
@@ -61,8 +61,9 @@ void Option_Init(BOOL first) {
         }
         base = (GlhAnchor*)((u8*)sOptGlh + sOptGlh->anchorOfs);
         for (i = 0; i < 6; i++) {
+            tag = 'lan1' + i;
             for (anchor = base, j = 0; j < sOptGlh->anchorCount; anchor++, j++) {
-                if (anchor->tag == 'lan1' + i) {
+                if (anchor->tag == tag) {
                     sOptLangY[i] = (s16)(anchor->y >> 4);
                 }
             }
@@ -286,8 +287,10 @@ s32 Option_Update(void) {
         Fx_Update();
     }
     for (i = 0; i < 6; i++) {
-        Fader_Step(&sOptLangName[i], i == sOptLang ? FADE_IN : FADE_HALF);
-        Fader_Step(&sOptLangText[i], i == sOptLang ? FADE_IN : FADE_OUT);
+        u8 mode = i == sOptLang ? FADE_IN : FADE_HALF;
+        Fader_Step(&sOptLangName[i], mode);
+        mode = i == sOptLang ? FADE_IN : FADE_OUT;
+        Fader_Step(&sOptLangText[i], mode);
     }
 
     /* pulse of the selection highlight, 50..120 */
@@ -323,11 +326,12 @@ s16 Option_GetLang(void) {
    language list. */
 void Option_DrawText(u8 alpha) {
     OptionParams* p = Option_GetParams();
-    GXColor white = sOptWhite;
+    GXColor white = { 255, 255, 255, 255 };
     GXColor green;
     s16 a;
     s16 b;
     s32 i;
+    u32 tag;
 
     green.r = p->textColor[0];
     green.g = p->textColor[1];
@@ -335,7 +339,7 @@ void Option_DrawText(u8 alpha) {
     GX_Setup2DText();
     for (i = 0; i < 6; i++) {
         Fader_GetAlpha(&sOptLangText[i], &a, NULL);
-        green.a = white.a = (u8)(alpha * a / 255);
+        white.a = green.a = (u8)(alpha * a / 255);
         Glh_DrawText(0, sOptSth[i], sOptGlh, &white); /* "Choose settings" */
         Glh_DrawStringOfs(1, sOptSth[i], sOptGlh, &green, 0, (s16)(16.0f * p->itemOfs[0]));
         Glh_DrawStringOfs(2, sOptSth[i], sOptGlh, &green, 0, (s16)(16.0f * p->itemOfs[1]));
@@ -343,10 +347,11 @@ void Option_DrawText(u8 alpha) {
     }
 
     GX_Setup2DTex();
+    tag = 'lan1';
     for (i = 0; i < 6; i++) {
         Fader_GetAlpha(&sOptLangName[i], &b, NULL);
         white.a = (u8)(alpha * b / 255);
-        Glh_DrawPaneOfs('lan1' + i, sOptGlh, &white, 0, (s32)(16.0f * p->langOfs));
+        Glh_DrawPaneOfs(tag + i, sOptGlh, &white, 0, (s32)(16.0f * p->langOfs));
     }
 
     /* separators between the six names, half transparent */
