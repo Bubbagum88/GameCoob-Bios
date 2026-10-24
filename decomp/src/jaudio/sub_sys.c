@@ -252,21 +252,23 @@ extern void Nap_SetU16(u32 cmd, u16 param) {
 extern s32 Nap_SendStart(void) {
     static u8 worst = 0;
     s32 msg;
-    s32 res;
-    STACK_PAD_VAR(3);
-    s32* REF_res = &res;
+    s32 pending;
+    STACK_PAD_VAR(6);
 
     if (AUDIO_SYSTEM_READY != TRUE) {
         return -1;
     }
 
-    msg = ((AG.thread_cmd_read_pos & 0xFF) << 8) | (AG.thread_cmd_write_pos & 0xFF);
-    res = Z_osSendMesg(AG.thread_cmd_proc_mq_p, (OSMesg)msg, OS_MESG_NOBLOCK);
+    // IPL: tracks the deepest command backlog instead of AC's OSReport.
+    pending = (u8)((AG.thread_cmd_write_pos + 0x100) - AG.thread_cmd_read_pos);
+    if (worst < pending) {
+        worst = pending;
+    }
 
-    if (res != -1) {
+    msg = (AG.thread_cmd_write_pos & 0xFF) | ((AG.thread_cmd_read_pos & 0xFF) << 8);
+    if (Z_osSendMesg(AG.thread_cmd_proc_mq_p, (OSMesg)msg, OS_MESG_NOBLOCK) != -1) {
         AG.thread_cmd_read_pos = AG.thread_cmd_write_pos;
     } else {
-        OSReport("SendStart::Mesg Full Queue\n");
         return -1;
     }
 
@@ -598,22 +600,18 @@ extern void Nap_WaitVsync(void) {
 }
 
 static s32 Nap_SilenceCheck_Inner(s32 flags) {
-    playbackch* playback_chan;
-    commonch* common_chan;
     s32 i;
     s32 channelCount;
-    channel* channel;
-    wtstr* tuned_sample;
 
     channelCount = 0;
     for (i = 0; i < AG.num_channels; i++) {
-        channel = &AG.channels[i];
-        playback_chan = &channel->playback_ch;
+        channel* channel = &AG.channels[i];
+        playbackch* playback_chan = &channel->playback_ch;
         if (channel->common_ch.enabled) {
-            common_chan = &channel->common_ch;
+            commonch* common_chan = &channel->common_ch;
             if (playback_chan->adsr_envp.state.flags.status != ADSR_STATUS_DISABLED) {
                 if (flags >= AUDIO_NOTE_SAMPLE_NOTES) {
-                    tuned_sample = common_chan->tuned_sample;
+                    wtstr* tuned_sample = common_chan->tuned_sample;
                     if ((tuned_sample == nullptr) || common_chan->is_synth_wave) {
                         continue;
                     }

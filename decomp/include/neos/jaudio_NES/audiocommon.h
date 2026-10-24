@@ -134,6 +134,14 @@ extern "C" {
     _a->words.w1 = _SHIFTL(l, 16, 16) | _SHIFTL(r, 0, 16);          \
 }
 
+#define	aDuplicate(pkt, count, dmem_in, dmem_out)						\
+{									\
+	Acmd *_a = (Acmd *)pkt;						\
+									\
+	_a->words.w0 = _SHIFTL(A_CMD_DUPLICATE, 24, 8) | _SHIFTL(count, 16, 8) | _SHIFTL(dmem_in, 0, 16);    		\
+	_a->words.w1 = _SHIFTL(dmem_out, 16, 16) | _SHIFTL(0x80, 0, 16);		\
+}
+
 #define	aSetEnvParam2(pkt, volL, volR)						\
 {									\
 	Acmd *_a = (Acmd *)pkt;						\

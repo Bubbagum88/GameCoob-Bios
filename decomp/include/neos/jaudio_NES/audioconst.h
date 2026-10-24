@@ -19,7 +19,7 @@ typedef struct _na_spec_config {
     fxconfig* _0C;
     u16 _10;
     u16 _12;
-    u16 _14;
+    s16 _14;
     u16 _16;
     s32 _18;
     s32 _1C;

@@ -24,7 +24,7 @@ extern "C" NeosGlobalConfig lbl_813F4750;                                    // 
 union Acmd;
 void Nas_InitAudio(u64* acmdBuf, s32 size);
 u32 CreateAudioTask(Acmd* cmds, s16* dst, u32 samples, s32 flags);
-extern "C" void fn_81337740(u32* taskBuf, u32 task, s32 flags);             // RspStart2
+void RspStart2(u32* task, s32 tasks, s32 mode);
 
 void Jac_RegisterMixcallback(MixCallback callback, u8 mixmode);
 
@@ -116,7 +116,7 @@ void* neosproc(void* param)
 
 		tmp = (cur + 1) & 1;
 		if (tasks[tmp]) {
-			fn_81337740((u32*)task_buf[tmp], tasks[tmp], 0);
+			RspStart2((u32*)task_buf[tmp], tasks[tmp], 0);
 			tasks[tmp] = 0;
 			Jac_bcopy(tmp_buf, (s16*)addr, DAC_SIZE * 2);
 		} else {

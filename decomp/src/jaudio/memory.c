@@ -83,8 +83,10 @@ void Nas_ResetIDtable() {
  * Size:	0000E0
  */
 void Nas_ForceStopChannel(s32 bankID) {
-    STACK_PAD_VAR(2);
     int i;
+    s32* REF_bankID = &bankID;
+    int* REF_i = &i;
+    STACK_PAD_VAR(2);
     for (i = 0; i < AG.num_channels; i++) {
         channel* channel = &AG.channels[i];
         if (channel->playback_ch.bank_id == bankID) {
@@ -807,7 +809,6 @@ extern s16 BP_FILTER[];
 void Nas_SetBPFilter(s16* a, s32 b, s32 c) {
     int i;
     int k;
-    int ind;
     int constant;
     if (b == 0 && c == 0) {
         Nas_SetLPFilter(a, 0);
@@ -826,18 +827,18 @@ void Nas_SetBPFilter(s16* a, s32 b, s32 c) {
             k += constant;
             constant--;
         }
-        ind = (c - b) - 1 + k;
+        k += (c - b) - 1;
         for (i = 0; i < 8; i++) {
-            a[i] = EL_FILTER[i + ind];
+            a[i] = EL_FILTER[i + k];
         }
     } else if (c < b) {
         for (i = c; i > 1; i--) {
             k += constant;
             constant--;
         }
-        ind = (b - c) - 1 + k;
+        k += (b - c) - 1;
         for (i = 0; i < 8; i++) {
-            a[i] = BP_FILTER[i + ind];
+            a[i] = BP_FILTER[i + k];
         }
     }
 }
@@ -857,11 +858,10 @@ void __DownDelay(delay* unused) {
  * Size:	0000A0
  */
 void __Nas_DelayDown() {
-    volatile int i;
+    int i;
     int j;
-    delay* delay_p;
     int c;
-    volatile int* REF_i = &i;
+    int* REF_i = &i;
 
     if (AG.audio_params.spec == 2) {
         c = 2;
@@ -870,7 +870,7 @@ void __Nas_DelayDown() {
     }
 
     for (i = 0; i < AG.num_synth_reverbs; i++) {
-        delay_p = &AG.synth_delay[i];
+        delay* delay_p = &AG.synth_delay[i];
         for (j = 0; j < c; j++) {
             __DownDelay(delay_p);
         }
@@ -899,7 +899,12 @@ void __Nas_DacClear() {
 s32 Nas_SpecChange() {
     int i;
     int j;
-    int c = AG.audio_params.spec == 2 ? 2 : 1;
+    int c;
+    if (AG.audio_params.spec == 2) {
+        c = 2;
+    } else {
+        c = 1;
+    }
     switch (AG.reset_status) {
         case 5: {
             for (i = 0; i < AG.audio_params.num_groups; i++) {
@@ -954,7 +959,10 @@ s32 Nas_SpecChange() {
             }
         } break;
     }
-    return AG.reset_status > 2;
+    if (AG.reset_status <= 2) {
+        return 0;
+    }
+    return 1;
 }
 
 /*
@@ -969,18 +977,20 @@ void __Nas_MemoryReconfig() {
     s32 b;
     s32 c;
     s32 d;
+    u8 pad2[24];
     na_spec_config* spec = &NA_SPEC_CONFIG[AG.spec_id];
+    na_spec_config** REF_spec = &spec;
+    u8 pad[116];
 
     /*0x2640*/ AG.num_waveloads = 0;
     /*0x286E*/ AG.audio_params.sampling_frequency = spec->_00;
+    /*0x2870*/ AG.audio_params.ai_sampling_frequency = AG.audio_params.sampling_frequency;
     /*0x2872*/ AG.audio_params.num_samples_per_frame_target = spec->_00 / AG.refresh_rate;
-    /*0x2878*/ AG.audio_params.updates_per_frame = 4;
     /*0x2876*/ AG.audio_params.num_samples_per_frame_min = AG.audio_params.num_samples_per_frame_target - 0x10;
     /*0x2874*/ AG.audio_params.num_samples_per_frame_max = AG.audio_params.num_samples_per_frame_target + 0x10;
+    /*0x2878*/ AG.audio_params.updates_per_frame = 4;
     /*0x287A*/ AG.audio_params.num_samples_per_update =
         (AG.audio_params.num_samples_per_frame_target / AG.audio_params.updates_per_frame) & ~7;
-    /*0x2870*/ AG.audio_params.ai_sampling_frequency = AG.audio_params.sampling_frequency;
-    OSReport("----------------------------- SFS_NORMAL = %d\n", AG.audio_params.num_samples_per_update);
 
     /*0x287C*/ AG.audio_params.num_samples_per_update_max = AG.audio_params.num_samples_per_update + 8;
     /*0x287E*/ AG.audio_params.num_samples_per_update_min = AG.audio_params.num_samples_per_update - 8;
@@ -994,14 +1004,14 @@ void __Nas_MemoryReconfig() {
 
     /*0x28B8*/ AG.num_channels = spec->_05;
     /*0x2880*/ AG.audio_params.num_groups = spec->_06;
-    if (AG.audio_params.num_groups > 5) {
-        /*0x2880*/ AG.audio_params.num_groups = 5;
+    if (AG.audio_params.num_groups > AUDIO_GROUP_NUM) {
+        /*0x2880*/ AG.audio_params.num_groups = AUDIO_GROUP_NUM;
     }
 
     /*0x2A18*/ AG.num_abi_cmds_max = 8;
-    /*0x0002*/ AG._0002 = (s16)spec->_14;
+    /*0x0002*/ AG._0002 = spec->_14;
 
-    /*0x28BC*/ AG.max_tempo = (int)(((((60.0f * 1000.0f * AUDIO_TATUMS_PER_BEAT) * (s16)AG.audio_params.updates_per_frame) / AGC.timeBase) / AG._29D8) / 1.04613);
+    /*0x28BC*/ AG.max_tempo = ((((60.0f * 1000.0f * AUDIO_TATUMS_PER_BEAT) * (s16)AG.audio_params.updates_per_frame) / AGC.timeBase) / AG._29D8);
 
     /*0x2894*/ AG.sample_to_update_delay_scale = (f32)AG.refresh_rate * (f32)AG.audio_params.updates_per_frame / AG.audio_params.ai_sampling_frequency / (s16)AG.max_tempo;
 
@@ -1028,12 +1038,12 @@ void __Nas_MemoryReconfig() {
     a = (spec->_18 + spec->_1C + spec->_20 + 0x40);
     b = (spec->_24 + spec->_28 + spec->_2C + 0x40);
     c = a + b;
-    d = AG.session_heap.length - c - 0x100;
+    d = AG.session_heap.length - 0x100;
     if (/*0x2A34*/ AG.external_heap.base != NULL) {
         /*0x2A38*/ AG.external_heap.current = AG.external_heap.base;
     }
     /*0x34EC*/ AG.audio_heap_info.misc_heap_size = d;
-    /*0x34F8*/ AG.audio_heap_info.cache_heap_size = c;
+    /*0x34F8*/ AG.audio_heap_info.cache_heap_size = 0;
     Nas_SzHeapDivide(&AG.audio_heap_info);
     /*0x34FC*/ AG.cache_heap.data_size = a;
     /*0x3500*/ AG.cache_heap.auto_size = b;
@@ -1190,6 +1200,8 @@ int Nas_Init_Single(s32 a, s32 b) {
  * Size:	000200
  */
 SwMember* __Nas_Alloc_Single_Auto_Inner(s32 size) {
+    int i;
+    int* REF_i = &i;
     s32* REF_size = &size;
     STACK_PAD_VAR(2);
     SwHeap* heap = &AG.emem_temporary_wave_heap;
@@ -1197,7 +1209,6 @@ SwMember* __Nas_Alloc_Single_Auto_Inner(s32 size) {
     u8* oldCurrent = heap->heap.current;
     u8* nowCurrent;
     alloc = Nas_HeapAlloc(&heap->heap, size);
-    int i;
 
     if (!alloc) {
         u8* nowCurrent = heap->heap.current;
@@ -1301,10 +1312,12 @@ void __SearchBank(SwMember* entry, s32 bank) {
  * Size:	0000EC
  */
 void __KillSwMember(SwMember* a) {
-    STACK_PAD_VAR(6);
     for (int i = 0, end = AG.bank_header->numEntries; i < end; i++) {
         int bank0 = AG.voice_info[i].wave_bank_id0;
         int bank1 = AG.voice_info[i].wave_bank_id1;
+        int* REF_end = &end;
+        int* REF_bank0 = &bank0;
+        int* REF_bank1 = &bank1;
         if (((bank0 != 0xff && bank0 == a->sample_bank_id) || (bank1 != 0xff && bank1 == a->sample_bank_id) ||
              (a->sample_bank_id == 0 || a->sample_bank_id == 0xfe)) &&
             Nas_SzCacheCheck(1, 2, i) && Nas_CheckIDbank(i)) {
@@ -1366,11 +1379,13 @@ void __Do_EmemKill(SwMember* entry, s32 id0, s32 id1, s32 bank) {
  * Size:	000128
  */
 void Emem_KillSwMember() {
-    STACK_PAD_VAR(4);
-    s32 i, j, end;
-    for (i = 0, end = AG.bank_header->numEntries; i < end; i++) {
+    s32 j;
+    for (s32 i = 0, end = AG.bank_header->numEntries; i < end; i++) {
         s32 id0 = AG.voice_info[i].wave_bank_id0;
         s32 id1 = AG.voice_info[i].wave_bank_id1;
+        s32* REF_end = &end;
+        s32* REF_id0 = &id0;
+        s32* REF_id1 = &id1;
         if ((id0 != 0xff || id1 != 0xff) && Nas_SzCacheCheck(1, 3, i) && Nas_CheckIDbank(i)) {
             for (j = 0; j < AG.emem_persistent_wave_heap.num_entries; j++) {
                 __Do_EmemKill(&AG.emem_persistent_wave_heap.entries[j], id0, id1, i);
@@ -1396,7 +1411,7 @@ void __RestoreAddr(Wavelookuptable* a, smzwavetable* b) {
         u8* o = a_sample + a->_08;
         if (b_sample >= a_sample && b_sample < o) {
             // fakematch?
-            b->sample = (u8*)((u32)a->_04 + (b->sample - (u32)a->sample));
+            b->sample = (u8*)((u32)a->_04 + (b_sample - a_sample));
             if (EXGTYPE == 0) {
                 b->medium = a->medium;
             } else {
