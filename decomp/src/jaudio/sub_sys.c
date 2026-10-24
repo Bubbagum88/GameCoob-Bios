@@ -600,22 +600,18 @@ extern void Nap_WaitVsync(void) {
 }
 
 static s32 Nap_SilenceCheck_Inner(s32 flags) {
-    playbackch* playback_chan;
-    commonch* common_chan;
     s32 i;
     s32 channelCount;
-    channel* channel;
-    wtstr* tuned_sample;
 
     channelCount = 0;
     for (i = 0; i < AG.num_channels; i++) {
-        channel = &AG.channels[i];
-        playback_chan = &channel->playback_ch;
+        channel* channel = &AG.channels[i];
+        playbackch* playback_chan = &channel->playback_ch;
         if (channel->common_ch.enabled) {
-            common_chan = &channel->common_ch;
+            commonch* common_chan = &channel->common_ch;
             if (playback_chan->adsr_envp.state.flags.status != ADSR_STATUS_DISABLED) {
                 if (flags >= AUDIO_NOTE_SAMPLE_NOTES) {
-                    tuned_sample = common_chan->tuned_sample;
+                    wtstr* tuned_sample = common_chan->tuned_sample;
                     if ((tuned_sample == nullptr) || common_chan->is_synth_wave) {
                         continue;
                     }
