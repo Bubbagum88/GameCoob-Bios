@@ -51,7 +51,7 @@ typedef struct CardIconInfo {
     u8* tlut;              /* 0x3C shared palette of the CI8 frames */
 } CardIconInfo;
 
-CardSlot gCardSlots[2];
+static CardSlot gCardSlots[2];
 static CardFile sCardFiles[2][CARD_MAX_FILES];
 static OSMessageQueue sCardReplyQueue;
 static OSMessageQueue sCardCmdQueue;
@@ -97,10 +97,6 @@ void CardThread_DoErase(u8 slot, s16 file);
 void CardThread_DoRefresh(void);
 s32 CardThread_FindInOther(u8 slot, s16 file);
 
-static void CardThread_Send(u32 msg) {
-    OSSendMessage(CardThread_CmdQueue(), (OSMessage)msg, OS_MESSAGE_NOBLOCK);
-}
-
 /* 0x8131BF6C */
 void* CardThread_GetFiles(void) {
     return sCardFiles;
@@ -141,38 +137,47 @@ void CardThread_Format(u8 slot) {
     u32 msg;
 
     sCardCmdSlot = slot;
+    sCardCmd = CARD_CMD_FORMAT;
     msg = (slot << 16) | CARD_CMD_FORMAT;
     sCardResult = CARD_UI_OK;
-    sCardCmd = CARD_CMD_FORMAT;
     sCardDestResult = CARD_UI_OK;
     OSSendMessage(CardThread_CmdQueue(), (OSMessage)msg, OS_MESSAGE_NOBLOCK);
 }
 
 /* 0x8131C000 */
 void CardThread_Copy(u8 slot, s16 file) {
+    u32 msg;
+
     sCardCmdSlot = slot;
     sCardResult = CARD_UI_OK;
     sCardDestResult = CARD_UI_OK;
     sCardCmd = CARD_CMD_COPY;
-    CardThread_Send(CARD_MSG(CARD_CMD_COPY, 0, slot, file));
+    msg = (file << 24) | ((slot & 1) << 16) | CARD_CMD_COPY;
+    OSSendMessage(CardThread_CmdQueue(), (OSMessage)msg, OS_MESSAGE_NOBLOCK);
 }
 
 /* 0x8131C05C */
 void CardThread_Move(u8 slot, s16 file) {
+    u32 msg;
+
     sCardCmdSlot = slot;
     sCardResult = CARD_UI_OK;
     sCardDestResult = CARD_UI_OK;
     sCardCmd = CARD_CMD_MOVE;
-    CardThread_Send(CARD_MSG(CARD_CMD_MOVE, 0, slot, file));
+    msg = (file << 24) | ((slot & 1) << 16) | CARD_CMD_MOVE;
+    OSSendMessage(CardThread_CmdQueue(), (OSMessage)msg, OS_MESSAGE_NOBLOCK);
 }
 
 /* 0x8131C0B8 */
 void CardThread_Erase(u8 slot, s16 file) {
+    u32 msg;
+
     sCardCmdSlot = slot;
     sCardResult = CARD_UI_OK;
     sCardDestResult = CARD_UI_OK;
     sCardCmd = CARD_CMD_ERASE;
-    CardThread_Send(CARD_MSG(CARD_CMD_ERASE, 0, slot, file));
+    msg = (file << 24) | ((slot & 1) << 16) | CARD_CMD_ERASE;
+    OSSendMessage(CardThread_CmdQueue(), (OSMessage)msg, OS_MESSAGE_NOBLOCK);
 }
 
 /* 0x8131C114 */
@@ -454,8 +459,8 @@ void* CardThread_Main(void* arg) {
 /* 0x8131CB64: a file can't be copied to the other card if that card already
    holds a file of the same name. */
 void CardThread_MarkConflicts(void) {
-    u8 slot;
-    s16 file;
+    int slot;
+    int file;
 
     for (slot = 0; slot < 2; slot++) {
         for (file = 0; file < CARD_MAX_FILES; file++) {
@@ -474,8 +479,8 @@ void CardThread_SetEnabled(u8 cmd, BOOL enabled) {
 
 /* 0x8131CC48: a command failed. Forget the card unless it is only full. */
 s32 CardThread_Fail(u8 slot, s32 cmd, s32 result) {
-    u8 i;
-    s16 file;
+    int file;
+    int i;
 
     if (result != CARD_RESULT_EXIST && result != CARD_RESULT_SIZE && result != CARD_RESULT_NOENT &&
         result != CARD_RESULT_INSSPACE) {
@@ -493,7 +498,7 @@ s32 CardThread_Fail(u8 slot, s32 cmd, s32 result) {
             }
         }
     }
-    OSSendMessage(&sCardReplyQueue, (OSMessage)CARD_MSG(cmd, result, slot, 0), OS_MESSAGE_BLOCK);
+    OSSendMessage(&sCardReplyQueue, (OSMessage)(((slot << 16) & 0x10000) | ((result << 8) & 0xFF00) | (cmd & 0xFF)), OS_MESSAGE_BLOCK);
     return 0;
 }
 
@@ -548,64 +553,70 @@ s32 CardThread_SetBanner(u8 slot, s16 file, CARDDir* dir) {
 /* 0x8131CF54: lay out the icon frames after the banner. Returns their size
    in bytes, palette included. */
 s32 CardThread_SetIcons(u8 slot, s16 file, CARDDir* dir) {
-    CardIconInfo* info = &sCardIcons[slot][file];
-    s32 total = 0;
     BOOL ci8 = FALSE;
+    s32 total = 0;
     s32 size;
     s32 speed;
-    s32 i;
+    int i;
 
-    info->frames = 0;
-    info->duration = 0;
-    info->speeds = dir->iconSpeed;
-    info->firstSpeed = (dir->iconSpeed & 3) << 2;
+#define INFO sCardIcons[slot][file]
+    INFO.frames = 0;
+    INFO.duration = 0;
+    INFO.speeds = dir->iconSpeed;
+    INFO.firstSpeed = (dir->iconSpeed & 3) << 2;
     for (i = 0; i < CARD_ICON_MAX; i++) {
         speed = (dir->iconSpeed >> (i * 2)) & 3;
-        if (speed == 0) {
-            break;
+        if (speed != 0) {
+            INFO.duration += speed << 2;
+        } else {
+            INFO.lastSpeed = ((dir->iconSpeed >> ((i - 1) * 2)) & 3) << 2;
+            goto done;
         }
-        info->duration += speed << 2;
     }
-    info->lastSpeed = ((dir->iconSpeed >> ((i - 1) * 2)) & 3) << 2;
+    INFO.lastSpeed = ((dir->iconSpeed >> ((CARD_ICON_MAX - 1) * 2)) & 3) << 2;
+done:
 
     if (!(dir->iconSpeed & 3) || !(dir->iconFormat & 3)) {
-        info->hasIcon = FALSE;
+        INFO.hasIcon = FALSE;
         return 0;
     }
     for (i = 0; i < CARD_ICON_MAX; i++) {
-        if (!((dir->iconSpeed >> (i * 2)) & 3)) {
-            info->tlut = info->image[i];
-            break;
-        }
+        if ((dir->iconSpeed >> (i * 2)) & 3) {
         switch ((dir->iconFormat >> (i * 2)) & 3) {
         case CARD_STAT_ICON_C8:
-            info->format[i] = GX_TF_C8;
+            INFO.format[i] = GX_TF_C8;
             size = CARD_ICON_WIDTH * CARD_ICON_HEIGHT;
             ci8 = TRUE;
             break;
         case CARD_STAT_ICON_RGB5A3:
-            info->format[i] = GX_TF_RGB5A3;
+            INFO.format[i] = GX_TF_RGB5A3;
             size = CARD_ICON_WIDTH * CARD_ICON_HEIGHT * 2;
             break;
         case CARD_STAT_ICON_NONE:
             size = 0;
-            info->format[i] = (&info->lastSpeed)[i]; /* the previous frame's format */
+            INFO.format[i] = (&INFO.lastSpeed)[i]; /* the previous frame's format */
             break;
         }
         if (i < CARD_ICON_MAX - 1) {
-            info->image[i + 1] = info->image[i] + size;
+            INFO.image[i + 1] = (u8*)(size + (u32)INFO.image[i]);
         } else {
-            info->tlut = info->image[i] + size;
+            INFO.tlut = (u8*)(size + (u32)INFO.image[i]);
         }
         total += size;
-        info->frames++;
+        INFO.frames++;
+        } else {
+            INFO.tlut = INFO.image[i];
+            goto icons_done;
+        }
     }
+icons_done:
     if (ci8) {
         total += 0x200;
     }
-    info->hasIcon = TRUE;
-    info->bounce = dir->bannerFormat & CARD_STAT_ANIM_BOUNCE;
-    info->animating = TRUE;
+    INFO.hasIcon = TRUE;
+    INFO.bounce = dir->bannerFormat & CARD_STAT_ANIM_BOUNCE;
+    INFO.animating = TRUE;
+#undef INFO
     return total;
 }
 
