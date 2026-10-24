@@ -1895,7 +1895,7 @@ void CardDraw_OpMenu(u16 msg, u8 slot, u8 alpha) {
     x = texts[e->pane].x - (maxW / 2 + disp->textPad * 16);
     y = (total / 2 + texts[e->pane].y) - boxH;
     Glh_DrawPaneRect(texts[e->pane].bgPane, sCardGlh, &c, x, y, maxW + disp->textPad * 32, boxH);
-    CardDraw_SetScissor(x, y, maxW + disp->textPad * 32, boxH, f->ticks * 5, &c);
+    CardDraw_SetScissor(x, y, maxW + disp->textPad * 32, boxH, (u8)(f->ticks * 5), &c);
     box = texts[e->pane];
     box.y = y + (disp->textPad * 16 + lh / 2);
     box.bgPane = 0xFFFF;
@@ -2012,9 +2012,12 @@ void CardDraw_MeasureLines(CardSlotFade* f, void* sth, void* glh, u16* outW) {
     u16 i;
     u16 w;
     u16 step;
+    u16 str;
+    SthEntry* e;
 
-    for (i = 0; i < 3; i++) {
-        Glh_MeasureString(&texts[entries[i + 2].pane], (u8*)&entries[i + 2] + entries[i + 2].ofs, &w, &f->lineH);
+    for (i = 0, str = 2; i < 3; str++, i++) {
+        e = &entries[i + 2];
+        Glh_MeasureString(&texts[entries[str].pane], STH_STRING(e), &w, &f->lineH);
         if (max < w) {
             max = w;
         }
@@ -2073,9 +2076,9 @@ void CardDraw_TextBox(u8 slot, CardSlotFade* f, void* sth, void* glh, GXColor* c
     Fader_GetAlpha(&sCardFadeA[slot ^ 1], &a[2], NULL);
     Fader_GetAlpha(&sCardFadeB[slot], &a[1], NULL);
     Fader_GetAlpha(&sCardFadeC[slot], &a[0], NULL);
-    a[2] = a[2] / 2;
-    a[1] = a[1] / 2;
-    a[0] = a[0] / 2;
+    a[2] /= 2;
+    a[1] /= 2;
+    a[0] /= 2;
     for (i = 0, str = 2; i < 3; str++, i++) {
         if (i <= 1) {
             u8 k;
@@ -2201,7 +2204,7 @@ void CardDraw_Dialog(u8 slot, CardSlotFade* f, void* sth, void* glh, GXColor* c)
         Glh_DrawPaneRect(pane, glh, c, x, y1, w + disp->textPad * 32, f->h1 + disp->textPad * 32);
         CardDraw_TextBox(slot, f, sth, glh, c, x + (w / 2 + disp->textPad * 16), y1 + disp->textPad * 16, w);
         c->a = c->a * (f->bMax - f->b) / f->bMax;
-        CardDraw_SetScissor(x, y1, w + disp->textPad * 32, f->h1 + disp->textPad * 32, f->phase, c);
+        CardDraw_SetScissor(x, y1, w + disp->textPad * 32, f->h1 + disp->textPad * 32, (u8)f->phase, c);
         c->a = alpha;
         if (f->b >= f->sA) {
             a2 = f->alpha * (f->b - f->sA) / (f->bMax - f->sA);
@@ -2212,7 +2215,7 @@ void CardDraw_Dialog(u8 slot, CardSlotFade* f, void* sth, void* glh, GXColor* c)
         }
         c->a = c->a * a2 / 255;
         Glh_DrawPaneRect(pane, glh, c, x, y + (f->h1 + disp->textPad * 32 + dy2 + 0x80), w + disp->textPad * 32, f->h2 + disp->textPad * 32);
-        CardDraw_SetScissor(x, y + (f->h1 + disp->textPad * 32 + dy2 + 0x80), w + disp->textPad * 32, f->h2 + disp->textPad * 32, f->phase, c);
+        CardDraw_SetScissor(x, y + (f->h1 + disp->textPad * 32 + dy2 + 0x80), w + disp->textPad * 32, f->h2 + disp->textPad * 32, (u8)f->phase, c);
         CardDraw_TextLines(f, sth, glh, c, x + (w / 2 + disp->textPad * 16), y + (disp->textPad * 16 + f->lineH + disp->textPad * 32 + dy2 + 0x80), w);
         c->a = alpha;
     }
