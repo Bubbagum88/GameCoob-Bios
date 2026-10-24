@@ -1845,11 +1845,12 @@ void CardDraw_OpMenu(u16 msg, u8 slot, u8 alpha) {
     u16 lh = 0;
     SthEntry* entries = ((Sth*)sCardSth)->entry;
     GlhText* texts = GLH_TEXTS(sCardGlh);
-    GXColor c;
-    GXColor glow;
     s16 a;
     s32 slide;
-    u16 idx;
+    GlhText box;
+    GXColor c;
+    GXColor glow;
+    s32 idx;
     SthEntry* e;
     SthEntry* entries2;
     GlhText* texts2;
@@ -1858,7 +1859,6 @@ void CardDraw_OpMenu(u16 msg, u8 slot, u8 alpha) {
     u16 x;
     u16 y;
     u16 i;
-    GlhText box;
     BOOL sel;
     Fader* f;
 
@@ -1882,26 +1882,28 @@ void CardDraw_OpMenu(u16 msg, u8 slot, u8 alpha) {
     texts2 = GLH_TEXTS(sCardGlh);
     {
         u16 sw = 0;
+        s16 unused[4];
+
         for (i = 0; i < 2; i++) {
-            Glh_MeasureString(&texts2[entries2[idx].pane], (u8*)&entries2[i + 5] + entries2[i + 5].ofs, &sw, &lh);
+            Glh_MeasureString(&texts2[entries2[(u16)idx].pane], (u8*)&entries2[i + 5] + entries2[i + 5].ofs, &sw, &lh);
             if (maxW < sw) {
                 maxW = sw;
             }
         }
     }
     h += disp->textPad * 32;
-    boxH = lh + texts2[entries2[idx].pane].lineSpace * 16 + disp->textPad * 32;
+    boxH = lh + texts2[entries2[(u16)idx].pane].lineSpace * 16 + disp->textPad * 32;
     total = h + (boxH + Card_GetParams()->cols * 16);
     Glh_DrawStringOfs(idx, sCardSth, sCardGlh, &c, 0, -total / 2 + h / 2);
-    if (f->frame > f->length / 2) {
-        glow.a = c.a = alpha * (f->frame - f->length / 2) * 2 / f->length;
+    if (f->frame > sCardMsg[idx].length / 2) {
+        glow.a = c.a = alpha * (f->frame - sCardMsg[idx].length / 2) * 2 / sCardMsg[idx].length;
     } else {
         glow.a = c.a = 0;
     }
     x = texts[e->pane].x - (maxW / 2 + disp->textPad * 16);
     y = (total / 2 + texts[e->pane].y) - boxH;
     Glh_DrawPaneRect(texts[e->pane].bgPane, sCardGlh, &c, x, y, maxW + disp->textPad * 32, boxH);
-    CardDraw_SetScissor(x, y, maxW + disp->textPad * 32, boxH, (u8)(f->ticks * 5), &c);
+    CardDraw_SetScissor(x, y, maxW + disp->textPad * 32, boxH, (u8)(sCardMsg[idx].ticks * 5), &c);
     box = texts[e->pane];
     box.y = y + (disp->textPad * 16 + lh / 2);
     box.bgPane = 0xFFFF;
@@ -2170,7 +2172,6 @@ void CardDraw_TextLines(CardSlotFade* f, void* sth, void* glh, GXColor* c, s32 x
 void CardDraw_Dialog(u8 slot, CardSlotFade* f, void* sth, void* glh, GXColor* c) {
     GlhFrame* frames = GLH_FRAMES(glh);
     DispSettings* disp = Disp_GetSettings();
-    GlhFrame* fr;
     u16 pane;
     s32 x;
     s32 y;
@@ -2183,8 +2184,8 @@ void CardDraw_Dialog(u8 slot, CardSlotFade* f, void* sth, void* glh, GXColor* c)
     s32 dy2;
     s16 unused[4];
 
-    for (pane = 0, fr = frames; pane < ((Glh*)glh)->nFrames; fr++, pane++) {
-        if (fr->tag == 'mes0') {
+    for (pane = 0; pane < ((Glh*)glh)->nFrames; pane++) {
+        if (frames[pane].tag == 'mes0') {
             break;
         }
     }
@@ -2200,6 +2201,7 @@ void CardDraw_Dialog(u8 slot, CardSlotFade* f, void* sth, void* glh, GXColor* c)
             x -= (w / 16 + disp->textPad * 2 + 40) * 16;
         }
         if (sCardRow[slot] < 2) {
+            c->a = c->a; /* dead store; keeps the empty-then branch */
         } else {
             dy = -dy;
             y -= f->h3 + disp->textPad * 8;
