@@ -637,12 +637,11 @@ static s32 __Command_Seq(note* n) {
     macro* m = &n->macro_player;
     sub* subtrack = n->sub_track;
     group* grp = subtrack->group;
-    sweep* port_sweep;
-    u8 cmd;
     u8 cmdArgU8;
-    u32 tmp;
     u16 cmdArgU16;
     u16 velocity;
+    u8 cmd;
+    sweep* port_sweep;
     u8* REF_cmd = &cmd;
 
     while (TRUE) {
@@ -680,12 +679,12 @@ static s32 __Command_Seq(note* n) {
                 if (cmd == NOTE_CMD_SET_GATE_TIME) {
                     n->gate_time = cmdArgU8;
                 } else {
-                    n->transposition = cmdArgU8;
+                    n->transposition = (s16)(s32)cmdArgU8;
                 }
                 break;
             case NOTE_CMD_CONTINUOUS_ON:
             case NOTE_CMD_CONTINUOUS_OFF:
-                n->continuous = cmd == NOTE_CMD_CONTINUOUS_ON;
+                n->continuous = cmd == NOTE_CMD_CONTINUOUS_ON ? TRUE : FALSE;
                 n->continuous_channel_released = FALSE;
                 Nas_Release_Channel(n);
                 break;
@@ -748,7 +747,8 @@ static s32 __Command_Seq(note* n) {
                 n->portamento_sweep.mode = PORTAMENTO_MODE_OFF;
                 break;
             case NOTE_CMD_SET_ADSR_ENVELOPE_DECAY_IDX:
-                n->adsr_env.envelope = (envdat*)(grp->seq_data + (Nas_ReadWordData(m) & 0xFFFF));
+                cmdArgU16 = Nas_ReadWordData(m);
+                n->adsr_env.envelope = (envdat*)(grp->seq_data + cmdArgU16);
                 // fallthrough 0xCB -> 0xCF
             case NOTE_CMD_SET_ADSR_DECAY_IDX:
                 n->adsr_env.decay_idx = Nas_ReadByteData(m);
@@ -787,6 +787,7 @@ static s32 __Command_Seq(note* n) {
 }
 
 static s32 __SetVoice(note* n, s32 arg) {
+    perctable* percussion;
     u8 semitone;
     s32 same_sample;
     s32 inst_or_wave;
@@ -795,7 +796,6 @@ static s32 __SetVoice(note* n, s32 arg) {
     f32 freq_scale2;
     wtstr* tuned_sample;
     voicetable* instrument;
-    perctable* percussion;
     percvoicetable* effect;
     sub* subtrack;
     group* grp;
@@ -810,6 +810,10 @@ static s32 __SetVoice(note* n, s32 arg) {
     f32 freq0;
     f32 freq1;
     f32 time;
+    u8* REF_semitone = &semitone;
+    perctable** REF_percussion = &percussion;
+    percvoicetable** REF_effect = &effect;
+    f32* REF_time = &time;
 
     semitone = arg;
     same_sample = TRUE;
