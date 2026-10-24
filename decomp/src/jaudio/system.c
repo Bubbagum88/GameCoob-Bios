@@ -1996,11 +1996,12 @@ void WaveReload(s32 bank_id, s32 async, WaveMedia* wavemedia) {
     smzwavetable* wavetable;
     u8* addr;
     s32 size;
+    STACK_PAD_VAR(1);
     s32 i;
     s32 preloading;
     s32 n_chunks;
-    STACK_PAD_VAR(6);
-    WaveMedia** REF_wavemedia = &wavemedia;
+    STACK_PAD_VAR(4);
+    s32* REF_i = &i;
 
     preloading = FALSE;
     if (AG.num_requested_samples != 0) {
@@ -2050,7 +2051,7 @@ void WaveReload(s32 bank_id, s32 async, WaveMedia* wavemedia) {
 
     size = 0;
     for (i = 0; i < AG.num_used_samples; i++) {
-        size += ALIGN_NEXT(AG.used_samples[i]->size, 32);
+        size += ALIGN_NEXT(AG.used_samples[i]->size, 16);
     }
 
     for (i = 0; i < AG.num_used_samples; i++) {
