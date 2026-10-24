@@ -58,6 +58,11 @@ block_relocations:
 - source: .data:0x814913FC
 - source: .data:0x8149625C
 - source: .data:0x814AABCC
+# asset words in .data that only look like pointers into memcard_draw's bss blocks
+- source: .data:0x813C5504
+- source: .data:0x813C5A08
+- source: .data:0x814AABE0
+- source: .data:0x814AAC08
 - source: .data:0x814AAC58
 # word in the same asset data that only looks like a pointer into EXIIntrruptHandler
 - source: .data:0x8141EF04
