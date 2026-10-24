@@ -1803,12 +1803,12 @@ note_seq:
 static void Nas_GroupSeq(group* grp) {
     group** REF_grp = &grp;
     u8 cmd;
+    s32 value;
+    u16 temp;
     u8 cmd_lo_bits;
     macro* m;
     s16 tempS;
-    u16 temp;
     s32 i;
-    s32 value;
     u8* data1;
     u8* data2;
     u8* data3;
@@ -1821,6 +1821,11 @@ static void Nas_GroupSeq(group* grp) {
     s8 argS8;
     s16 argS16;
     u8 argU8;
+    u8* REF_cmd = &cmd;
+    s32* REF_value = &value;
+    u16* REF_temp = &temp;
+    u8 pad[40];
+    (void)&pad;
 
     if (grp->flags.enabled) {
         if (Nas_CheckIDseq(grp->seq_id) == FALSE || Nas_CheckIDbank(grp->bank_id) == FALSE) {
@@ -1863,8 +1868,8 @@ static void Nas_GroupSeq(group* grp) {
                 while (TRUE) {
                     cmd = Nas_ReadByteData(m);
                     if (cmd >= COMMON_CMD_BRANCH_REL_NOT_EQ_ZERO) {
-                        u16 arg = Convert_Com(m, cmd);
-                        delay = Common_Com(grp, m, cmd, arg);
+                        temp = Convert_Com(m, cmd);
+                        delay = Common_Com(grp, m, cmd, temp);
 
                         if (delay != 0) {
                             /* Group is on delay or script has exited */
@@ -2109,9 +2114,9 @@ static void Nas_GroupSeq(group* grp) {
                                 break;
                             // [0x60, 0x67] @BUG - ([0x68, 0x6F] end here but would result in undefined behavior)
                             case GRP_CMD_ASYNC_LOAD_MASK: // async load
-                                cmd = (u8)Nas_ReadByteData(m);
+                                value = (u8)Nas_ReadByteData(m);
                                 argU8 = Nas_ReadByteData(m);
-                                MK_load(cmd, argU8, (u8*)&grp->port[cmd_lo_bits]);
+                                MK_load(value, argU8, (u8*)&grp->port[cmd_lo_bits]);
                                 break;
                         }
                     }
