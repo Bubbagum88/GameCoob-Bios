@@ -1200,6 +1200,8 @@ int Nas_Init_Single(s32 a, s32 b) {
  * Size:	000200
  */
 SwMember* __Nas_Alloc_Single_Auto_Inner(s32 size) {
+    int i;
+    int* REF_i = &i;
     s32* REF_size = &size;
     STACK_PAD_VAR(2);
     SwHeap* heap = &AG.emem_temporary_wave_heap;
@@ -1207,7 +1209,6 @@ SwMember* __Nas_Alloc_Single_Auto_Inner(s32 size) {
     u8* oldCurrent = heap->heap.current;
     u8* nowCurrent;
     alloc = Nas_HeapAlloc(&heap->heap, size);
-    int i;
 
     if (!alloc) {
         u8* nowCurrent = heap->heap.current;
