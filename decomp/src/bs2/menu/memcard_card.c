@@ -1086,8 +1086,10 @@ inline void CardThread_Error(u8 slot, s32 cmd, s32 result) {
         }
     }
     CardThread_MarkConflicts();
-    OSSendMessage(&sCardReplyQueue, (OSMessage)(((slot << 16) & 0x10000) | ((result << 8) & 0xFF00) | (cmd & 0xFF)),
-                  OS_MESSAGE_BLOCK);
+    {
+        u32 msg = ((slot << 16) & 0x10000) | ((result << 8) & 0xFF00) | (cmd & 0xFF);
+        OSSendMessage(&sCardReplyQueue, (OSMessage)msg, OS_MESSAGE_BLOCK);
+    }
 }
 
 /* Refresh the block counts the UI shows for a card. */
@@ -1095,9 +1097,11 @@ inline void CardThread_UpdateSlot(u8 slot) {
     u32 sector;
     s32 freeBytes;
     s32 freeFiles;
+    s32 pad;
     u16 memSize;
     BOOL enabled;
 
+    (void)&pad;
     CARDGetMemSize(slot, &memSize);
     CARDGetSectorSize(slot, &sector);
     CARDFreeBlocks(slot, &freeBytes, &freeFiles);
@@ -1241,6 +1245,7 @@ cleanup:
 /* 0x8131E994 */
 void CardThread_DoFormat(u8 slot) {
     s32 result;
+    s32 unused;
 
     result = CARDFormat(slot);
     if (result < 0) {
@@ -1260,6 +1265,7 @@ void CardThread_DoFormat(u8 slot) {
 void CardThread_DoErase(u8 slot, s16 file) {
     BOOL enabled;
     s32 result;
+    s32 unused;
 
     result = CARDFastDelete(slot, file);
     if (result < 0) {
@@ -1277,7 +1283,10 @@ void CardThread_DoErase(u8 slot, s16 file) {
     OSRestoreInterrupts(enabled);
     CardThread_UpdateSlot(slot);
     CardThread_MarkConflicts();
-    OSSendMessage(&sCardReplyQueue, (OSMessage)((file << 24) | ((slot << 16) & 0x10000) | (CARD_CMD_ERASE & 0xFF)), OS_MESSAGE_BLOCK);
+    {
+        u32 msg = ((u8)file << 24) | ((slot << 16) & 0x10000) | (CARD_CMD_ERASE & 0xFF);
+        OSSendMessage(&sCardReplyQueue, (OSMessage)msg, OS_MESSAGE_BLOCK);
+    }
 }
 
 /* 0x8131ECC4: count the blocks used by the running game's own files */
