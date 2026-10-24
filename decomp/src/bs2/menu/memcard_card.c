@@ -79,7 +79,7 @@ static s32 sCardResult;
 static s32 sCardDestResult;
 static BOOL sCardRefreshAsked;
 static BOOL sCardRefreshing;
-static BOOL sCardWriting;
+static u32 sCardWriting;
 
 void* HeapAlloc(u32 size);
 OSMessageQueue* CardThread_CmdQueue(void);
@@ -152,7 +152,7 @@ void CardThread_Copy(u8 slot, s16 file) {
     sCardResult = CARD_UI_OK;
     sCardDestResult = CARD_UI_OK;
     sCardCmd = CARD_CMD_COPY;
-    msg = (file << 24) | ((slot & 1) << 16) | CARD_CMD_COPY;
+    msg = (file << 24) | ((slot << 16) & 0x10000) | CARD_CMD_COPY;
     OSSendMessage(CardThread_CmdQueue(), (OSMessage)msg, OS_MESSAGE_NOBLOCK);
 }
 
@@ -164,7 +164,7 @@ void CardThread_Move(u8 slot, s16 file) {
     sCardResult = CARD_UI_OK;
     sCardDestResult = CARD_UI_OK;
     sCardCmd = CARD_CMD_MOVE;
-    msg = (file << 24) | ((slot & 1) << 16) | CARD_CMD_MOVE;
+    msg = (file << 24) | ((slot << 16) & 0x10000) | CARD_CMD_MOVE;
     OSSendMessage(CardThread_CmdQueue(), (OSMessage)msg, OS_MESSAGE_NOBLOCK);
 }
 
@@ -176,7 +176,7 @@ void CardThread_Erase(u8 slot, s16 file) {
     sCardResult = CARD_UI_OK;
     sCardDestResult = CARD_UI_OK;
     sCardCmd = CARD_CMD_ERASE;
-    msg = (file << 24) | ((slot & 1) << 16) | CARD_CMD_ERASE;
+    msg = (file << 24) | ((slot << 16) & 0x10000) | CARD_CMD_ERASE;
     OSSendMessage(CardThread_CmdQueue(), (OSMessage)msg, OS_MESSAGE_NOBLOCK);
 }
 
@@ -187,19 +187,22 @@ void CardThread_Enable(void) {
 
 /* 0x8131C140 */
 void CardThread_UnmountAll(void) {
+    u32 msg;
+
     sCardCmdSlot = 0;
     sCardCmd = CARD_CMD_UNMOUNT;
     sCardResult = CARD_UI_OK;
     OSSendMessage(CardThread_CmdQueue(), (OSMessage)CARD_MSG(CARD_CMD_UNMOUNT, 0, 0, 0), OS_MESSAGE_NOBLOCK);
     sCardCmd = CARD_CMD_UNMOUNT;
     sCardCmdSlot = 1;
+    msg = CARD_MSG(CARD_CMD_UNMOUNT, 0, 1, 0);
     sCardResult = CARD_UI_OK;
-    OSSendMessage(CardThread_CmdQueue(), (OSMessage)CARD_MSG(CARD_CMD_UNMOUNT, 0, 1, 0), OS_MESSAGE_NOBLOCK);
+    OSSendMessage(CardThread_CmdQueue(), (OSMessage)msg, OS_MESSAGE_NOBLOCK);
     OSSendMessage(CardThread_CmdQueue(), (OSMessage)CARD_CMD_DISABLE, OS_MESSAGE_NOBLOCK);
 }
 
 /* 0x8131C1CC: SDK result to the message shown by the UI. */
-s32 Card_MapError(s8 result) {
+s32 Card_MapError(s32 result) {
     switch (result) {
     case CARD_RESULT_READY:
         return 0;
@@ -238,6 +241,7 @@ s32 Card_MapError(s8 result) {
    come and go, and takes the thread's replies. */
 void CardThread_Poll(void) {
     OSMessage msg;
+    u32 m;
     s32 present;
     s16 slot;
     s8 res;
@@ -266,16 +270,18 @@ void CardThread_Poll(void) {
         if (present && gCardSlots[1].state < 2) {
             sCardCmdSlot = 1;
             sCardCmd = CARD_CMD_MOUNT;
+            m = CARD_MSG(CARD_CMD_MOUNT, 0, 1, 0);
             sCardResult = CARD_UI_OK;
-            if (OSSendMessage(CardThread_CmdQueue(), (OSMessage)CARD_MSG(CARD_CMD_MOUNT, 0, 1, 0), OS_MESSAGE_NOBLOCK)) {
+            if (OSSendMessage(CardThread_CmdQueue(), (OSMessage)m, OS_MESSAGE_NOBLOCK)) {
                 gCardSlots[1].state = 3;
                 gCardSlots[1].dirty = FALSE;
             }
         } else if (!present && gCardSlots[1].state > 2) {
             sCardCmdSlot = 1;
             sCardCmd = CARD_CMD_UNMOUNT;
+            m = CARD_MSG(CARD_CMD_UNMOUNT, 0, 1, 0);
             sCardResult = CARD_UI_OK;
-            if (OSSendMessage(CardThread_CmdQueue(), (OSMessage)CARD_MSG(CARD_CMD_UNMOUNT, 0, 1, 0), OS_MESSAGE_NOBLOCK)) {
+            if (OSSendMessage(CardThread_CmdQueue(), (OSMessage)m, OS_MESSAGE_NOBLOCK)) {
                 gCardSlots[1].dirty = FALSE;
             }
         }
@@ -283,16 +289,12 @@ void CardThread_Poll(void) {
 
     while (OSReceiveMessage(CardThread_ReplyQueue(), &msg, OS_MESSAGE_NOBLOCK)) {
         slot = CARD_MSG_SLOT((u32)msg);
-        switch (CARD_MSG_CMD((u32)msg)) {
-        case CARD_CMD_ENABLE:
-        case CARD_CMD_DISABLE:
+        if (CARD_MSG_CMD((u32)msg) == CARD_CMD_ENABLE || CARD_MSG_CMD((u32)msg) == CARD_CMD_DISABLE) {
             sCardEnabled = (u8)((u32)msg >> 8);
-            break;
-        case CARD_CMD_REFRESH:
+        } else if (CARD_MSG_CMD((u32)msg) == CARD_CMD_REFRESH) {
             sCardRefreshAsked = TRUE;
             sCardRefreshing = TRUE;
-            break;
-        default:
+        } else {
             res = CARD_MSG_RES((u32)msg);
             switch (res) {
             case CARD_RESULT_SIZE:
@@ -329,7 +331,6 @@ void CardThread_Poll(void) {
             }
             gCardSlots[slot].dirty = TRUE;
             sCardRefreshing = FALSE;
-            break;
         }
     }
 }
@@ -474,7 +475,10 @@ void CardThread_MarkConflicts(void) {
 
 /* 0x8131CC10 */
 void CardThread_SetEnabled(u8 cmd, BOOL enabled) {
-    OSSendMessage(&sCardReplyQueue, (OSMessage)CARD_MSG(cmd, enabled, 0, 0), OS_MESSAGE_BLOCK);
+    u32 msg;
+
+    msg = ((enabled << 8) & 0xFF00) | cmd;
+    OSSendMessage(&sCardReplyQueue, (OSMessage)msg, OS_MESSAGE_BLOCK);
 }
 
 /* 0x8131CC48: a command failed. Forget the card unless it is only full. */
@@ -498,7 +502,7 @@ s32 CardThread_Fail(u8 slot, s32 cmd, s32 result) {
             }
         }
     }
-    OSSendMessage(&sCardReplyQueue, (OSMessage)(((slot << 16) & 0x10000) | ((result << 8) & 0xFF00) | (cmd & 0xFF)), OS_MESSAGE_BLOCK);
+    OSSendMessage(&sCardReplyQueue, (OSMessage)(((result << 8) & 0xFF00) | ((slot << 16) & 0x10000) | (cmd & 0xFF)), OS_MESSAGE_BLOCK);
     return 0;
 }
 
@@ -525,28 +529,32 @@ void CardThread_ClearFiles(u8 slot) {
 s32 CardThread_SetBanner(u8 slot, s16 file, CARDDir* dir) {
     s32 size = 0;
 
+    /* the code really stores the image buffer minus the record's own address
+     * (matches byte for byte) */
+#define INFO sCardIcons[slot][file]
     switch (dir->bannerFormat & CARD_STAT_BANNER_MASK) {
     case CARD_STAT_BANNER_C8:
-        sCardIcons[slot][file].hasBanner = TRUE;
-        sCardIcons[slot][file].bannerFormat = GX_TF_C8;
-        sCardIcons[slot][file].banner = sCardIconBuf[slot][file];
+        INFO.hasBanner = TRUE;
+        INFO.bannerFormat = GX_TF_C8;
+        INFO.banner = (u8*)(sCardIconBuf[slot][file] - &INFO.hasBanner);
         size = CARD_BANNER_WIDTH * CARD_BANNER_HEIGHT + 0x200;
-        sCardIcons[slot][file].bannerTlut = sCardIcons[slot][file].banner + CARD_BANNER_WIDTH * CARD_BANNER_HEIGHT;
-        sCardIcons[slot][file].image[0] = sCardIcons[slot][file].bannerTlut + 0x200;
+        INFO.bannerTlut = INFO.banner + CARD_BANNER_WIDTH * CARD_BANNER_HEIGHT;
+        INFO.image[0] = INFO.bannerTlut + 0x200;
         break;
     case CARD_STAT_BANNER_RGB5A3:
-        sCardIcons[slot][file].hasBanner = TRUE;
-        sCardIcons[slot][file].bannerFormat = GX_TF_RGB5A3;
+        INFO.hasBanner = TRUE;
+        INFO.bannerFormat = GX_TF_RGB5A3;
         size = CARD_BANNER_WIDTH * CARD_BANNER_HEIGHT * 2;
-        sCardIcons[slot][file].banner = sCardIconBuf[slot][file];
-        sCardIcons[slot][file].image[0] = sCardIcons[slot][file].banner + CARD_BANNER_WIDTH * CARD_BANNER_HEIGHT * 2;
+        INFO.banner = (u8*)(sCardIconBuf[slot][file] - &INFO.hasBanner);
+        INFO.image[0] = INFO.banner + CARD_BANNER_WIDTH * CARD_BANNER_HEIGHT * 2;
         break;
     default:
-        sCardIcons[slot][file].hasBanner = FALSE;
-        sCardIcons[slot][file].bannerFormat = 0;
-        sCardIcons[slot][file].image[0] = sCardIconBuf[slot][file];
+        INFO.hasBanner = FALSE;
+        INFO.bannerFormat = 0;
+        INFO.image[0] = (u8*)(sCardIconBuf[slot][file] - &INFO.hasBanner);
         break;
     }
+#undef INFO
     return size;
 }
 
@@ -722,6 +730,7 @@ s32 CardThread_ReadEntry(u8 slot, s16 file, CARDDir* dir) {
 /* 0x8131D670 */
 void CardThread_DoUnmount(u8 slot) {
     s16 file;
+    u32 msg;
 
     for (file = 0; file < CARD_MAX_FILES; file++) {
         CardFile_Clear(slot, file);
@@ -729,8 +738,8 @@ void CardThread_DoUnmount(u8 slot) {
     CARDUnmount(slot);
     sCardMounted[slot] = FALSE;
     CardThread_MarkConflicts();
-    OSSendMessage(&sCardReplyQueue, (OSMessage)CARD_MSG(CARD_CMD_UNMOUNT, CARD_RESULT_NOCARD, slot, 0),
-                  OS_MESSAGE_BLOCK);
+    msg = CARD_MSG(CARD_CMD_UNMOUNT, CARD_RESULT_NOCARD, slot, 0);
+    OSSendMessage(&sCardReplyQueue, (OSMessage)msg, OS_MESSAGE_BLOCK);
 }
 
 /* A CARD call failed while mounting: carry on with the next file, check a
@@ -830,7 +839,10 @@ void CardThread_DoMount(u8 slot) {
     }
     sCardMounted[slot] = TRUE;
     CardThread_MarkConflicts();
-    OSSendMessage(&sCardReplyQueue, (OSMessage)CARD_MSG(CARD_CMD_MOUNT, CARD_RESULT_READY, slot, 0), OS_MESSAGE_BLOCK);
+    {
+        u32 msg = CARD_MSG(CARD_CMD_MOUNT, CARD_RESULT_READY, slot, 0);
+        OSSendMessage(&sCardReplyQueue, (OSMessage)msg, OS_MESSAGE_BLOCK);
+    }
 
     /* left over from a debug listing of the file names */
     for (i = 0; i < CARD_MAX_FILES; i++) {
@@ -853,7 +865,10 @@ fail:
         }
     }
     CardThread_MarkConflicts();
-    OSSendMessage(&sCardReplyQueue, (OSMessage)CARD_MSG(CARD_CMD_MOUNT, result, slot, 0), OS_MESSAGE_BLOCK);
+    {
+        u32 msg = CARD_MSG(CARD_CMD_MOUNT, result, slot, 0);
+        OSSendMessage(&sCardReplyQueue, (OSMessage)msg, OS_MESSAGE_BLOCK);
+    }
 }
 
 /* 0x8131DAE8: CARDWriteAsync callback. */
@@ -864,15 +879,15 @@ void CardThread_WriteDone(s32 chan, s32 result) {
 /* 0x8131DAF4: copy the data of a file into the file created on the other
    card, a chunk of sCardCopyBuf at a time. Cancelled if the card is pulled. */
 s32 CardThread_CopyData(u8 slot, s16 file) {
-    CARDDir dir;
     u32 sector;
-    u32 chunk;
-    u32 blocks;
-    u32 offset;
-    s32 length;
-    s32 block;
-    BOOL cancelled = FALSE;
+    CARDDir dir;
     s32 result;
+    s32 length;
+    u32 offset;
+    u32 blocks;
+    s32 block;
+    u32 chunk;
+    BOOL cancelled = FALSE;
 
     result = __CARDGetStatusEx(slot, file, &dir);
     if (result >= 0) {
@@ -882,10 +897,7 @@ s32 CardThread_CopyData(u8 slot, s16 file) {
             result = CARDFastOpen(slot, file, &sCardSrcInfo);
             if (result >= 0) {
                 for (block = 0; block < dir.length; block += chunk) {
-                    blocks = dir.length - block;
-                    if (blocks > chunk) {
-                        blocks = chunk;
-                    }
+                    blocks = dir.length - block > chunk ? chunk : dir.length - block;
                     offset = block * sector;
                     length = blocks * sector;
                     result = CARDRead(&sCardSrcInfo, sCardCopyBuf, length, offset);
@@ -1034,7 +1046,7 @@ s32 CardThread_MoveFile(u8 slot, s16 file, s16 dst, BOOL* done) {
 s32 CardThread_FindInOther(u8 slot, s16 file) {
     CARDDir dir;
     CARDDir other;
-    s16 i;
+    int i;
     s32 result;
 
     result = __CARDGetStatusEx(slot, file, &dir);
@@ -1071,15 +1083,16 @@ inline void CardThread_Error(u8 slot, s32 cmd, s32 result) {
         }
     }
     CardThread_MarkConflicts();
-    OSSendMessage(&sCardReplyQueue, (OSMessage)CARD_MSG(cmd, result, slot, 0), OS_MESSAGE_BLOCK);
+    OSSendMessage(&sCardReplyQueue, (OSMessage)(((slot << 16) & 0x10000) | ((result << 8) & 0xFF00) | (cmd & 0xFF)),
+                  OS_MESSAGE_BLOCK);
 }
 
 /* Refresh the block counts the UI shows for a card. */
 inline void CardThread_UpdateSlot(u8 slot) {
-    u16 memSize;
     u32 sector;
     s32 freeBytes;
     s32 freeFiles;
+    u16 memSize;
     BOOL enabled;
 
     CARDGetMemSize(slot, &memSize);
@@ -1097,15 +1110,15 @@ inline void CardThread_UpdateSlot(u8 slot) {
 
 /* 0x8131E130 */
 void CardThread_DoCopyMove(u8 slot, s16 file, s32 cmd) {
-    CARDDir dir;
-    CARDDir dir2;
-    u32 sector0;
-    u32 sector1;
-    u32 sector;
     BOOL done = FALSE;
+    u32 sector1;
+    u32 sector0;
+    CARDDir dir2;
+    CARDDir dir;
+    u32 sector;
     BOOL created = FALSE;
     s16 dst = -1;
-    s16 error = 0;
+    s32 error = 0;
     s16 n;
     u8 other;
     s32 result;
@@ -1189,7 +1202,7 @@ void CardThread_DoCopyMove(u8 slot, s16 file, s32 cmd) {
             CardThread_UpdateSlot(slot);
             CardThread_UpdateSlot(other);
             CardThread_MarkConflicts();
-            OSSendMessage(&sCardReplyQueue, (OSMessage)CARD_MSG(CARD_CMD_MOUNT, 0, slot, file), OS_MESSAGE_BLOCK);
+            OSSendMessage(&sCardReplyQueue, (OSMessage)((file << 24) | ((slot << 16) & 0x10000) | (CARD_CMD_MOUNT & 0xFF)), OS_MESSAGE_BLOCK);
             CardThread_MarkConflicts();
             OSSendMessage(&sCardReplyQueue, (OSMessage)CARD_MSG(cmd, 0, other, dst), OS_MESSAGE_BLOCK);
             return;
@@ -1234,7 +1247,10 @@ void CardThread_DoFormat(u8 slot) {
     sCardMounted[slot] = TRUE;
     CardThread_UpdateSlot(slot);
     CardThread_MarkConflicts();
-    OSSendMessage(&sCardReplyQueue, (OSMessage)CARD_MSG(CARD_CMD_FORMAT, 0, slot, 0), OS_MESSAGE_BLOCK);
+    {
+        u32 msg = CARD_MSG(CARD_CMD_FORMAT, 0, slot, 0);
+        OSSendMessage(&sCardReplyQueue, (OSMessage)msg, OS_MESSAGE_BLOCK);
+    }
 }
 
 /* 0x8131EB04 */
@@ -1258,7 +1274,7 @@ void CardThread_DoErase(u8 slot, s16 file) {
     OSRestoreInterrupts(enabled);
     CardThread_UpdateSlot(slot);
     CardThread_MarkConflicts();
-    OSSendMessage(&sCardReplyQueue, (OSMessage)CARD_MSG(CARD_CMD_ERASE, 0, slot, file), OS_MESSAGE_BLOCK);
+    OSSendMessage(&sCardReplyQueue, (OSMessage)((file << 24) | ((slot << 16) & 0x10000) | (CARD_CMD_ERASE & 0xFF)), OS_MESSAGE_BLOCK);
 }
 
 /* 0x8131ECC4: count the blocks used by the running game's own files */
