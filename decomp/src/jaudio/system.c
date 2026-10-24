@@ -1636,11 +1636,11 @@ static void __BgCopyFinishProcess(Bgload* bgload) {
     s32 id;
     s32 type;
     s32 status;
-    OSMesg ret_msg;
     s32 wave0;
     s32 wave1;
     WaveMedia wavemedia;
-    STACK_PAD_VAR(3);
+    u32* REF_msg = &msg;
+    s32* REF_id = &id;
 
     type = BGLOAD_TBLTYPE(msg);
     status = BGLOAD_LOAD_STATUS(msg);
@@ -1677,8 +1677,7 @@ static void __BgCopyFinishProcess(Bgload* bgload) {
     }
 
     bgload->status = LOAD_STATUS_NOT_LOADED;
-    ret_msg = (OSMesg)bgload->ret_msg;
-    Z_osSendMesg(bgload->ret_mq, ret_msg, OS_MESG_NOBLOCK);
+    Z_osSendMesg(bgload->ret_mq, (OSMesg)bgload->ret_msg, OS_MESG_NOBLOCK);
 }
 
 static void __BgCopySub(Bgload* bgload, s32 reset_status) {
