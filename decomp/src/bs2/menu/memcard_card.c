@@ -939,7 +939,7 @@ fail:
 s32 CardThread_CopyFile(u8 slot, s16 file, s16 dst, BOOL* done) {
     CARDDir dir;
     u32 time;
-    u8 other;
+    int other;
     s32 result;
 
     result = __CARDGetStatusEx(slot, file, &dir);

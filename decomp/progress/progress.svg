@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="960" height="584" font-family="Verdana,DejaVu Sans,sans-serif">
 <rect width="100%" height="100%" fill="#0d1117"/>
 <rect x="0" y="0" width="960" height="44" fill="#161b22"/>
-<rect x="0" y="40" width="722.9" height="4" fill="#2ea043"/>
-<text x="12" y="27" font-size="16" fill="#e6edf3">BS2 PAL 1.0: 75.30% code, 45.30% data, 1843/2041 functions</text>
+<rect x="0" y="40" width="726.6" height="4" fill="#2ea043"/>
+<text x="12" y="27" font-size="16" fill="#e6edf3">BS2 PAL 1.0: 75.68% code, 45.30% data, 1849/2041 functions</text>
 <g><title>BS2 menu</title>
 <rect x="0.0" y="44.0" width="297.2" height="540.0" fill="#21262d" stroke="#0d1117"/>
 <text x="4.0" y="56.0" font-size="11" fill="#e6edf3">BS2 menu</text>
@@ -19,8 +19,8 @@
 <rect x="2.0" y="246.4" width="131.9" height="135.4" fill="#6a9d37" stroke="#0d1117" stroke-width="1"/>
 <text x="5.0" y="258.4" font-size="10" fill="#0d1117">menu</text>
 </g>
-<g><title>bs2/menu/memcard_card: 11856 bytes, 36.2% matched, 94.7% fuzzy, 29/42 functions</title>
-<rect x="133.9" y="246.4" width="85.1" height="135.4" fill="#979c2e" stroke="#0d1117" stroke-width="1"/>
+<g><title>bs2/menu/memcard_card: 11856 bytes, 52.5% matched, 95.8% fuzzy, 35/42 functions</title>
+<rect x="133.9" y="246.4" width="85.1" height="135.4" fill="#7c9d33" stroke="#0d1117" stroke-width="1"/>
 <text x="136.9" y="258.4" font-size="10" fill="#0d1117">memcard_card</text>
 </g>
 <g><title>bs2/menu/memcard_draw: 10612 bytes, 30.3% matched, 98.9% fuzzy, 12/21 functions</title>
