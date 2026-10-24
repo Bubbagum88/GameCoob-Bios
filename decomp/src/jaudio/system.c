@@ -353,6 +353,11 @@ void* Nas_PreLoadBank(s32 seq_id, s32* bank_id) {
     s32 i;
     s32 idx;
     void* ctrl;
+    s32* REF_i = &i;
+
+    if (seq_id >= AG.num_sequences) {
+        return NULL;
+    }
 
     l_bank_id = 0xFF;
     idx = ((u16*)AG.map_header)[seq_id];
@@ -1220,6 +1225,8 @@ static void __SetVlute(s32 bank_id) {
 
 void Nas_InitAudio(u64* heap_p, s32 heap_size) {
     s32 i;
+    s32* REF_i = &i;
+    u8 pad[112];
     u8* seq_p;
     u8* bank_p;
     u8* wave_p;
@@ -1230,7 +1237,7 @@ void Nas_InitAudio(u64* heap_p, s32 heap_size) {
     NA_SOUND_CALLBACK = NULL;
     NA_DACOUT_CALLBACK = NULL;
 
-    for (i = 0; i < ARRAY_COUNT(AG.seq_callbacks); i++) {
+    for (i = 0; i < 4; i++) {
         AG.seq_callbacks[i] = NULL;
     }
 
@@ -1260,17 +1267,11 @@ void Nas_InitAudio(u64* heap_p, s32 heap_size) {
 
     AG.audio_heap_p = heap_p;
     AG.audio_heap_size = heap_size;
-    OSReport("AUDIOHEAP SET ADDR %xh (SIZE %xh) \n", (u32)heap_p, heap_size);
-    OSReport(" FIXSIZE  %x \n", AGC.fixSize);
-    OSReport(" EMEMSIZE %x \n", AGC.ememSize);
-    OSReport(" MAXCHAN  %d \n", AGC.maxChan);
-    OSReport(" TIMEBASE %d \n", AGC.timeBase);
 
     for (i = 0; i < AG.audio_heap_size / (s32)sizeof(u64); i++) {
         AG.audio_heap_p[i] = 0;
     }
 
-    OSReport(" Cleaedr Memory \n");
 
     Nas_SzHeapReset(AGC.fixSize + 0x400);
     for (i = 0; i < ARRAY_COUNT(AG.ai_buffers); i++) {
@@ -1481,10 +1482,18 @@ static void __Nas_SlowDiskCopy(u8* dev_addr, u8* ram_addr, u32 size, s32 medium)
 s32 SeqLoad(s32 seq_id, u8* ram_addr, s8* is_done) {
     s32* REF_seq_id = &seq_id;
     u8** REF_ram_addr = &ram_addr;
-    s32 link_id = __Link_BankNum(SEQUENCE_TABLE, seq_id);
-    ArcHeader* header = __Get_ArcHeader(SEQUENCE_TABLE);
-    lpscache* cache = &AG.lps_cache[AG.slow_load_pos];
+    ArcHeader* header;
+    lpscache* cache;
     u32 size;
+
+    if (seq_id >= AG.num_sequences) {
+        *is_done = 0;
+        return -1;
+    }
+
+    seq_id = __Link_BankNum(SEQUENCE_TABLE, seq_id);
+    header = __Get_ArcHeader(SEQUENCE_TABLE);
+    cache = &AG.lps_cache[AG.slow_load_pos];
 
     if (cache->status == LPS_CACHE_STATE_DONE) {
         cache->status = LPS_CACHE_STATE_WAITING;
@@ -1493,16 +1502,16 @@ s32 SeqLoad(s32 seq_id, u8* ram_addr, s8* is_done) {
     cache->sample.sample = NULL;
     cache->is_done = is_done;
 
-    size = header->entries[link_id].size;
+    size = header->entries[seq_id].size;
     size = ALIGN_NEXT(size, 32);
 
     cache->current_ram_addr = ram_addr;
     cache->status = LPS_CACHE_STATE_START;
     cache->bytes_remaining = size;
     cache->ram_addr = cache->current_ram_addr;
-    cache->current_device_addr = header->entries[link_id].addr;
-    cache->medium = header->entries[link_id].medium;
-    cache->seq_or_bank_id = link_id;
+    cache->current_device_addr = header->entries[seq_id].addr;
+    cache->medium = header->entries[seq_id].medium;
+    cache->seq_or_bank_id = seq_id;
 
     if (cache->medium == MEDIUM_DISK) {
         cache->unk_medium_param = header->medium;

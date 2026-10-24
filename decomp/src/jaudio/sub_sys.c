@@ -252,21 +252,23 @@ extern void Nap_SetU16(u32 cmd, u16 param) {
 extern s32 Nap_SendStart(void) {
     static u8 worst = 0;
     s32 msg;
-    s32 res;
-    STACK_PAD_VAR(3);
-    s32* REF_res = &res;
+    s32 pending;
+    STACK_PAD_VAR(6);
 
     if (AUDIO_SYSTEM_READY != TRUE) {
         return -1;
     }
 
-    msg = ((AG.thread_cmd_read_pos & 0xFF) << 8) | (AG.thread_cmd_write_pos & 0xFF);
-    res = Z_osSendMesg(AG.thread_cmd_proc_mq_p, (OSMesg)msg, OS_MESG_NOBLOCK);
+    // IPL: tracks the deepest command backlog instead of AC's OSReport.
+    pending = (u8)((AG.thread_cmd_write_pos + 0x100) - AG.thread_cmd_read_pos);
+    if (worst < pending) {
+        worst = pending;
+    }
 
-    if (res != -1) {
+    msg = (AG.thread_cmd_write_pos & 0xFF) | ((AG.thread_cmd_read_pos & 0xFF) << 8);
+    if (Z_osSendMesg(AG.thread_cmd_proc_mq_p, (OSMesg)msg, OS_MESG_NOBLOCK) != -1) {
         AG.thread_cmd_read_pos = AG.thread_cmd_write_pos;
     } else {
-        OSReport("SendStart::Mesg Full Queue\n");
         return -1;
     }
 

@@ -83,8 +83,10 @@ void Nas_ResetIDtable() {
  * Size:	0000E0
  */
 void Nas_ForceStopChannel(s32 bankID) {
-    STACK_PAD_VAR(2);
     int i;
+    s32* REF_bankID = &bankID;
+    int* REF_i = &i;
+    STACK_PAD_VAR(2);
     for (i = 0; i < AG.num_channels; i++) {
         channel* channel = &AG.channels[i];
         if (channel->playback_ch.bank_id == bankID) {
@@ -1398,7 +1400,7 @@ void __RestoreAddr(Wavelookuptable* a, smzwavetable* b) {
         u8* o = a_sample + a->_08;
         if (b_sample >= a_sample && b_sample < o) {
             // fakematch?
-            b->sample = (u8*)((u32)a->_04 + (b->sample - (u32)a->sample));
+            b->sample = (u8*)((u32)a->_04 + (b_sample - a_sample));
             if (EXGTYPE == 0) {
                 b->medium = a->medium;
             } else {
