@@ -690,7 +690,8 @@ config.libs = [
             Object(Matching, "jaudio/centcalc.c"),
             Object(Matching, "jaudio/jamosc.c"),
             Object(Matching, "jaudio/oneshot.c"),
-            Object(NonMatching, "jaudio/ipl_8135A8E0.c"),  # Sound_* and boot helpers, built like JAudio (32-byte aligned)
+            Object(Matching, "jaudio/ipl_8135A8E0.c"),  # Sound_* and boot helpers, built like JAudio (32-byte aligned)
+            Object(NonMatching, "jaudio/ipl_8135B360.c"),  # sound archive lookups, same flags
         ],
     },
 ]
