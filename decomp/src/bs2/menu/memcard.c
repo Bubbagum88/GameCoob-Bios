@@ -1208,11 +1208,11 @@ static inline void CardUi_UpdateSlotMsgs(CardSlot* slots, volatile CardSlot* s, 
 
 /* 0x81317F40: per-frame fades of the slot messages and arrows. */
 void CardUi_UpdateFaders(void) {
+    CardSlot* s;
     CardSlot* slots = CardThread_GetSlots();
-    CardSlot* s = slots;
     u8 i;
 
-    for (i = 0; i < 2; i++, s++) {
+    for (i = 0, s = slots; i < 2; i++, s++) {
         if (s->state == CARD_SLOT_READY) {
             Fader_Step(&sCardFadeA[i], FADE_IN);
             CardUi_UpdateOpFaders(0);
@@ -1447,7 +1447,6 @@ void CardUi_UpdateResultMsg(void) {
 /* 0x81318E80: the blinking slot cursor. */
 void CardUi_UpdateCursor(void) {
     CardSlot* slots = CardThread_GetSlots();
-    CardSlot* s;
     int i;
     int n;
 
@@ -1461,8 +1460,8 @@ void CardUi_UpdateCursor(void) {
         sCardArrowDir = -1;
     }
     n = 0;
-    for (i = 0, s = slots; i < 2; i++, s++) {
-        if (i == sCardSlot && s->state == CARD_SLOT_READY) {
+    for (i = 0; i < 2; i++) {
+        if (i == sCardSlot && slots[i].state == CARD_SLOT_READY) {
             Fader_Step(&sCardFadeF[i], FADE_IN);
             n++;
         } else {
@@ -2224,8 +2223,9 @@ BOOL CardDraw_LoadFileIcon(void) {
     u32 file = sCardSort[sCardSlot][sCardCol[sCardSlot] + (sCardRow[sCardSlot] + sCardTop[sCardSlot]) * 4].file;
     CardIconInfo* icon;
     u8* image;
-    TexHeader tex;
+    s16 unused[4];
     u8* fmt;
+    TexHeader tex;
 
     if (files[sCardSlot][file].used == 0) {
         return FALSE;
@@ -2243,14 +2243,14 @@ BOOL CardDraw_LoadFileIcon(void) {
     tex.height = 32;
     tex.wrapS = GX_CLAMP;
     tex.wrapT = GX_CLAMP;
+    tex.format = icons[sCardSlot][file].bannerFormat;
     fmt = &icons[sCardSlot][file].bannerFormat;
-    tex.format = *fmt;
     tex.minFilter = GX_LINEAR;
     tex.magFilter = GX_LINEAR;
     tex.minLod = 0;
     tex.maxLod = 0;
     tex.lodBias = 0;
-    if (*fmt == GX_TF_RGB5A3) {
+    if (icons[sCardSlot][file].bannerFormat == GX_TF_RGB5A3) {
         tex.indexed = 0;
         tex.imageOffset = image - (u8*)&tex;
         J3D_LoadTexture(0, &tex);
