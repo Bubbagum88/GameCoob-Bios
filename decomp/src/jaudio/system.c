@@ -952,54 +952,46 @@ static void Nas_BankOfsToAddr_Inner(s32 bank_id, u8* ctrl_p, WaveMedia* wave_med
 #undef BANK_ENTRY
 
 void Nas_FastCopy(u8* SrcAddr, u8* DestAdd, size_t Length, s32 medium) {
+    u8** REF_SrcAddr = &SrcAddr;
+    u8** REF_DestAdd = &DestAdd;
+    size_t* REF_Length = &Length;
     u8* unalign_src_copy;
-    u32 unalign_copy_len;
+    u32 unalign;
+    u32 len;
 
+    // The IPL build has no align32 warnings.
     Length = ALIGN_NEXT(Length, 32);
     osInvalDCache2(DestAdd, Length);
 
-    // This is unnecessary because we've already ensured length is aligned to 32
-    if ((Length & 0x1F) != 0) {
-        OSReport("DMA Warning: Length  %d is not align32\n", Length);
-    }
-
-    if ((((u32)SrcAddr) & 0x1F) != 0) {
-        OSReport("DMA Warning: SrcAddr %d is not align32\n", SrcAddr);
-    }
-
-    if ((((u32)DestAdd) & 0x1F) != 0) {
-        OSReport("DMA Warning: DestAdd %d is not align32\n", DestAdd);
-    }
-
-    if ((((u32)SrcAddr) & 0x1F) != 0) {
+    if ((unalign = ((u32)SrcAddr) & 0x1F) != 0) {
         unalign_src_copy = (u8*)FASTDMA_BUFFER;
 
         // DMA the first non-align32 bytes
         // @BUG - FASTDMA_BUFFER is always NULL
-        Nas_StartDma(&AG.sync_dma_io_mesg, 1, 0, (u32)SrcAddr - (((u32)SrcAddr) & 0x1F), FASTDMA_BUFFER, 0x20,
+        Nas_StartDma(&AG.sync_dma_io_mesg, 1, 0, (u32)SrcAddr - unalign, unalign_src_copy, 0x20,
                      &AG.sync_dma_queue, medium, (s8*)"FastCopy");
         Z_osRecvMesg(&AG.sync_dma_queue, NULL, OS_MESG_BLOCK);
-        unalign_copy_len = 32 - (((u32)SrcAddr) & 0x1F);
-        Z_bcopy(unalign_src_copy + (((u32)SrcAddr) & 0x1F), DestAdd, 32 - (((u32)SrcAddr) & 0x1F));
-        SrcAddr += unalign_copy_len;
-        DestAdd += unalign_copy_len;
-        Length -= unalign_copy_len;
+        len = 32 - unalign;
+        Z_bcopy(unalign_src_copy + unalign, DestAdd, len);
+        SrcAddr += len;
+        DestAdd += len;
+        Length -= len;
 
-        while (Length != 0) {
+        while ((len = Length) != 0) {
             Nas_StartDma(&AG.sync_dma_io_mesg, 1, 0, (u32)SrcAddr, unalign_src_copy, 0x400, &AG.sync_dma_queue, medium,
                          (s8*)"FastCopy");
             Z_osRecvMesg(&AG.sync_dma_queue, NULL, OS_MESG_BLOCK);
 
-            if (Length < 0x400) {
-                unalign_copy_len = Length;
+            if (len < 0x400) {
+                (void)len;
             } else {
-                unalign_copy_len = 0x400;
+                len = 0x400;
             }
 
-            Z_bcopy(unalign_src_copy, DestAdd, unalign_copy_len);
-            Length -= unalign_copy_len;
-            SrcAddr += unalign_copy_len;
-            DestAdd += unalign_copy_len;
+            Z_bcopy(unalign_src_copy, DestAdd, len);
+            Length -= len;
+            SrcAddr += len;
+            DestAdd += len;
         }
     } else {
         while (TRUE) {
