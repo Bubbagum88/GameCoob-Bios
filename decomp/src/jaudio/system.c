@@ -635,10 +635,13 @@ static u32 __Load_Wave_Check(s32 wave_id, u32* medium) {
 
 static u32 __Load_Wave(s32 wave_id, u32* medium, s32 no_load) {
     s32* REF_no_load = &no_load;
-    STACK_PAD_VAR(1);
+    s32 link_id;
+    s32* REF_link_id = &link_id;
     void* ram_p;
-    s32 link_id = __Link_BankNum(WAVE_TABLE, wave_id);
-    ArcHeader* header = __Get_ArcHeader(WAVE_TABLE);
+    ArcHeader* header;
+
+    link_id = __Link_BankNum(WAVE_TABLE, wave_id);
+    header = __Get_ArcHeader(WAVE_TABLE);
 
     ram_p = __Check_Cache(WAVE_TABLE, link_id);
     if (ram_p != NULL) {
