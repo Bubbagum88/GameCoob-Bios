@@ -1,4 +1,4 @@
-// Partly matching: Clock_Commit and Clock_FixDate still differ (register use).
+// Partly matching: only Clock_Commit differs (&now and &now.sec share one register).
 //
 // "Calendar" submenu (PAL 1.0 BS2, 0x81328CA4..0x81329890): view and set the
 // date and time.
@@ -45,7 +45,7 @@ static const u32 sUnusedPane[9] = {
 };
 
 static const GXColor sClockWhite = { 255, 255, 255, 255 };
-static const GXColor sClockYellow = { 255, 255, 255, 255 };
+static const GXColor sClockYellow = { 255, 255, 100, 150 }; /* rgb replaced by ClockParams.textColor */
 
 /* 0x81328CA4: write the edited date or time to the RTC. The RTC itself is
    not written; SRAM counterBias is set so that RTC + bias = new time. */
@@ -157,43 +157,36 @@ s32 Clock_UpdateMenu(void) {
 
 /* 0x81328FE4: wrap year (2000..2099) and month, keep the day valid. */
 void Clock_FixDate(void) {
-    s32* v = gClockEdit.value;
-    s32* mon;
-    s32* day;
-    s32 leap;
     s32 days;
+    s32 leap;
 
-    if (v[0] < 2000) {
-        v[0] = 2099;
+    if (gClockEdit.value[0] < 2000) {
+        gClockEdit.value[0] = 2099;
     }
-    if (v[0] > 2099) {
-        v[0] = 2000;
+    if (gClockEdit.value[0] > 2099) {
+        gClockEdit.value[0] = 2000;
     }
-    mon = &v[1];
-    if (*mon < 0) {
-        *mon = 11;
+    if (gClockEdit.value[1] < 0) {
+        gClockEdit.value[1] = 11;
     }
-    if (*mon > 11) {
-        *mon = 0;
+    if (gClockEdit.value[1] > 11) {
+        gClockEdit.value[1] = 0;
     }
-
-    leap = ((v[0] % 4 == 0) && (v[0] % 100 != 0)) || (v[0] % 400 == 0);
+    leap = ((gClockEdit.value[0] % 4 == 0) && (gClockEdit.value[0] % 100 != 0)) || (gClockEdit.value[0] % 400 == 0);
     if (leap) {
-        days = sDaysInMonthLeap[*mon];
+        days = sDaysInMonthLeap[gClockEdit.value[1]];
     } else {
-        days = sDaysInMonth[*mon];
+        days = sDaysInMonth[gClockEdit.value[1]];
     }
-
-    day = &v[2];
-    if (*day > days) {
-        if (sDateField == 2) { /* wrap only when editing the day */
-            *day = 1;
+    if (gClockEdit.value[2] > days) {
+        if (sDateField == 2) {
+            gClockEdit.value[2] = 1;
         } else {
-            *day = days;
+            gClockEdit.value[2] = days;
         }
     }
-    if (*day < 1) {
-        *day = days;
+    if (gClockEdit.value[2] < 1) {
+        gClockEdit.value[2] = days;
     }
 }
 /* Direction in which "left" moves the field cursor. */

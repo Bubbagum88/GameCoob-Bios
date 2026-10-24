@@ -1,4 +1,4 @@
-// Partly matching: GameIcon_CalcMtx and GameIcon_UpdateEnter still differ.
+// Partly matching: only GameIcon_CalcMtx differs (scale / by-value copy stack slots).
 //
 // Game Play icon (PAL 1.0 BS2, 0x813230F0..0x81323C30): a ring of 16 small
 // cubes behind the Game Play submenu. The cubes fly out one after the other,
@@ -110,7 +110,6 @@ void GameIcon_CalcMtx(void) {
     GameParams* p = Game_GetParams();
     Mtx m;
     Mtx rot;
-    u8 unused[4]; /* never used, but still takes a stack slot */
     s16 i;
 
     for (i = 0; i < GAMEICON_CUBES; i++) {
@@ -122,11 +121,13 @@ void GameIcon_CalcMtx(void) {
         PSMTXConcat(Menu_GetCubeMtx(), m, m);
         {
             Vec scale = { 0.0f, 0.0f, 0.0f };
+            Vec *d;
 
             scale.x = p->cubeScale;
             scale.y = p->cubeScale;
             scale.z = p->cubeScale;
-            J3D_SetModelMtx(&sGameIconInst[i], m, scale);
+            d = &scale;
+            J3D_SetModelMtx(&sGameIconInst[i], m, *d);
         }
         J3D_SetViewMtx(&sGameIconInst[i], Camera_GetView());
         J3D_CalcJoints(&sGameIconInst[i]);
@@ -188,12 +189,12 @@ void GameIcon_UpdateHide(void) {
 
 /* 0x813239E4: pull every cube back to the centre of the ring. */
 void GameIcon_UpdateEnter(void) {
-    u8 unused[4]; /* never used, but still takes a stack slot */
     s16 settled = 0;
     s16 i;
     s16 alpha;
     f32 v;
     GameParams* p;
+    u8 unused[4]; /* never used, but still takes a stack slot */
 
     for (i = 0; i < GAMEICON_CUBES; i++) {
         alpha = sGameIconInst[i].alpha;
