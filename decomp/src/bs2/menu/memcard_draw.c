@@ -257,6 +257,13 @@ static inline void CardBlock_Move(CardBlock* b) {
 }
 
 /* 0x8131F770: one piece of the Erase burst */
+static inline void CardBlock_SetBurstMtx(J3DModelInstance* inst, Mtx m) {
+    Vec* s;
+    Vec scale = {0.3f, 0.3f, 0.3f};
+    s = &scale;
+    J3D_SetModelMtx(inst, m, *s);
+}
+
 void CardBlock_CalcBurst(s32 i) {
     Mtx m;
     f32 x;
@@ -276,12 +283,7 @@ void CardBlock_CalcBurst(s32 i) {
     y = 48.0f * (0.25f + 0.75f * t) * CosS(sBurstAngle[i]);
     PSMTXTrans(m, x, y, 0.0f);
     PSMTXConcat(sFlyMtx, m, m);
-    {
-        Vec* s;
-        Vec scale = {0.3f, 0.3f, 0.3f};
-        s = &scale;
-        J3D_SetModelMtx(&sBurstInst[i], m, *s);
-    }
+    CardBlock_SetBurstMtx(&sBurstInst[i], m);
     J3D_SetViewMtx(&sBurstInst[i], fn_81302F94());
     J3D_CalcJoints(&sBurstInst[i]);
 }
@@ -326,7 +328,7 @@ void fn_8131F8F8(void) {
                         sBurstFrame[i] = 0;
                         sBurstLen[i] = 10;
                         sBurstDelay[i] = Rand() & 3;
-                        sBurstAngle[i] = Rand();
+                        sBurstAngle[i] = (u16)Rand();
                     }
                 }
                 done = FALSE;
@@ -453,7 +455,12 @@ void fn_81320094(u8 slot, u16 dest, u16 file, u16 kind) {
             sBlocks[slot][file].alpha = 0;
             sBlocks[slot][file].alphaTarget = 0;
             a = Rand();
-            VEC_SET(sFly.p1, 16.0f * (292.0f + 40.0f * SinS(a)), 16.0f * (200.0f + 40.0f * CosS(a)), 0.0f);
+            {
+                Vec p1 = {0.0f, 0.0f, 0.0f};
+                p1.x = 16.0f * (292.0f + 40.0f * SinS(a));
+                p1.y = 16.0f * (200.0f + 40.0f * CosS(a));
+                sFly.p1 = p1;
+            }
             sFly.frame = 0;
             sFly.end = 40;
         } else {
