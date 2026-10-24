@@ -29,6 +29,10 @@ enum {
 /* copy, move or erase */
 #define CARD_OP_IS_XFER(k) ((u32)((k) - CARD_CMD_COPY) <= CARD_CMD_ERASE - CARD_CMD_COPY)
 
+
+/* text of a string table entry */
+#define STH_STRING(e) ((u8*)(e) + (e)->ofs)
+
 /* Fade ramp of a slot header (0x20 bytes) */
 typedef struct CardSlotFade {
     s16 a;                 /* 0x00 */
@@ -1693,17 +1697,22 @@ BOOL CardDraw_IconFrameCount(s32 slot, s32 file) {
     return CardDraw_SetIconFrame(slot, file, n - 1);
 }
 
+/* white with alpha a */
+static inline GXColor CardDraw_White(u8 a) {
+    GXColor c = { 255, 255, 255, 0 };
+
+    c.a = a;
+    return c;
+}
+
 /* 0x81319A8C: icon of grid cell `pos`; the selected file without a */
 /* banner also gets the 'ic00' pane. */
-void CardDraw_Icon(u8 slot, s16 pos, u8 frame, u8 alpha) {
+void CardDraw_Icon(u8 slot, s16 pos, s32 frame, u8 alpha) {
     CardIconInfo(*icons)[CARD_MAX_FILES] = CardThread_GetIcons();
-    GXColor c = { 255, 255, 255, 0 };
-    GXColor color;
+    GXColor color = CardDraw_White(alpha);
     u32 file;
     u32 sel;
 
-    c.a = alpha;
-    color = c;
     file = sCardSort[slot][pos + sCardTop[slot] * 4].file;
     sel = sCardSort[sCardSlot][sCardCol[sCardSlot] + (sCardRow[sCardSlot] + sCardTop[sCardSlot]) * 4].file;
     if (CardDraw_SetIconFrame(slot, file, frame)) {
@@ -1717,7 +1726,9 @@ void CardDraw_Icon(u8 slot, s16 pos, u8 frame, u8 alpha) {
 /* 0x81319BD4: slot header, its free-block count and title. */
 void CardDraw_SlotHeader(u8 slot, CardSlot* slots, GXColor* c) {
     CardParams* p = Card_GetParams();
+    GXColor mat;
     s16 a;
+    s16 unused; /* only takes a stack slot */
 
     if (p->s6C & 1) {
         Fader_GetAlpha(&sCardFadeF[slot], &a, NULL);
@@ -1727,7 +1738,8 @@ void CardDraw_SlotHeader(u8 slot, CardSlot* slots, GXColor* c) {
         c->a = c->a * (u8)(0xFF - p->s6E + p->s6E * sCardArrow / sCardArrowMax) / 255;
     }
     Glh_DrawPane('texa' + slot, sCardGlh, c);
-    GXSetChanMatColor(GX_COLOR0A0, *c);
+    mat = *c;
+    GXSetChanMatColor(GX_COLOR0A0, mat);
     CardDraw_LoadTexture(sCardNameX[slot], sCardNameY[slot], slots[slot].freeBlocks);
     Glh_DrawFrame('ffra' + slot, sCardGlh, c);
     GX_Setup2DText();
@@ -1738,10 +1750,10 @@ void CardDraw_SlotHeader(u8 slot, CardSlot* slots, GXColor* c) {
 void CardDraw_FileBanner(u8 slot, CardSlot* slots, GXColor* c) {
     s16 a;
     GXColor hdr;
-    s16 up;
-    s16 down;
-    u8 alpha;
+    s16 arrow[2];
+    s16 unused;
     u8 a2;
+    u8 alpha;
 
     GX_Setup2DTex();
     Fader_GetAlpha(&sCardFadeA[slot], &a, NULL);
@@ -1751,11 +1763,11 @@ void CardDraw_FileBanner(u8 slot, CardSlot* slots, GXColor* c) {
     CardDraw_SlotHeader(slot, slots, &hdr);
     GX_Setup2DTex();
     a2 = c->a;
-    Fader_GetAlpha(&sCardFadeD[slot], &up, NULL);
-    Fader_GetAlpha(&sCardFadeE[slot], &down, NULL);
-    c->a = a2 * up / 255;
+    Fader_GetAlpha(&sCardFadeD[slot], &arrow[0], NULL);
+    Fader_GetAlpha(&sCardFadeE[slot], &arrow[1], NULL);
+    c->a = a2 * arrow[0] / 255;
     Glh_DrawPaneOfs(sCardFadeD[slot].id, sCardGlh, c, 0, Hermite(sCardBlink, 0.0f, 0.0f, 0.0f, sCardBlinkMax, 128.0f, 0.0f));
-    c->a = a2 * down / 255;
+    c->a = a2 * arrow[1] / 255;
     Glh_DrawPaneOfs(sCardFadeE[slot].id, sCardGlh, c, 0, -(s32)Hermite(sCardBlink, 0.0f, 0.0f, 0.0f, sCardBlinkMax, 128.0f, 0.0f));
     c->a = a2;
     if (slot == sCardSlot) {
@@ -2007,10 +2019,10 @@ void CardDraw_MeasureLines(CardSlotFade* f, void* sth, void* glh, u16* outW) {
         }
     }
     f->h3 = f->lineH + texts[entries[2].pane].lineSpace * 32;
-    if (f->b < f->bMax) {
+    if (f->b < f->s8) {
         step = texts[entries[2].pane].lineSpace * 32;
-    } else if (f->b >= f->bMax && f->b < f->sA) {
-        step = (f->sA - f->b) * (texts[entries[2].pane].lineSpace * 32) / (f->sA - f->bMax);
+    } else if (f->b >= f->s8 && f->b < f->sA) {
+        step = (f->sA - f->b) * (texts[entries[2].pane].lineSpace * 32) / (f->sA - f->s8);
     } else if (f->b >= f->sA) {
         step = 0;
     }
@@ -2023,12 +2035,16 @@ void CardDraw_MeasureLines(CardSlotFade* f, void* sth, void* glh, u16* outW) {
 void CardDraw_TextBox(u8 slot, CardSlotFade* f, void* sth, void* glh, GXColor* c, s32 x, s32 y, s32 w) {
     CardParams* p = Card_GetParams();
     SthEntry* entries = ((Sth*)sth)->entry;
+    GlhText* texts = GLH_TEXTS(glh);
     GXColor col;
     GXColor glow;
-    GlhText box;
+    GXColor g2;
+    GXColor c2;
     s16 a[3];
+    GlhText box;
     u16 step;
     u16 i;
+    u16 str;
 
     col.r = p->white[0];
     col.g = p->white[1];
@@ -2038,18 +2054,18 @@ void CardDraw_TextBox(u8 slot, CardSlotFade* f, void* sth, void* glh, GXColor* c
     glow.g = p->cream[1];
     glow.b = p->cream[2];
     glow.a = 0xFF;
-    box = GLH_TEXTS(glh)[entries[2].pane];
+    box = texts[entries[2].pane];
     box.x = x;
     box.y = y + f->lineH / 2;
     box.w = w;
     box.h = f->lineH;
-    col.a = f->b < f->bMax ? (s16)(c->a * (f->bMax - f->b) / f->bMax) : 0;
+    col.a = f->b < f->s8 ? (s16)(c->a * (f->s8 - f->b) / f->s8) : 0;
     glow.a = c->a;
     GX_Setup2DText();
-    if (f->b < f->bMax) {
+    if (f->b < f->s8) {
         step = box.lineSpace * 16;
-    } else if (f->b >= f->bMax && f->b < f->sA) {
-        step = box.lineSpace * 16 * (f->sA - f->b) / (f->sA - f->bMax);
+    } else if (f->b >= f->s8 && f->b < f->sA) {
+        step = box.lineSpace * 16 * (f->sA - f->b) / (f->sA - f->s8);
     } else if (f->b >= f->sA) {
         step = 0;
     }
@@ -2059,12 +2075,15 @@ void CardDraw_TextBox(u8 slot, CardSlotFade* f, void* sth, void* glh, GXColor* c
     a[2] = a[2] / 2;
     a[1] = a[1] / 2;
     a[0] = a[0] / 2;
-    for (i = 0; i < 3; i++) {
+    for (i = 0, str = 2; i < 3; str++, i++) {
         if (i <= 1) {
-            GXColor g2 = glow;
-            GXColor c2 = col;
-            u8 k = a[i];
-            CardParams* p2 = Card_GetParams();
+            u8 k;
+            CardParams* p2;
+
+            g2 = glow;
+            c2 = col;
+            k = a[i];
+            p2 = Card_GetParams();
 
             c2.r = c2.r * (p2->collapseFade + k) / (p2->collapseFade + 127);
             c2.g = c2.g * (p2->collapseFade + k) / (p2->collapseFade + 127);
@@ -2074,27 +2093,27 @@ void CardDraw_TextBox(u8 slot, CardSlotFade* f, void* sth, void* glh, GXColor* c
                     fn_813095A0(&g2, &g2);
                     c2.a = g2.a;
                     fn_81309554(&c2, &c2);
-                    fn_813090A4(&box, (u8*)&entries[i + 2] + entries[i + 2].ofs);
+                    fn_813090A4(&box, STH_STRING(&entries[str]));
                 } else {
                     Font_SetColorU32(c->a - 0x100, c->a - 0x100);
-                    fn_81308DB8(&box, (u8*)&entries[i + 2] + entries[i + 2].ofs);
+                    fn_81308DB8(&box, STH_STRING(&entries[str]));
                 }
             } else {
                 fn_81309554(&c2, &c2);
-                fn_81308DB8(&box, (u8*)&entries[i + 2] + entries[i + 2].ofs);
+                fn_81308DB8(&box, STH_STRING(&entries[str]));
             }
         } else if (sCardOp == i) {
             if (sCardUiState == 2) {
                 fn_813095A0(&glow, &glow);
                 Font_SetColorU32(c->a - 0x100, c->a - 0x100);
-                fn_813090A4(&box, (u8*)&entries[i + 2] + entries[i + 2].ofs);
+                fn_813090A4(&box, STH_STRING(&entries[str]));
             } else {
                 Font_SetColorU32(c->a - 0x100, c->a - 0x100);
-                fn_81308DB8(&box, (u8*)&entries[i + 2] + entries[i + 2].ofs);
+                fn_81308DB8(&box, STH_STRING(&entries[str]));
             }
         } else {
             fn_81309554(&col, &col);
-            fn_81308DB8(&box, (u8*)&entries[i + 2] + entries[i + 2].ofs);
+            fn_81308DB8(&box, STH_STRING(&entries[str]));
         }
         box.y += step;
     }
@@ -2104,10 +2123,12 @@ void CardDraw_TextBox(u8 slot, CardSlotFade* f, void* sth, void* glh, GXColor* c
 void CardDraw_TextLines(CardSlotFade* f, void* sth, void* glh, GXColor* c, s32 x, s32 y, s32 w) {
     CardParams* p = Card_GetParams();
     SthEntry* entries = ((Sth*)sth)->entry;
+    GlhText* texts = GLH_TEXTS(glh);
     GXColor col;
     GXColor glow;
     GlhText box;
     u16 i;
+    u16 str;
 
     col.r = p->white[0];
     col.g = p->white[1];
@@ -2117,19 +2138,19 @@ void CardDraw_TextLines(CardSlotFade* f, void* sth, void* glh, GXColor* c, s32 x
     glow.g = p->cream[1];
     glow.b = p->cream[2];
     glow.a = c->a;
-    box = GLH_TEXTS(glh)[entries[5].pane];
+    box = texts[entries[5].pane];
     box.x = x;
     box.y = y + f->lineH / 2;
     box.w = w;
     box.h = f->lineH;
     GX_Setup2DText();
-    for (i = 0; i < 2; i++) {
+    for (i = 0, str = 5; i < 2; str++, i++) {
         fn_81309554(&col, &col);
         fn_813095A0(&glow, &glow);
         if (sCardYesNo == i) {
-            fn_813090A4(&box, (u8*)&entries[i + 5] + entries[i + 5].ofs);
+            fn_813090A4(&box, STH_STRING(&entries[str]));
         } else {
-            fn_81308DB8(&box, (u8*)&entries[i + 5] + entries[i + 5].ofs);
+            fn_81308DB8(&box, STH_STRING(&entries[str]));
         }
         box.y += box.lineSpace * 16;
     }
@@ -2137,8 +2158,9 @@ void CardDraw_TextLines(CardSlotFade* f, void* sth, void* glh, GXColor* c, s32 x
 
 /* 0x8131B018: the op menu box next to the cursor and the Yes/No box under it. */
 void CardDraw_Dialog(u8 slot, CardSlotFade* f, void* sth, void* glh, GXColor* c) {
-    GlhFrame* fr = GLH_FRAMES(glh);
+    GlhFrame* frames = GLH_FRAMES(glh);
     DispSettings* disp = Disp_GetSettings();
+    GlhFrame* fr;
     u16 pane;
     s32 x;
     s32 y;
@@ -2149,12 +2171,12 @@ void CardDraw_Dialog(u8 slot, CardSlotFade* f, void* sth, void* glh, GXColor* c)
     u8 alpha;
     s16 a2;
     s32 dy2;
+    s16 unused[4];
 
-    for (pane = 0; pane < ((Glh*)glh)->nFrames; pane++) {
+    for (pane = 0, fr = frames; pane < ((Glh*)glh)->nFrames; fr++, pane++) {
         if (fr->tag == 'mes0') {
             break;
         }
-        fr++;
     }
     x = sCardAnchorX[slot][sCardCol[slot] + sCardRow[slot] * 4];
     y = sCardAnchorY[slot][sCardCol[slot] + sCardRow[slot] * 4];
@@ -2249,12 +2271,9 @@ BOOL CardDraw_LoadFileIcon(void) {
 void CardDraw_FileInfo(u8 alpha) {
     u8 slot = sCardSlot;
     s16 file = sCardSort[slot][sCardCol[slot] + (sCardRow[slot] + sCardTop[slot]) * 4].file;
-    GXColor tmp = { 255, 255, 255, 0 };
-    GXColor frm;
+    GXColor frm = CardDraw_White(alpha);
     CardFile(*files)[CARD_MAX_FILES];
 
-    tmp.a = alpha;
-    frm = tmp;
     files = CardThread_GetFiles();
     GX_Setup2DTex();
     if (files[slot][file].used) {

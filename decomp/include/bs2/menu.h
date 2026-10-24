@@ -307,7 +307,7 @@ typedef struct CardParams {
     s16 fadeOutSpeed;      /* 0x60 13 */
     f32 f64_;              /* 0x64 10 */
     f32 f68_;              /* 0x68 5 */
-    s16 s6C;               /* 0x6C 1 */
+    u16 s6C;               /* 0x6C 1: bit 0 dims the idle slot, bit 1 pulses the active one */
     s16 s6E;               /* 0x6E 0x80 */
     f32 f70;               /* 0x70 320 */
 } CardParams;
