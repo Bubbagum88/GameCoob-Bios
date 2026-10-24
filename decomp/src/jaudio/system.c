@@ -709,25 +709,24 @@ static u8* __Load_Ctrl(s32 bank_id) {
 }
 
 static u8* __Load_Bank(s32 table_type, s32 id, s32* did_alloc) {
+    s32 load_status;
+    s32* REF_load_status = &load_status;
+    STACK_PAD_VAR(2);
     s32* REF_table_type = &table_type;
     s32* REF_id = &id;
-    STACK_PAD_VAR(4);
     u32 size;
     ArcHeader* header;
     s32 medium;
-    s32 load_status;
     u8* ram_addr;
     s32 cache_type;
     u8* rom_addr;
     s32 link_id;
-    STACK_PAD_VAR(1);
-    s32** REF_did_alloc = &did_alloc;
 
     link_id = __Link_BankNum(table_type, id);
     ram_addr = (u8*)__Check_Cache(table_type, link_id);
     if (ram_addr != NULL) {
-        *did_alloc = FALSE;
         load_status = LOAD_STATUS_COMPLETE;
+        *did_alloc = FALSE;
     } else {
         header = __Get_ArcHeader(table_type);
         size = header->entries[link_id].size;
