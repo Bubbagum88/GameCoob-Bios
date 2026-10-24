@@ -31,27 +31,39 @@ static Fader sDiscUnknown;          /* 0x814B62DC Game face: disc without banner
 static Fader sErrorMsg;             /* 0x814B62EC fatal disc error text (string 4) */
 static Fader sLangGuide[6];         /* 0x814B62FC cross-fade of the guide text between languages */
 
-MenuWork *gMenu;                    /* 0x814AD3F0 */
-s32 gMenuState;                     /* 0x814AD3F4 MenuState */
-s32 gMenuNextState;                 /* 0x814AD3F8 */
-void *gTopFaceGlh;                  /* 0x814AD3FC front face layout */
-void *gGameFaceGlh;                 /* 0x814AD400 */
-void *gCardFaceGlh;                 /* 0x814AD404 */
-void *gOptionFaceGlh;               /* 0x814AD408 */
-void *gClockFaceGlh;                /* 0x814AD40C */
-void *gMenuTexBank;                 /* 0x814AD410 TXH0 res 167 */
-void *gGuideGlh;                    /* 0x814AD414 button guide layout, res 115 */
-void *gDialogGlh;                   /* 0x814AD418 res 108 */
-void *gDialogSth;                   /* 0x814AD41C res 109..114 */
-s16 gSlotGlow[2];                   /* 0x814AD420 card slot glow, 60..255 */
-s32 gSlotFill[2];                   /* 0x814AD424 card slot fill, 0..255 */
-void *gSoundModeTex[2];             /* 0x814AD42C mono / stereo label */
-s16 gGuideAlpha;                    /* 0x814AD434 */
-s16 gGuideBlink;                    /* 0x814AD436 */
+/* .sbss: CW lays globals out in reverse definition order */
 s16 gGuideLang;                     /* 0x814AD438 language the guide text is shown in */
+u16 gGuideBlink;                    /* 0x814AD436 */
+s16 gGuideAlpha;                    /* 0x814AD434 */
+void *gSoundModeTex[2];             /* 0x814AD42C mono / stereo label */
+s32 gSlotFill[2];                   /* 0x814AD424 card slot fill, 0..255 */
+s16 gSlotGlow[2];                   /* 0x814AD420 card slot glow, 60..255 */
+void *gDialogSth;                   /* 0x814AD41C res 109..114 */
+void *gDialogGlh;                   /* 0x814AD418 res 108 */
+void *gGuideGlh;                    /* 0x814AD414 button guide layout, res 115 */
+void *gMenuTexBank;                 /* 0x814AD410 TXH0 res 167 */
+void *gClockFaceGlh;                /* 0x814AD40C */
+void *gOptionFaceGlh;               /* 0x814AD408 */
+void *gCardFaceGlh;                 /* 0x814AD404 */
+void *gGameFaceGlh;                 /* 0x814AD400 */
+void *gTopFaceGlh;                  /* 0x814AD3FC front face layout */
+s32 gMenuNextState;                 /* 0x814AD3F8 */
+s32 gMenuState;                     /* 0x814AD3F4 MenuState */
+MenuWork *gMenu;                    /* 0x814AD3F0 */
 
 extern s32 gSramLostPending;        /* 0x814AD000 */
-extern const Vec sZeroVec;          /* 0x8137EC28 */
+static const Vec sZeroVec = { 0.0f, 0.0f, 0.0f };   /* 0x8137EC28 */
+
+/* 0x8137EC34: SRT of each face layout relative to the cube. The missing
+   translation component of each entry is filled in by the code. */
+static const SRT sFaceSRT[6] = {
+    { 1.0f, -1.0f, 1.0f,       0,       0, 0, 0, -144.0f, 144.0f,  144.0f }, /* top */
+    { 1.0f, -1.0f, 1.0f,       0,       0, 0, 0, -144.0f, 144.0f,    0.0f }, /* work copy */
+    { 1.0f, -1.0f, 1.0f,  0x4000,       0, 0, 0, -144.0f,   0.0f,  144.0f }, /* card */
+    { 1.0f, -1.0f, 1.0f, -0x4000,       0, 0, 0, -144.0f,   0.0f, -144.0f }, /* game */
+    { 1.0f, -1.0f, 1.0f,       0,  0x4000, 0, 0,    0.0f, 144.0f,  144.0f }, /* clock */
+    { 1.0f, -1.0f, 1.0f,       0, -0x4000, 0, 0,    0.0f, 144.0f, -144.0f }, /* option */
+};
 
 static void Menu_InitRes(BOOL first);
 static void Menu_SetPalTextLayout(MenuWork *m);
@@ -172,6 +184,24 @@ void Menu_Init(BOOL first) {
     OptionIcon_Init(&sIconModel, first);
     ClockIcon_Init(&sIconModel, first);
 }
+
+/* Text layout for language code 3, which PAL never reports (codes are
+   4..9): leftover from another region. Inlined into Menu_SetDefaults. */
+#pragma auto_inline on
+static void Menu_SetLang3TextLayout(MenuWork *m) {
+    m->fxTitle[0].x = 10.0f;
+    m->fxTitle[0].y = -22.0f;
+    m->fxTitle[0].scale = 0.6f;
+    m->fxTitle[1].scale = 0.7f;
+    m->fxSel[0] = -18.0f;
+    m->fxSel[1] = 9.0f;
+    m->fxSel[2] = -47.0f;
+    m->fxSel[3] = 9.0f;
+    m->fxCursorScale = 0.66f;
+    m->fxItem[0].scale = 0.74f;
+    m->fxItem[1].scale = 0.74f;
+}
+#pragma auto_inline reset
 
 /* 0x813113EC: PAL text layout overrides for the mosaic screens (longer words). */
 static void Menu_SetPalTextLayout(MenuWork *m) {
@@ -321,17 +351,7 @@ static void Menu_SetDefaults(MenuWork *m) {
     /* Language code 3 never occurs on PAL (codes are 4..9): leftover from
      * another region's layout. */
     if (Lang_GetCode() == 3) {
-        m->fxTitle[0].x = 10.0f;
-        m->fxTitle[0].y = -22.0f;
-        m->fxTitle[0].scale = 0.6f;
-        m->fxTitle[1].scale = 0.7f;
-        m->fxSel[0] = -18.0f;
-        m->fxSel[1] = 9.0f;
-        m->fxSel[2] = -47.0f;
-        m->fxSel[3] = 9.0f;
-        m->fxCursorScale = 0.66f;
-        m->fxItem[0].scale = 0.74f;
-        m->fxItem[1].scale = 0.74f;
+        Menu_SetLang3TextLayout(m);
     }
     Menu_SetPalTextLayout(m);
 }
@@ -944,23 +964,14 @@ void Menu_SetGuideLang(s32 lang) {
 // "z" panes (zitl, zodi, ...) are drop shadows drawn in 0x282828 before
 // the matching white pane.
 
-#define FACE_HALF       144.0f
 #define FACE_SHOW_ROT   0x2E3A
 #define FACE_FADE_RANGE 5000
 
-/* 0x8137EC34: SRT of each face layout relative to the cube. The missing
-   translation component of each entry is filled in by the code. */
-extern const SRT sFaceSRT[6];
+#define FACE_HALF       144.0f
+
 enum { FACE_TOP = 0, FACE_WORK = 1, FACE_CARD = 2, FACE_GAME = 3, FACE_CLOCK = 4, FACE_OPTION = 5 };
 
-/* constant colours (0x814ADE84..0x814ADED0) */
-static const GXColor sFaceWhite  = { 255, 255, 255, 255 };
-static const GXColor sFaceShadow = {  40,  40,  40, 255 };
-static const GXColor sStickBack  = { 150, 150, 150, 255 };
-
-
 /* view * base * SRT -> GX_PNMTX0 (written out at every call site) */
-/* view * base * SRT -> GX_PNMTX0 */
 #define FACE_LOAD_MTX(base, srt, tmp, m)                \
     do {                                                \
         PSMTXConcat(Camera_GetView(), (base), (tmp));   \
@@ -970,38 +981,29 @@ static const GXColor sStickBack  = { 150, 150, 150, 255 };
         GXSetCurrentMtx(GX_PNMTX0);                     \
     } while (0)
 
-static inline void Menu_LoadFaceMtx(MtxPtr base, SRT srt) {
-    Mtx tmp;
+/* 0x81312F88: the front face on the spinning cube during the spin-out
+   (Scene state 4). The alpha is applied twice (alpha^2 / 255). */
+static inline void Menu_DrawFrontFace(MtxPtr cube, SRT srt, u8 alpha) {
+    GXColor c = { 255, 255, 255, 255 };
     Mtx m;
+    Mtx tmp;
 
-    PSMTXConcat(Camera_GetView(), base, tmp);
+    PSMTXConcat(Camera_GetView(), cube, tmp);
+    c.a = alpha;
     MtxFromSRT(&srt, m);
     PSMTXConcat(tmp, m, m);
     GXLoadPosMtxImm(m, GX_PNMTX0);
     GXSetCurrentMtx(GX_PNMTX0);
-}
-
-static inline u8 Face_Alpha(s16 rot) {
-    if (rot < 0) rot = -rot;
-    return (u8)(255 - (0x4000 - rot) * 255 / FACE_FADE_RANGE);
-}
-
-/* 0x81312F88: the front face on the spinning cube during the spin-out
-   (Scene state 4). The alpha is applied twice (alpha^2 / 255). */
-static inline void Menu_DrawTopFace(MtxPtr cube, u8 alpha) {
-    SRT srt = sFaceSRT[FACE_TOP];
-    GXColor c = { 255, 255, 255, 255 };
-    SRT *d = &srt;
-
-    Menu_LoadFaceMtx(cube, *d);
-    c.a = alpha;
     c.a = (u8)(c.a * alpha / 255);
     GX_Setup2DTex();
     Glh_DrawAll(gTopFaceGlh, &c);
 }
 
 void Menu_DrawSpinOutFace(MtxPtr cube, u8 alpha) {
-    Menu_DrawTopFace(cube, alpha);
+    SRT srt = sFaceSRT[FACE_TOP];
+    SRT *d = &srt;
+
+    Menu_DrawFrontFace(cube, *d, alpha);
 }
 
 /* 0x813130CC: disc banner on the Game face: image, short name, maker. */
@@ -1127,6 +1129,26 @@ static void Menu_DrawSlot(u8 slot, void *glh, u8 alpha) {
     Glh_DrawFrame('mca1' + tag, gCardFaceGlh, &c);
     Menu_DrawFillBar('mca2' + tag, gCardFaceGlh, &c,
                      (u8)(gSlotFill[slot] * (gSlotGlow[slot] - 60) / 195));
+}
+
+/* bottom face: Memory Card frame, title and the two slot bars */
+static inline void Menu_DrawCardFace(void *glh, SRT *srt, u8 alpha) {
+    Mtx tmp;
+    Mtx m;
+    GXColor c = { 255, 255, 255, 255 };
+
+    PSMTXConcat(Camera_GetView(), sCubeMtx, tmp);
+    c.a = alpha;
+    MtxFromSRT(srt, m);
+    PSMTXConcat(tmp, m, m);
+    GXLoadPosMtxImm(m, GX_PNMTX0);
+    GXSetCurrentMtx(GX_PNMTX0);
+    c.a = (u8)(c.a * alpha / 255);
+    Glh_DrawFrame('fram', glh, &c);
+    GX_Setup2DTex();
+    Glh_DrawPane('titl', glh, &c);
+    Menu_DrawSlot(0, glh, alpha);
+    Menu_DrawSlot(1, glh, alpha);
 }
 
 static inline void *Digit(s32 n) {
@@ -1255,63 +1277,82 @@ static void Menu_DrawOptionFace(void *glh, const SRT *srt, u8 alpha) {
 }
 
 static inline s16 AbsClamp(s16 rot) {
-    if (rot >= FACE_FADE_RANGE || rot <= -FACE_FADE_RANGE) return FACE_FADE_RANGE;
-    return rot >= 0 ? rot : -rot;
+    if ((rot >= 0 && rot < FACE_FADE_RANGE) || (rot <= 0 && rot > -FACE_FADE_RANGE)) {
+        return (s16)(rot >= 0 ? rot : -rot);
+    }
+    return FACE_FADE_RANGE;
+}
+
+
+static inline s32 Face_Fade(s16 rot) {
+    if (rot < 0) rot = -rot;
+    return 255 - (0x4000 - rot) * 255 / FACE_FADE_RANGE;
 }
 
 /* 0x81314304: all faces of the cube, alpha = overall menu alpha. */
 void Menu_DrawFaces(u8 alpha) {
-    SRT srt = sFaceSRT[FACE_WORK];
-    s16 ax = AbsClamp(gMenu->rotX);
-    s16 ay = AbsClamp(gMenu->rotY);
-    GXColor c;
-    void *glh;
-    u8 a;
+    SRT srt;
+    f32 half = FACE_HALF;
+    s16 ax, ay;
+    s16 *rot;
 
-    srt.tz = FACE_HALF;
+    {
+        SRT t = sFaceSRT[FACE_WORK];
+        t.tz = half;
+        srt = t;
+    }
+    ax = AbsClamp(gMenu->rotX);
+    ay = AbsClamp(gMenu->rotY);
 
     /* front face: fades with the larger of the two turns */
     if (ax > ay) {
-        Menu_DrawTopFace(sCubeMtx, (u8)(255 - ax * 255 / FACE_FADE_RANGE));
+        MtxPtr cube = sCubeMtx;
+        SRT s = sFaceSRT[FACE_TOP];
+        SRT *d = &s;
+        Menu_DrawFrontFace(cube, *d, 255 - ax * 255 / FACE_FADE_RANGE);
     } else if (ax < ay) {
-        Menu_DrawTopFace(sCubeMtx, (u8)(255 - ay * 255 / FACE_FADE_RANGE));
+        MtxPtr cube = sCubeMtx;
+        SRT s = sFaceSRT[FACE_TOP];
+        SRT *d = &s;
+        Menu_DrawFrontFace(cube, *d, 255 - ay * 255 / FACE_FADE_RANGE);
     } else if (ax == 0) {
-        Menu_DrawTopFace(sCubeMtx, 255);
+        MtxPtr cube = sCubeMtx;
+        SRT s = sFaceSRT[FACE_TOP];
+        SRT *d = &s;
+        Menu_DrawFrontFace(cube, *d, 255 - ax * 255 / FACE_FADE_RANGE);
     }
 
     /* bottom: Memory Card */
-    if (gMenu->rotX <= -FACE_SHOW_ROT) {
-        srt = sFaceSRT[FACE_CARD];
-        srt.ty = -FACE_HALF;
-        glh = gCardFaceGlh;
-        c = sFaceWhite;
-        a = (u8)(alpha * Face_Alpha(gMenu->rotX) / 255);
-        Menu_LoadFaceMtx(sCubeMtx, srt);
-        c.a = a;
-        c.a = (u8)(c.a * a / 255);
-        Glh_DrawFrame('fram', glh, &c);
-        GX_Setup2DTex();
-        Glh_DrawPane('titl', glh, &c);
-        Menu_DrawSlot(0, glh, a);
-        Menu_DrawSlot(1, glh, a);
+    rot = &gMenu->rotX;
+    if (*rot <= -FACE_SHOW_ROT) {
+        SRT t = sFaceSRT[FACE_CARD];
+        t.ty = -half;
+        srt = t;
+        Menu_DrawCardFace(gCardFaceGlh, &srt, alpha * Face_Fade(*rot) / 255);
     }
     /* top: Game Play */
-    if (gMenu->rotX >= FACE_SHOW_ROT) {
-        srt = sFaceSRT[FACE_GAME];
-        srt.ty = FACE_HALF;
-        Menu_DrawGameFace(gGameFaceGlh, &srt, (u8)(alpha * Face_Alpha(gMenu->rotX) / 255));
+    rot = &gMenu->rotX;
+    if (*rot >= FACE_SHOW_ROT) {
+        SRT t = sFaceSRT[FACE_GAME];
+        t.ty = half;
+        srt = t;
+        Menu_DrawGameFace(gGameFaceGlh, &srt, alpha * Face_Fade(*rot) / 255);
     }
     /* right: Calendar */
-    if (gMenu->rotY <= -FACE_SHOW_ROT) {
-        srt = sFaceSRT[FACE_CLOCK];
-        srt.tx = FACE_HALF;
-        Menu_DrawClockFace(gClockFaceGlh, &srt, (u8)(alpha * Face_Alpha(gMenu->rotY) / 255));
+    rot = &gMenu->rotY;
+    if (*rot <= -FACE_SHOW_ROT) {
+        SRT t = sFaceSRT[FACE_CLOCK];
+        t.tx = half;
+        srt = t;
+        Menu_DrawClockFace(gClockFaceGlh, &srt, alpha * Face_Fade(*rot) / 255);
     }
     /* left: Options */
-    if (gMenu->rotY >= FACE_SHOW_ROT) {
-        srt = sFaceSRT[FACE_OPTION];
-        srt.tx = -FACE_HALF;
-        Menu_DrawOptionFace(gOptionFaceGlh, &srt, (u8)(alpha * Face_Alpha(gMenu->rotY) / 255));
+    rot = &gMenu->rotY;
+    if (*rot >= FACE_SHOW_ROT) {
+        SRT t = sFaceSRT[FACE_OPTION];
+        t.tx = -half;
+        srt = t;
+        Menu_DrawOptionFace(gOptionFaceGlh, &srt, alpha * Face_Fade(*rot) / 255);
     }
 }
 
@@ -1323,7 +1364,8 @@ BOOL Menu_CardFadeDone(void) {
     for (i = 0; i < 3; i++) {
         Fader_GetAlpha(&sCardFade[i], &a[i], NULL);
     }
-    return a[0] > 172 && a[1] > 172 && a[2] > 172;
+    if (a[0] > 172 && a[1] > 172 && a[2] > 172) return TRUE;
+    return FALSE;
 }
 
 /* 0x81314D70: each submenu is drawn while its first fader is non zero;
@@ -1348,16 +1390,22 @@ void Menu_DrawSubmenus(void) {
 /* 0x81314F44: guide labels, drawn once per language so that a language
    change cross-fades (langGuide[] faders). */
 static void Menu_DrawGuideText(u8 alpha) {
-    GXColor c = sFaceWhite;
+    s32 lang;
     s16 a;
-    s32 lang, i;
 
     for (lang = 0; lang < 6; lang++) {
+        GXColor c = { 255, 255, 255, 255 };
+
         Fader_GetAlpha(&sLangGuide[lang], &a, NULL);
         c.a = (u8)(alpha * a / 255);
-        for (i = 0; i < 8; i++) {
-            Fader_DrawString(&sGuideText[i], sGuideSth[lang], gGuideGlh, &c);
-        }
+        Fader_DrawString(&sGuideText[0], sGuideSth[lang], gGuideGlh, &c);
+        Fader_DrawString(&sGuideText[1], sGuideSth[lang], gGuideGlh, &c);
+        Fader_DrawString(&sGuideText[2], sGuideSth[lang], gGuideGlh, &c);
+        Fader_DrawString(&sGuideText[3], sGuideSth[lang], gGuideGlh, &c);
+        Fader_DrawString(&sGuideText[4], sGuideSth[lang], gGuideGlh, &c);
+        Fader_DrawString(&sGuideText[5], sGuideSth[lang], gGuideGlh, &c);
+        Fader_DrawString(&sGuideText[6], sGuideSth[lang], gGuideGlh, &c);
+        Fader_DrawString(&sGuideText[7], sGuideSth[lang], gGuideGlh, &c);
     }
 }
 
@@ -1365,15 +1413,22 @@ static void Menu_DrawGuideText(u8 alpha) {
    Two groups of three glyphs (stick, B, A), one per guide line.
    guideIcon[0..2] = stick/B/A of line 1, [3..5] of line 2. */
 void Menu_DrawGuide(u8 alpha) {
-    GXColor white = sFaceWhite;
-    GXColor back = sStickBack;
-    GXColor colA, colB;
-    GXColor c;
-    s16 g[6];
-    s16 blink = gGuideBlink;
+    GXColor white = { 255, 255, 255, 255 };
+    GXColor stick = { 255, 255, 255, 255 };
+    GXColor dots = { 255, 255, 255, 255 };
+    GXColor butB = { 255, 255, 255, 255 };
+    GXColor butA = { 255, 255, 255, 255 };
+    GXColor back = { 150, 150, 150, 255 };
+    GXColor colB;
+    GXColor colA;
+    s16 ga[2];
+    s16 gb[2];
+    s16 gc[2];
     s16 pulse, base, f;
+    s16 k;
     u8 fa;
-    s32 i, k;
+    u32 i;
+    u32 tag;
 
     colA.r = (u8)gMenu->guideColorA[0];
     colA.g = (u8)gMenu->guideColorA[1];
@@ -1386,63 +1441,69 @@ void Menu_DrawGuide(u8 alpha) {
 
     GX_Setup2DView();
     GX_Setup2DTex();
-    for (i = 0; i < 6; i++) {
-        Fader_GetAlpha(&sGuideIcon[i], &g[i], NULL);
-    }
+    Fader_GetAlpha(&sGuideIcon[0], &ga[0], NULL);
+    Fader_GetAlpha(&sGuideIcon[1], &gb[0], NULL);
+    Fader_GetAlpha(&sGuideIcon[2], &gc[0], NULL);
+    Fader_GetAlpha(&sGuideIcon[3], &ga[1], NULL);
+    Fader_GetAlpha(&sGuideIcon[4], &gb[1], NULL);
+    Fader_GetAlpha(&sGuideIcon[5], &gc[1], NULL);
 
     /* glyph backgrounds pulse 255 -> 100 -> 255 every 256 frames */
-    if (blink % 256 > 127) {
-        pulse = 100 + (blink % 128) * 155 / 127;
+    if (gGuideBlink % 256 > 127) {
+        pulse = (gGuideBlink % 128) * 155 / 127 + 100;
     } else {
-        pulse = 255 - (blink % 128) * 155 / 127;
+        pulse = 255 - (gGuideBlink % 128) * 155 / 127;
     }
     base = (s16)(pulse * alpha / 255);
     for (i = 0; i < 2; i++) {
-        back.a = (u8)(base * g[i * 3 + 0] / 255);
-        colB.a = (u8)(base * g[i * 3 + 1] / 255);
-        colA.a = (u8)(base * g[i * 3 + 2] / 255);
-        Glh_DrawPane('bac1' + i * 3, gGuideGlh, &back);
-        Glh_DrawPane('bac2' + i * 3, gGuideGlh, &colB);
-        Glh_DrawPane('bac3' + i * 3, gGuideGlh, &colA);
+        back.a = (u8)(base * ga[i] / 255);
+        colB.a = (u8)(base * gb[i] / 255);
+        colA.a = (u8)(base * gc[i] / 255);
+        tag = 'bac1' + i * 3;
+        Glh_DrawPane(tag, gGuideGlh, &back);
+        Glh_DrawPane(tag + 1, gGuideGlh, &colB);
+        Glh_DrawPane(tag + 2, gGuideGlh, &colA);
     }
 
     /* stick: every 128 frames cross-fade between the neutral sprite
        (stk0 / stk5) and one of the four tilted ones, cycling directions */
-    k = (blink / 128) % 8;
-    if (k % 2 == 0) {
-        f = (blink % 128) * 255 / 127;
-    } else {
-        f = 255 - (blink % 128) * 255 / 127;
-    }
-    fa = (u8)(f * alpha / 255);
     for (i = 0; i < 2; i++) {
-        c = white;
-        c.a = (u8)((255 - fa) * g[i * 3] / 255);
-        Glh_DrawPane('stk0' + i * 5 + ((k + 1) / 2 + 3) % 4 + 1, gGuideGlh, &c);
-        c.a = (u8)(fa * g[i * 3] / 255);
-        Glh_DrawPane('stk0' + i * 5, gGuideGlh, &c);
+        k = (gGuideBlink / 128) % 8;
+        if (k % 2 == 0) {
+            f = (u8)((gGuideBlink % 128) * 255 / 127);
+        } else {
+            f = (u8)(255 - (gGuideBlink % 128) * 255 / 127);
+        }
+        fa = (u8)(f * alpha / 255);
+        stick.a = 255 - fa;
+        stick.a = (u8)(stick.a * ga[i] / 255);
+        tag = 'stk0' + i * 5;
+        Glh_DrawPane(tag + ((k + 1) / 2 + 3) % 4 + 1, gGuideGlh, &stick);
+        stick.a = fa;
+        stick.a = (u8)(stick.a * ga[i] / 255);
+        Glh_DrawPane(tag, gGuideGlh, &stick);
     }
 
     /* button glyphs and the dots after them, faded in by gGuideAlpha */
-    fa = (u8)(white.a * alpha / 255);
-    fa = (u8)(fa * gGuideAlpha / 255);
-    c = white;
-    c.a = (u8)(fa * g[1] / 255);
-    Glh_DrawPane('butb', gGuideGlh, &c);
-    Glh_DrawPane('dot2', gGuideGlh, &c);
-    c.a = (u8)(fa * g[4] / 255);
-    Glh_DrawPane('butc', gGuideGlh, &c);
-    Glh_DrawPane('dot5', gGuideGlh, &c);
-    c.a = (u8)(fa * g[2] / 255);
-    Glh_DrawPane('buta', gGuideGlh, &c);
-    Glh_DrawPane('dot3', gGuideGlh, &c);
-    c.a = (u8)(fa * g[5] / 255);
-    Glh_DrawPane('butd', gGuideGlh, &c);
-    Glh_DrawPane('dot6', gGuideGlh, &c);
-    c.a = (u8)(fa * g[0] / 255);
-    Glh_DrawPane('dot1', gGuideGlh, &c);
-    c.a = (u8)(fa * g[3] / 255);
-    Glh_DrawPane('dot4', gGuideGlh, &c);
+    white.a = (u8)(white.a * alpha / 255);
+    white.a = (u8)(white.a * gGuideAlpha / 255);
+    fa = white.a;
+    butB.a = (u8)(fa * gb[0] / 255);
+    Glh_DrawPane('butb', gGuideGlh, &butB);
+    Glh_DrawPane('dot2', gGuideGlh, &butB);
+    butB.a = (u8)(fa * gb[1] / 255);
+    Glh_DrawPane('butc', gGuideGlh, &butB);
+    Glh_DrawPane('dot5', gGuideGlh, &butB);
+    butA.a = (u8)(fa * gc[0] / 255);
+    Glh_DrawPane('buta', gGuideGlh, &butA);
+    Glh_DrawPane('dot3', gGuideGlh, &butA);
+    butA.a = (u8)(fa * gc[1] / 255);
+    Glh_DrawPane('butd', gGuideGlh, &butA);
+    Glh_DrawPane('dot6', gGuideGlh, &butA);
+    dots.a = (u8)(fa * ga[0] / 255);
+    Glh_DrawPane('dot1', gGuideGlh, &dots);
+    dots.a = (u8)(fa * ga[1] / 255);
+    Glh_DrawPane('dot4', gGuideGlh, &dots);
 
     GX_Setup2DText();
     Menu_DrawGuideText(alpha);
@@ -1454,7 +1515,7 @@ void Menu_DrawGuide(u8 alpha) {
 
 /* 0x8131567C: Scene draw hook for state 5. */
 void Menu_Draw2D(u8 alpha) {
-    GXColor c = sFaceWhite;
+    GXColor c = { 255, 255, 255, 255 };
     Scene *scene = Scene_Get();
     s16 a;
 
