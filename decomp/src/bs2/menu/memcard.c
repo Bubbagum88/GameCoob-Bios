@@ -156,9 +156,9 @@ void fn_813095A0(GXColor* top, GXColor* bottom);
 void Backdrop_DrawSpots(Mtx mv, u8 alpha, Vec* pos1, Vec* pos2, u8 alpha1, u8 alpha2, u8 spotAlpha);
 
 void CardUi_StepSlotFader(CardSlotFade* f, u8 mode);
-BOOL CardDraw_LoadFileIcon(void);
+u32 CardDraw_LoadFileIcon(void);
 void CardDraw_FileInfo(u8 alpha);
-void CardDraw_SetScissor(s32 x, s32 y, s32 w, s32 h, u8 t, GXColor* c);
+void CardDraw_SetScissor(s32 x, s32 y, s32 w, s32 h, s32 t, GXColor* c);
 
 static inline void Card_ClearFrames(u8 slot) {
     int j;
@@ -426,13 +426,15 @@ BOOL Card_CheckMove(u8 slot, s32 file, s32* errOut) {
    if the current slot has no usable card, switch to the other one. */
 void CardUi_Browse_Enter(BOOL force) {
     CardSlot* slots = CardThread_GetSlots();
-    volatile CardSlot* o;
+    volatile s16* st;
+    CardSlot* o;
 
     if (sCardUiState == 5 && !force) {
         return;
     }
     o = &slots[sCardSlot ^ 1];
-    if (o->state == CARD_SLOT_ENCODING || o->state == CARD_SLOT_NEED_FORMAT) {
+    st = &o->state;
+    if (o->state == CARD_SLOT_ENCODING || *st == CARD_SLOT_NEED_FORMAT) {
         sCardUiState = sCardUiNext = 4;
         sCardSlot ^= 1;
     } else {
@@ -814,7 +816,7 @@ s32 CardUi_Format(void) {
         sCardFmtSel[sCardSlot] = v;
     }
     if (gMenuPad.buttonDown & PAD_A) {
-        switch (sCardFmtSel[sCardSlot] & 3) {
+        switch (sCardFmtA[sCardSlot] & 3) {
         case 0:
             sCardFmtSel[sCardSlot] = 3;
             Sound_Play(SE_DECIDE);
@@ -1162,7 +1164,7 @@ void CardUi_UpdateFormatMsg(CardSlot* slots, u8 slot, BOOL show) {
     CardSlot* s = &slots[slot];
     volatile s16* st = &s->state;
 
-    if (*st == CARD_SLOT_NEED_FORMAT || *st == CARD_SLOT_ENCODING) {
+    if (s->state == CARD_SLOT_NEED_FORMAT || *st == CARD_SLOT_ENCODING) {
         if (sCardUiState == 4 || show) {
             if (!(sCardFmtA[slot] & 2)) {
                 if (slot == sCardSlot) {
@@ -1227,7 +1229,7 @@ void CardUi_UpdateFaders(void) {
             Fader_Step(&sCardMsg[35 + i], FADE_OUT);
             Fader_Step(&sCardMsg[39 + i], FADE_OUT);
             Fader_Step(&sCardMsg[41 + i], FADE_OUT);
-        } else {
+        } else if (sCardOpSlot != i) {
             CardUi_UpdateSlotMsgs(slots, s, i, TRUE);
         }
         if (sCardUiState == 1) {
@@ -1712,8 +1714,8 @@ void CardDraw_Icon(u8 slot, s16 pos, s32 frame, u8 alpha) {
     u32 file;
     u32 sel;
 
-    file = sCardSort[slot][pos + sCardTop[slot] * 4].file;
     sel = sCardSort[sCardSlot][sCardCol[sCardSlot] + (sCardRow[sCardSlot] + sCardTop[sCardSlot]) * 4].file;
+    file = sCardSort[slot][pos + sCardTop[slot] * 4].file;
     if (CardDraw_SetIconFrame(slot, file, frame)) {
         GX_Setup2D(1, 0, 1);
         if (sel == file && slot == sCardSlot && icons[slot][file].hasBanner == 0) {
@@ -1751,15 +1753,15 @@ void CardDraw_FileBanner(u8 slot, CardSlot* slots, GXColor* c) {
     GXColor hdr;
     s16 arrow[2];
     s16 unused;
-    u8 a2;
     u8 alpha;
+    u8 a2;
 
     GX_Setup2DTex();
     Fader_GetAlpha(&sCardFadeA[slot], &a, NULL);
     alpha = c->a;
     c->a = alpha * a / 255;
-    hdr = *c;
-    CardDraw_SlotHeader(slot, slots, &hdr);
+    /* the copy is scheduled after the alpha math, as a comma */
+    CardDraw_SlotHeader(slot, slots, (hdr = *c, &hdr));
     GX_Setup2DTex();
     a2 = c->a;
     Fader_GetAlpha(&sCardFadeD[slot], &arrow[0], NULL);
@@ -1967,7 +1969,7 @@ void CardUi_StepSlotFader(CardSlotFade* f, u8 mode) {
 }
 
 /* 0x8131A7B4: pulsing outline around a box. */
-void CardDraw_SetScissor(s32 x, s32 y, s32 w, s32 h, u8 t, GXColor* c) {
+void CardDraw_SetScissor(s32 x, s32 y, s32 w, s32 h, s32 t, GXColor* c) {
     u32 color = 0xC0C0C000;
     u32 a;
 
@@ -2217,7 +2219,7 @@ void CardDraw_Dialog(u8 slot, CardSlotFade* f, void* sth, void* glh, GXColor* c)
 }
 
 /* 0x8131B3CC: loads the selected file's banner into GX_TEXMAP0. */
-BOOL CardDraw_LoadFileIcon(void) {
+u32 CardDraw_LoadFileIcon(void) {
     CardIconInfo(*icons)[CARD_MAX_FILES] = CardThread_GetIcons();
     CardFile(*files)[CARD_MAX_FILES] = CardThread_GetFiles();
     u32 file = sCardSort[sCardSlot][sCardCol[sCardSlot] + (sCardRow[sCardSlot] + sCardTop[sCardSlot]) * 4].file;
