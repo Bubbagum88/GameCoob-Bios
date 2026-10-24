@@ -326,7 +326,8 @@ void CardThread_Poll(void) {
                 break;
             }
             sCardResult = Card_MapError(res);
-            if (CARD_MSG_CMD((u32)msg) != CARD_CMD_MOUNT && CARD_MSG_CMD((u32)msg) != CARD_CMD_UNMOUNT) {
+            m = (u8)(u32)msg;
+            if ((s8)m != CARD_CMD_MOUNT && (s8)m != CARD_CMD_UNMOUNT) {
                 sCardDestResult = Card_MapError(CARD_MSG_RES((u32)msg));
                 if (sCardCmdSlot != (s16)CARD_MSG_SLOT((u32)msg)) {
                     sCardDestFile = CARD_MSG_FILE((u32)msg);
@@ -342,7 +343,7 @@ void CardThread_Poll(void) {
 void CardThread_Init(void) {
     u8* icons = HeapAlloc(2 * CARD_MAX_FILES * 0x5A00);
     u8* comments = HeapAlloc(2 * CARD_MAX_FILES * 0x40);
-    s32 i;
+    int i;
 
     for (i = 0; i < CARD_MAX_FILES; i++) {
         sCardIconBuf[0][i] = icons + i * 0x5A00;
