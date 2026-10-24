@@ -131,7 +131,7 @@ void fn_8132056C(CardSortEntry (*sort)[CARD_MAX_FILES], s8* top);
 void fn_81320094(u8 slot, u16 pos, u16 file, s32 cmd);
 void fn_8132030C(u8 file);
 void fn_813204B0(void);
-void fn_81320920(u8 slot);
+void fn_81320920(s32 slot);
 void fn_8131F8F8(void);
 
 void CardThread_Format(u8 slot);
@@ -903,7 +903,7 @@ int CardFile_Compare(const void* a, const void* b) {
 }
 
 static inline void Card_SetMaxTop(u8 slot) {
-    CardSlot* s = &CardThread_GetSlots()[slot];
+    CardSlot* s = &CardThread_GetSlots()[(u8)slot];
     volatile u16* n;
     s8 m;
 
@@ -1098,7 +1098,7 @@ void CardUi_PollSlot(u8 slot) {
     }
     s = &slots[sCardSlot];
     st = &s->state;
-    if (*st == CARD_SLOT_EMPTY) {
+    if (s->state == CARD_SLOT_EMPTY) {
         CardUi_Browse_Enter(FALSE);
         if (Card_OtherReady(NULL)) {
             sCardSlot ^= 1;
@@ -2339,6 +2339,23 @@ static inline void CardDraw_Slot(u8 slot, u8 alpha) {
 }
 
 /* 0x8131B94C: drawn by the menu while zoomed into the Memory Card face. */
+/* lamp spot over slot s's card */
+static inline void Card_SpotPos(Vec* v, u8 s) {
+    CardParams* p = Card_GetParams();
+
+    v->x = (sCardAnchorX[s][5] + sCardAnchorX[s][6]) / 32.0f;
+    v->y = (sCardAnchorY[s][5] + sCardAnchorY[s][9]) / 32.0f;
+    v->z = p->f70;
+}
+
+static inline void CardDraw_Dialogs(u8 alpha) {
+    GXColor c = { 255, 255, 255, 255 };
+
+    c.a = c.a * alpha / 255;
+    CardDraw_Dialog(0, &sCardSlotFade[0], sCardSth, sCardGlh, &c);
+    CardDraw_Dialog(1, &sCardSlotFade[1], sCardSth, sCardGlh, &c);
+}
+
 void Card_Draw(u8 fxAlpha, u8 bgAlpha, u8 alpha) {
     DispSettings* disp = Disp_GetSettings();
     CardSlot* slots = CardThread_GetSlots();
@@ -2353,6 +2370,7 @@ void Card_Draw(u8 fxAlpha, u8 bgAlpha, u8 alpha) {
     Mtx mv;
     Mtx view;
     Mtx nrm;
+    s16 unused[2];
 
     eye.z = 224.0f / tanf(3.141592f * disp->fovy / 360.0f);
     C_MTXLookAt(view, &eye, &up, &at);
@@ -2363,12 +2381,8 @@ void Card_Draw(u8 fxAlpha, u8 bgAlpha, u8 alpha) {
     GXLoadNrmMtxImm(nrm, GX_PNMTX0);
     GXSetCurrentMtx(GX_PNMTX0);
 
-    spot0.x = (sCardAnchorX[0][5] + sCardAnchorX[0][6]) * 0.03125f;
-    spot0.y = (sCardAnchorY[0][5] + sCardAnchorY[0][9]) * 0.03125f;
-    spot0.z = Card_GetParams()->f70;
-    spot1.x = (sCardAnchorX[1][5] + sCardAnchorX[1][6]) * 0.03125f;
-    spot1.y = (sCardAnchorY[1][5] + sCardAnchorY[1][9]) * 0.03125f;
-    spot1.z = Card_GetParams()->f70;
+    Card_SpotPos(&spot0, 0);
+    Card_SpotPos(&spot1, 1);
     Fader_GetAlpha(&sCardFadeF[0], &a[0], NULL);
     Fader_GetAlpha(&sCardFadeF[1], &a[1], NULL);
     Fader_GetAlpha(&sCardFadeF[2], &a2, NULL);
@@ -2398,13 +2412,7 @@ void Card_Draw(u8 fxAlpha, u8 bgAlpha, u8 alpha) {
         CardDraw_Slot(0, alpha);
         CardDraw_Slot(1, alpha);
     }
-    {
-        GXColor c = { 255, 255, 255, 255 };
-
-        c.a = c.a * alpha / 255;
-        CardDraw_Dialog(0, &sCardSlotFade[0], sCardSth, sCardGlh, &c);
-        CardDraw_Dialog(1, &sCardSlotFade[1], sCardSth, sCardGlh, &c);
-    }
+    CardDraw_Dialogs(alpha);
     CardDraw_Messages(alpha);
 }
 
