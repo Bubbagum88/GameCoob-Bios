@@ -487,10 +487,12 @@ u8* Nas_SeqToBank(s32 seq_id, s32* num_banks) {
 }
 
 void Nas_FlushBank(s32 seq_id) {
-    s32 bank_id;
     s32 bank_count;
     s32 index = ((u16*)AG.map_header)[seq_id];
-    STACK_PAD_VAR(4);
+    STACK_PAD_VAR(1);
+    s32 bank_id;
+    s32* REF_bank_id = &bank_id;
+    STACK_PAD_VAR(1);
 
     bank_count = ((u8*)AG.map_header)[index++];
     while (bank_count > 0) {

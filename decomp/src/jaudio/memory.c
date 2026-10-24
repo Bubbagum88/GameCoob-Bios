@@ -809,7 +809,6 @@ extern s16 BP_FILTER[];
 void Nas_SetBPFilter(s16* a, s32 b, s32 c) {
     int i;
     int k;
-    int ind;
     int constant;
     if (b == 0 && c == 0) {
         Nas_SetLPFilter(a, 0);
@@ -828,18 +827,18 @@ void Nas_SetBPFilter(s16* a, s32 b, s32 c) {
             k += constant;
             constant--;
         }
-        ind = (c - b) - 1 + k;
+        k += (c - b) - 1;
         for (i = 0; i < 8; i++) {
-            a[i] = EL_FILTER[i + ind];
+            a[i] = EL_FILTER[i + k];
         }
     } else if (c < b) {
         for (i = c; i > 1; i--) {
             k += constant;
             constant--;
         }
-        ind = (b - c) - 1 + k;
+        k += (b - c) - 1;
         for (i = 0; i < 8; i++) {
-            a[i] = BP_FILTER[i + ind];
+            a[i] = BP_FILTER[i + k];
         }
     }
 }
@@ -859,11 +858,10 @@ void __DownDelay(delay* unused) {
  * Size:	0000A0
  */
 void __Nas_DelayDown() {
-    volatile int i;
+    int i;
     int j;
-    delay* delay_p;
     int c;
-    volatile int* REF_i = &i;
+    int* REF_i = &i;
 
     if (AG.audio_params.spec == 2) {
         c = 2;
@@ -872,7 +870,7 @@ void __Nas_DelayDown() {
     }
 
     for (i = 0; i < AG.num_synth_reverbs; i++) {
-        delay_p = &AG.synth_delay[i];
+        delay* delay_p = &AG.synth_delay[i];
         for (j = 0; j < c; j++) {
             __DownDelay(delay_p);
         }
@@ -901,7 +899,12 @@ void __Nas_DacClear() {
 s32 Nas_SpecChange() {
     int i;
     int j;
-    int c = AG.audio_params.spec == 2 ? 2 : 1;
+    int c;
+    if (AG.audio_params.spec == 2) {
+        c = 2;
+    } else {
+        c = 1;
+    }
     switch (AG.reset_status) {
         case 5: {
             for (i = 0; i < AG.audio_params.num_groups; i++) {
@@ -956,7 +959,10 @@ s32 Nas_SpecChange() {
             }
         } break;
     }
-    return AG.reset_status > 2;
+    if (AG.reset_status <= 2) {
+        return 0;
+    }
+    return 1;
 }
 
 /*
@@ -1305,10 +1311,12 @@ void __SearchBank(SwMember* entry, s32 bank) {
  * Size:	0000EC
  */
 void __KillSwMember(SwMember* a) {
-    STACK_PAD_VAR(6);
     for (int i = 0, end = AG.bank_header->numEntries; i < end; i++) {
         int bank0 = AG.voice_info[i].wave_bank_id0;
         int bank1 = AG.voice_info[i].wave_bank_id1;
+        int* REF_end = &end;
+        int* REF_bank0 = &bank0;
+        int* REF_bank1 = &bank1;
         if (((bank0 != 0xff && bank0 == a->sample_bank_id) || (bank1 != 0xff && bank1 == a->sample_bank_id) ||
              (a->sample_bank_id == 0 || a->sample_bank_id == 0xfe)) &&
             Nas_SzCacheCheck(1, 2, i) && Nas_CheckIDbank(i)) {
@@ -1370,11 +1378,13 @@ void __Do_EmemKill(SwMember* entry, s32 id0, s32 id1, s32 bank) {
  * Size:	000128
  */
 void Emem_KillSwMember() {
-    STACK_PAD_VAR(4);
-    s32 i, j, end;
-    for (i = 0, end = AG.bank_header->numEntries; i < end; i++) {
+    s32 j;
+    for (s32 i = 0, end = AG.bank_header->numEntries; i < end; i++) {
         s32 id0 = AG.voice_info[i].wave_bank_id0;
         s32 id1 = AG.voice_info[i].wave_bank_id1;
+        s32* REF_end = &end;
+        s32* REF_id0 = &id0;
+        s32* REF_id1 = &id1;
         if ((id0 != 0xff || id1 != 0xff) && Nas_SzCacheCheck(1, 3, i) && Nas_CheckIDbank(i)) {
             for (j = 0; j < AG.emem_persistent_wave_heap.num_entries; j++) {
                 __Do_EmemKill(&AG.emem_persistent_wave_heap.entries[j], id0, id1, i);
