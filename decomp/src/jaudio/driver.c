@@ -137,9 +137,8 @@ void Nas_CpuFX(s32 chunkLen, s32 updateIdx, s32 reverbIdx) {
     param_p->n_samples = chunkLen;
 
     if (del_p->sub_delay != 0) {
-        t = del_p->delay_num_samples;
         idx = next_buf_pos + del_p->sub_delay;
-        while (idx >= t) {
+        while (idx >= (t = del_p->delay_num_samples)) {
             idx -= t;
         }
 

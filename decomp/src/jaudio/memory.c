@@ -969,18 +969,20 @@ void __Nas_MemoryReconfig() {
     s32 b;
     s32 c;
     s32 d;
+    u8 pad2[24];
     na_spec_config* spec = &NA_SPEC_CONFIG[AG.spec_id];
+    na_spec_config** REF_spec = &spec;
+    u8 pad[116];
 
     /*0x2640*/ AG.num_waveloads = 0;
     /*0x286E*/ AG.audio_params.sampling_frequency = spec->_00;
+    /*0x2870*/ AG.audio_params.ai_sampling_frequency = AG.audio_params.sampling_frequency;
     /*0x2872*/ AG.audio_params.num_samples_per_frame_target = spec->_00 / AG.refresh_rate;
-    /*0x2878*/ AG.audio_params.updates_per_frame = 4;
     /*0x2876*/ AG.audio_params.num_samples_per_frame_min = AG.audio_params.num_samples_per_frame_target - 0x10;
     /*0x2874*/ AG.audio_params.num_samples_per_frame_max = AG.audio_params.num_samples_per_frame_target + 0x10;
+    /*0x2878*/ AG.audio_params.updates_per_frame = 4;
     /*0x287A*/ AG.audio_params.num_samples_per_update =
         (AG.audio_params.num_samples_per_frame_target / AG.audio_params.updates_per_frame) & ~7;
-    /*0x2870*/ AG.audio_params.ai_sampling_frequency = AG.audio_params.sampling_frequency;
-    OSReport("----------------------------- SFS_NORMAL = %d\n", AG.audio_params.num_samples_per_update);
 
     /*0x287C*/ AG.audio_params.num_samples_per_update_max = AG.audio_params.num_samples_per_update + 8;
     /*0x287E*/ AG.audio_params.num_samples_per_update_min = AG.audio_params.num_samples_per_update - 8;
@@ -994,14 +996,14 @@ void __Nas_MemoryReconfig() {
 
     /*0x28B8*/ AG.num_channels = spec->_05;
     /*0x2880*/ AG.audio_params.num_groups = spec->_06;
-    if (AG.audio_params.num_groups > 5) {
-        /*0x2880*/ AG.audio_params.num_groups = 5;
+    if (AG.audio_params.num_groups > AUDIO_GROUP_NUM) {
+        /*0x2880*/ AG.audio_params.num_groups = AUDIO_GROUP_NUM;
     }
 
     /*0x2A18*/ AG.num_abi_cmds_max = 8;
-    /*0x0002*/ AG._0002 = (s16)spec->_14;
+    /*0x0002*/ AG._0002 = spec->_14;
 
-    /*0x28BC*/ AG.max_tempo = (int)(((((60.0f * 1000.0f * AUDIO_TATUMS_PER_BEAT) * (s16)AG.audio_params.updates_per_frame) / AGC.timeBase) / AG._29D8) / 1.04613);
+    /*0x28BC*/ AG.max_tempo = ((((60.0f * 1000.0f * AUDIO_TATUMS_PER_BEAT) * (s16)AG.audio_params.updates_per_frame) / AGC.timeBase) / AG._29D8);
 
     /*0x2894*/ AG.sample_to_update_delay_scale = (f32)AG.refresh_rate * (f32)AG.audio_params.updates_per_frame / AG.audio_params.ai_sampling_frequency / (s16)AG.max_tempo;
 
@@ -1028,12 +1030,12 @@ void __Nas_MemoryReconfig() {
     a = (spec->_18 + spec->_1C + spec->_20 + 0x40);
     b = (spec->_24 + spec->_28 + spec->_2C + 0x40);
     c = a + b;
-    d = AG.session_heap.length - c - 0x100;
+    d = AG.session_heap.length - 0x100;
     if (/*0x2A34*/ AG.external_heap.base != NULL) {
         /*0x2A38*/ AG.external_heap.current = AG.external_heap.base;
     }
     /*0x34EC*/ AG.audio_heap_info.misc_heap_size = d;
-    /*0x34F8*/ AG.audio_heap_info.cache_heap_size = c;
+    /*0x34F8*/ AG.audio_heap_info.cache_heap_size = 0;
     Nas_SzHeapDivide(&AG.audio_heap_info);
     /*0x34FC*/ AG.cache_heap.data_size = a;
     /*0x3500*/ AG.cache_heap.auto_size = b;
