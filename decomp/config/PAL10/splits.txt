@@ -151,6 +151,13 @@ bs2/cube_draw.c:
 	.sdata2     start:0x814ADDB0 end:0x814ADDB8
 	.bss        start:0x814B5DF0 end:0x814B5EA0
 
+bs2/menu/memcard.c:
+	.text       start:0x813157B8 end:0x8131BF6C
+	.rodata     start:0x8137ECF8 end:0x8137ED40
+	.sbss       start:0x814AD448 end:0x814AD4B0
+	.sdata2     start:0x814ADEE0 end:0x814ADF40
+	.bss        start:0x814B6380 end:0x814B7280
+
 bs2/menu/memcard_card.c:
 	.text       start:0x8131BF6C end:0x8131EDBC
 	.data       start:0x81381290 end:0x813813C0
