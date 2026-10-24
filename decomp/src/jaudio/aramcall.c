@@ -14,7 +14,7 @@ static char extdir[64] = "/Banks/";
 
 /**
  * @TODO: Documentation
- * @note UNUSED Size: 000008
+ * BS2: 81352A80, size 0x8
  */
 void Jac_RegisterARAMCallback(ARAMCallback callback)
 {

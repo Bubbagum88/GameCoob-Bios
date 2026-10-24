@@ -45,7 +45,7 @@ each source file, still assembly).
 | `connect.c` | `81351AA0-81352160` | 11 | 11 | 0 | 0 |
 | `bankdrv.c` | `81352160-813529E0` | 8 | 3 | 5 | 0 |
 | `random.c` | `813529E0-81352A80` | 2 | 2 | 0 | 0 |
-| `aramcall.c` | `81352AA0-81352DA0` | 6 | 6 | 0 | 0 |
+| `aramcall.c` | `81352A80-81352DA0` | 7 | 7 | 0 | 0 |
 | `ja_calc.c` | `81352DA0-81352F20` | 4 | 4 | 0 | 0 |
 | `fat.c` | `81352F20-81353320` | 5 | 5 | 0 | 0 |
 | `cmdstack.c` | `81353320-813534C0` | 6 | 6 | 0 | 0 |
@@ -59,11 +59,16 @@ each source file, still assembly).
 | `oneshot.c` | `81359140-8135A8E0` | 31 | 31 | 0 | 0 |
 | total | | 405 | 328 | 20 | 57 |
 
-Not split yet (no Pikmin counterpart, or edge unclear): `81337740-81338400`
-(3 functions before `aictrl.c`), `813396C0-81339B60` after `StartAudioThread`
-(another audio thread), `8133B560-8133C240` (likely the rest of
-`dvdthread.c`), `8133CB60-8133ED60`, and the big IPL-only block
-`8133EDA0-8134D2C0` (except `memory.c`), about 200 functions.
+The IPL-only code between those units is NEOS, the N64 sound driver run on
+the CPU, which Animal Crossing also ships as `jaudio_NES`
+(github.com/ACreTeam/ac-decomp, CC0). Those units are ported from AC with
+headers in `include/neos/`: `rspsim.c` (`81337740`, the RSP microcode
+simulator; the IPL's `RspStart` is an older, smaller form with a two-tap
+ADPCM decoder and no `A_FILTER`), `neosthread.c`, `driver.c`, `memory.c`,
+`system.c`, `sub_sys.c`, `os.c`, `astest.c`, `channel.c`, `effect.c` and
+`track.c`. Where the IPL differs from AC (echo line, synth-wave samples,
+align32 warnings missing from `Nas_FastCopy`), the source follows the IPL and
+says so in a comment.
 
 Data blobs: `jdsp` (the DSP microcode, `.data` `813F4BA0`, 0x1760 bytes) is
 Nintendo data and is not committed. `configure.py` runs

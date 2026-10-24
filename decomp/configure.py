@@ -621,6 +621,7 @@ config.libs = [
             Object(Matching, "bs2/menu/clock_params.c"),
             Object(NonMatching, "bs2/menu/calendar.c"),
             Object(NonMatching, "bs2/menu/menu_icon_card.c"),
+            Object(NonMatching, "bs2/menu/memcard.c", extra_cflags=["-inline noauto"]),
             Object(NonMatching, "bs2/menu/memcard_card.c", extra_cflags=["-inline noauto"]),
             Object(NonMatching, "bs2/menu/memcard_draw.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
             Object(NonMatching, "bs2/menu/menu_icon_game.c"),
@@ -644,7 +645,7 @@ config.libs = [
         "progress_category": "jaudio",
         "objects": [
             Object(Matching, "jaudio/dummyprobe.c"),
-            Object(NonMatching, "jaudio/ipl_81337740.c"),  # IPL-only, no source yet
+            Object(NonMatching, "jaudio/rspsim.c", extra_cflags=["-i include/neos", "-D_LANGUAGE_C"]),  # from AC jaudio_NES
             Object(NonMatching, "jaudio/aictrl.c"),
             Object(Matching, "jaudio/sample.c"),
             Object(Matching, "jaudio/dummyrom.c"),
@@ -677,7 +678,6 @@ config.libs = [
             Object(Matching, "jaudio/connect.c"),
             Object(Matching, "jaudio/bankdrv.c"),
             Object(Matching, "jaudio/random.c"),
-            Object(NonMatching, "jaudio/ipl_81352A80.c"),  # IPL-only, no source yet
             Object(Matching, "jaudio/aramcall.c"),
             Object(Matching, "jaudio/ja_calc.c"),
             Object(Matching, "jaudio/fat.c"),

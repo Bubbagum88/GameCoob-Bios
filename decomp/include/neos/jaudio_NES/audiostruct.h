@@ -814,7 +814,7 @@ typedef struct echoline_ {
 typedef struct AudioGlobals {
     /* 0x0000 */ u8 _0000;
     /* 0x0001 */ s8 num_synth_reverbs;
-    /* 0x0002 */ u16 _0002;
+    /* 0x0002 */ s16 _0002;
     /* 0x0004 */ u16 _0004;
     /* 0x0006 */ u8 _0006[10];
     /* 0x0010 */ s16* adpcm_code_book;

@@ -165,6 +165,12 @@ bs2/menu/game_params.c:
 	.sbss       start:0x814AD440 end:0x814AD448
 	.sdata2     start:0x814ADED8 end:0x814ADEE0
 	.bss        start:0x814B6360 end:0x814B6380
+bs2/menu/memcard.c:
+	.text       start:0x813157B8 end:0x8131BF6C
+	.rodata     start:0x8137ECF8 end:0x8137ED40
+	.sbss       start:0x814AD448 end:0x814AD4B0
+	.sdata2     start:0x814ADEE0 end:0x814ADF40
+	.bss        start:0x814B6380 end:0x814B7280
 
 bs2/menu/memcard_card.c:
 	.text       start:0x8131BF6C end:0x8131EDBC
@@ -298,8 +304,12 @@ bs2/menu/menu_fx_wipe.c:
 jaudio/dummyprobe.c:
 	.text       start:0x813376A0 end:0x81337740 align:32
 
-jaudio/ipl_81337740.c:
+jaudio/rspsim.c:
 	.text       start:0x81337740 end:0x81338400 align:32
+	.data       start:0x813F0EA0 end:0x813F1128
+	.sdata      start:0x814AD0D0 end:0x814AD0D8
+	.sbss       start:0x814AD630 end:0x814AD658
+	.bss        start:0x815604C0 end:0x815615E0
 
 jaudio/aictrl.c:
 	.text       start:0x81338400 end:0x81338CA0 align:32
@@ -459,11 +469,8 @@ jaudio/random.c:
 	.sdata      start:0x814AD138 end:0x814AD140
 	.sdata2     start:0x814AE3A0 end:0x814AE3B0
 
-jaudio/ipl_81352A80.c:
-	.text       start:0x81352A80 end:0x81352AA0 align:32
-
 jaudio/aramcall.c:
-	.text       start:0x81352AA0 end:0x81352DA0 align:32
+	.text       start:0x81352A80 end:0x81352DA0 align:32
 	.data       start:0x813F6A48 end:0x813F6A88
 	.sdata      start:0x814AD140 end:0x814AD148
 	.sbss       start:0x814AD7C0 end:0x814AD7C8
