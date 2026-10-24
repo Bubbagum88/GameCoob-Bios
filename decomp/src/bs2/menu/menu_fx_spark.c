@@ -141,7 +141,7 @@ void fn_8133498C(f32 *dx, f32 *dy, u16 *rx, u16 *ry, f32 t) {
     f32 py;
     f32 pr;
 
-    px = fn_81334BA8(t + 0.5f * Menu_Get()->fxC4, 1.0f);
+    px = fn_81334BA8(t + Menu_Get()->fxC4 * 0.5f, 1.0f);
     py = fn_81334BA8(0.25f + 2.0f * FxMod(t, 1.0f), 1.0f);
     pr = FxMod(0.25f + t, 1.0f);
     *dx = fn_81334B40(Menu_Get()->fxC4, px, -Menu_Get()->fxB4, Menu_Get()->fxB4);

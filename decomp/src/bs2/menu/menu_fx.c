@@ -1063,12 +1063,14 @@ void fn_8132C830(Vec* out, FxCube* cubes, u16* idx, u32 n) {
     }
     {
         Vec c = { 0.0f, 0.0f, 0.0f };
+        Vec *o = out;
 
         c.x = x / n;
         c.y = y / n;
         c.z = z / n;
-        *out = c;
+        *o = c;
     }
+
 }
 
 /* 0x8132CB60: degrees to a 16-bit angle. */
@@ -1278,6 +1280,30 @@ static inline void Fx_ScaleAbout(Vec* o, f32 sx, f32 sy, f32 sz, FxCube* c) {
         LAST                                                                        \
     }
 
+/* Out-of-line slide-in weight; nothing calls it, so the linker strips it,
+   but its constants stay in .sdata2 ahead of fn_8132D234's. */
+f32 Fx_SlideT(void) {
+    f32 t = (Fx_Progress() - 0.9f) / (1.0f - 0.9f);
+
+    if (t < 0.0f) {
+        t = 0.0f;
+    } else if (t > 1.0f) {
+        t = 1.0f;
+    }
+    return t;
+}
+
+static inline f32 FxSlideOff(void) {
+    f32 t = (Fx_Progress() - 0.9f) / (1.0f - 0.9f);
+
+    if (t < 0.0f) {
+        t = 0.0f;
+    } else if (t > 1.0f) {
+        t = 1.0f;
+    }
+    return t * (-271.0 + (271.0 / 296.0) * fn_8132DE98());
+}
+
 /* 0x8132D234: lay out the three Options text lines. */
 void fn_8132D234(void) {
     s32 i;
@@ -1303,13 +1329,8 @@ void fn_8132D234(void) {
     FX_GROW_LINE(fn_813327B8, fn_81332820, 1)
 #undef LAST
 #define LAST                                                                        \
-    t = (Fx_Progress() - 0.9f) / (1.0f - 0.9f);                                     \
-    if (t < 0.0f) {                                                                 \
-        t = 0.0f;                                                                   \
-    } else if (t > 1.0f) {                                                          \
-        t = 1.0f;                                                                   \
-    }                                                                               \
-    sFxCube[list[i]].pos.x += t * (-271.0 + (271.0 / 296.0) * fn_8132DE98());
+    t = FxSlideOff();                                                               \
+    sFxCube[list[i]].pos.x += t;
     FX_GROW_LINE(fn_81331008, fn_81331070, 2)
 #undef LAST
 }
@@ -1382,8 +1403,7 @@ void fn_8132DEFC(void) {
 
     FX_PLACE_ITEM(fn_813315C8, fn_81331630, 0)
     FX_PLACE_ITEM(fn_813311F4, fn_81331258, 1)
-    switch (sFxState.v[6]) {
-    case 1:
+    if (sFxState.v[6] == 1) {
         switch (sFxState.v[8]) {
         case 0:
             FX_GROW_ITEM(fn_81332008, fn_81332070, 0)
@@ -1395,8 +1415,7 @@ void fn_8132DEFC(void) {
             FX_GROW_ITEM(fn_8133166C, fn_813316D4, 0)
             break;
         }
-        break;
-    case 2:
+    } else if (sFxState.v[6] == 2) {
         switch (sFxState.v[9]) {
         case 0:
             FX_GROW_ITEM(fn_81331858, fn_813318C0, 1)
@@ -1408,7 +1427,6 @@ void fn_8132DEFC(void) {
             FX_GROW_ITEM(fn_81331E1C, fn_81331E84, 1)
             break;
         }
-        break;
     }
 }
 
@@ -1510,6 +1528,10 @@ f32 fn_8132FF6C(void);
 /* Selection bar: slide a line's cells by the title offset and scale them about o. */
 #define FX_SEL_PLACE(listFn, countFn, o, line)                                        \
     list = listFn();                                                                \
+    FX_SEL_MOVE(countFn, o, line)
+
+/* Move the selection bar cells with their title line. */
+#define FX_SEL_MOVE(countFn, o, line)                                                 \
     for (i = 0; i < countFn(); i++) {                                               \
         sFxCube[list[i]].pos.x += Menu_Get()->fxTitle[line].x;                      \
         sFxCube[list[i]].pos.y += Menu_Get()->fxTitle[line].y;                      \
@@ -1535,6 +1557,7 @@ void fn_8132F010(void) {
     Vec o0;
     Vec o1;
     Vec o2;
+    u16* sel;
 
     list = fn_81332C34();
     fn_8132C830(&o0, sFxCube, list, fn_81332C9C());
@@ -1549,7 +1572,9 @@ void fn_8132F010(void) {
     o2.x += Menu_Get()->fxTitle[2].x;
     o2.y += Menu_Get()->fxTitle[2].y;
 
-    FX_SEL_PLACE(fn_813329A4, fn_81332A0C, o0, 0)
+    sel = fn_813329A4();
+    list = sel;
+    FX_SEL_MOVE(fn_81332A0C, o0, 0)
     FX_SEL_GROW(fn_81332A0C, o0, 0, -=,
                 sFxCube[list[i]].pos.x += Menu_Get()->fxSel[0];, Menu_Get()->fxSel[1])
     FX_SEL_PLACE(fn_81332A48, fn_81332AB0, o0, 0)
@@ -1603,6 +1628,16 @@ void fn_8132FFF0(void) {
 
 /* Squash factor of the fade-out's first tenth. */
 static inline f32 Fx_Squash(f32 t) {
+    if (t < 0.1f) {
+        return 1.0f - 0.05f * Hermite(t, 0.0f, 0.0f, 0.0f, 0.1f, 1.0f, 0.0f);
+    } else {
+        return 1.0f - 0.05f * Hermite(t, 0.1f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f);
+    }
+}
+
+/* Out-of-line copy of Fx_Squash; nothing calls it, so the linker strips it,
+   but its constants stay in .sdata2. */
+f32 Fx_SquashOut(f32 t) {
     if (t < 0.1f) {
         return 1.0f - 0.05f * Hermite(t, 0.0f, 0.0f, 0.0f, 0.1f, 1.0f, 0.0f);
     } else {
@@ -1700,12 +1735,17 @@ void fn_813306FC(s32 from, s32 to) {
     }
 }
 
+static inline f32 FxCursorT(void) {
+    return sFxCursor.v[2] / 10.0f;
+}
+
 /* 0x813307B4: cross-fade the cursor glyph between its old and new row. */
 void fn_813307B4(void) {
     u16* fromList;
     u16 fromCount;
-    u16* toList;
     u16 toCount;
+    u16* toList;
+
     s32 i;
 
     switch (sFxState.v[5]) {
@@ -1726,23 +1766,18 @@ void fn_813307B4(void) {
         sFxAlpha[fn_81332C34()[i]] = 0;
     }
     for (i = 0; i < fromCount; i++) {
-        f32 t;
-
         sFxCube[sFxCount + i] = sFxCube[fromList[i]];
-        t = sFxCursor.v[2] / 10.0f;
-        sFxCube[sFxCount + i].pos.x -= 0.2 * (sFxCursor.f[0] * (sFxCursor.unk14[i] * t));
-        sFxAlpha[sFxCount + i] = 255.0f * (1.0f - t);
+        sFxCube[sFxCount + i].pos.x -= 0.2 * (sFxCursor.f[0] * (sFxCursor.unk14[i] * FxCursorT()));
+        sFxAlpha[sFxCount + i] = 255.0f * (1.0f - FxCursorT());
         sFxLightCol[sFxCount + i] = sFxLight2;
         sFxDarkCol[sFxCount + i] = sFxDark2;
     }
     sFxCount += fromCount;
     for (i = 0; i < toCount; i++) {
-        f32 t;
-
         sFxCube[sFxCount + i] = sFxCube[toList[i]];
-        t = sFxCursor.v[2] / 10.0f;
-        sFxCube[sFxCount + i].pos.x += 0.2 * (sFxCursor.f[0] * (sFxCursor.unk14[fromCount + i] * (1.0f - t)));
-        sFxAlpha[sFxCount + i] = 255.0f * t;
+        sFxCube[sFxCount + i].pos.x += 0.2 * (sFxCursor.f[0] * (sFxCursor.unk14[fromCount + i] * (1.0f - FxCursorT())));
+        sFxAlpha[sFxCount + i] = 255.0f * FxCursorT();
+
         sFxLightCol[sFxCount + i] = sFxLight2;
         sFxDarkCol[sFxCount + i] = sFxDark2;
     }
@@ -1759,22 +1794,17 @@ void fn_81330B7C(void) {
     list = fn_813327B8();
     n = fn_81332820();
     for (i = 0; i < n; i++) {
-        f32 t;
-
         sFxCube[sFxCount + i] = sFxCube[list[i]];
-        t = sFxCursor.v[2] / 10.0f;
-        sFxCube[sFxCount + i].pos.x -= 0.2 * (sFxCursor.f[0] * (sFxCursor.unk14[i] * t));
-        sFxAlpha[sFxCount + i] = sFxAlpha[list[i]] * (1.0f - t);
+        sFxCube[sFxCount + i].pos.x -= 0.2 * (sFxCursor.f[0] * (sFxCursor.unk14[i] * FxCursorT()));
+        sFxAlpha[sFxCount + i] = sFxAlpha[list[i]] * (1.0f - FxCursorT());
+
         sFxLightCol[sFxCount + i] = sFxLightCol[list[i]];
         sFxDarkCol[sFxCount + i] = sFxDarkCol[list[i]];
     }
     sFxCount += n;
     for (i = 0; i < n; i++) {
-        f32 t;
+        sFxCube[list[i]].pos.x += 0.2 * (sFxCursor.f[0] * (sFxCursor.unk14[i] * (1.0f - FxCursorT())));
+        sFxAlpha[list[i]] = sFxAlpha[list[i]] * FxCursorT();
 
-        t = sFxCursor.v[2] / 10.0f;
-        sFxCube[list[i]].pos.x += 0.2 * (sFxCursor.f[0] * (sFxCursor.unk14[i] * (1.0f - t)));
-        t = sFxCursor.v[2] / 10.0f;
-        sFxAlpha[list[i]] = sFxAlpha[list[i]] * t;
     }
 }
