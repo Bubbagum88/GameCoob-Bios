@@ -829,6 +829,7 @@ extern Acmd* Nas_DriveRsp(s16* aiBuf, s32 aiBufLen, Acmd* cmd, s32 updateIndex) 
 }
 
 extern Acmd* Nas_SynthMain(s32 chan_id, commonch* common, driverch* driver, s16* samples, s32 samples_per_update, Acmd* cmd, s32 update_idx) {
+    u8 pad[8];
     s32 size;
     void* reverbAddrSrc;
     smzwavetable* sample;
