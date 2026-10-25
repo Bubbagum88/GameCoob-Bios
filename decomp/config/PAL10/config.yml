@@ -10,6 +10,14 @@ detect_objects: true
 detect_strings: true
 write_asm: true
 fill_gaps: true
+add_relocations:
+# OSInit's `__ArenaLo` lis/addi: dtk's linker-symbol detection misses this older OSInit
+- source: .text:0x8135B7E0
+  type: ha
+  target: __ArenaLo
+- source: .text:0x8135B7E4
+  type: l
+  target: __ArenaLo
 block_relocations:
 # word in the app's .data asset blob that only looks like a pointer into dvdthread's CALLSTACK
 - source: .data:0x81436730

@@ -1,5 +1,3 @@
-// Partly matching: only GameIcon_CalcMtx differs (scale / by-value copy stack slots).
-//
 // Game Play icon (PAL 1.0 BS2, 0x813230F0..0x81323C30): a ring of 16 small
 // cubes behind the Game Play submenu. The cubes fly out one after the other,
 // the ring spins and tilts while the submenu is open, and they shrink back to
@@ -105,6 +103,17 @@ void GameIcon_UpdateFace(void) {
     }
 }
 
+/* Passing the scale through VecRef gives the IPL's stack layout for the
+ * by-value Vec argument (rodata copy, then the argument copy above it). */
+static inline Vec* VecRef(Vec* v) { (void)v; return v; }
+
+static inline void GameIcon_SetMtx(J3DModelInstance* inst, Mtx m, GameParams* p) {
+    Vec scale = { 0.0f, 0.0f, 0.0f };
+
+    scale.z = scale.y = scale.x = p->cubeScale;
+    J3D_SetModelMtx(inst, m, *VecRef(&scale));
+}
+
 /* 0x813235D4 */
 void GameIcon_CalcMtx(void) {
     GameParams* p = Game_GetParams();
@@ -119,16 +128,7 @@ void GameIcon_CalcMtx(void) {
         MtxRotTrans(-0x4000, 0, 0, rot, 0.0f, 0.0f, 0.0f);
         PSMTXConcat(rot, m, m);
         PSMTXConcat(Menu_GetCubeMtx(), m, m);
-        {
-            Vec scale = { 0.0f, 0.0f, 0.0f };
-            Vec *d;
-
-            scale.x = p->cubeScale;
-            scale.y = p->cubeScale;
-            scale.z = p->cubeScale;
-            d = &scale;
-            J3D_SetModelMtx(&sGameIconInst[i], m, *d);
-        }
+        GameIcon_SetMtx(&sGameIconInst[i], m, p);
         J3D_SetViewMtx(&sGameIconInst[i], Camera_GetView());
         J3D_CalcJoints(&sGameIconInst[i]);
     }

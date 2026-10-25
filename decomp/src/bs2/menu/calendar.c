@@ -1,5 +1,3 @@
-// Partly matching: only Clock_Commit differs (&now and &now.sec share one register).
-//
 // "Calendar" submenu (PAL 1.0 BS2, 0x81328CA4..0x81329890): view and set the
 // date and time.
 //
@@ -35,6 +33,10 @@ static s8 sClockPulseStep;  /* +-2 */
 
 ClockEdit gClockEdit;
 
+/* Spelled as a byte offset: with &gClockEdit.now the compiler shares one
+ * register between it and the &now.sec store in the time case. */
+#define CLOCK_NOW ((OSCalendarTime*)((u8*)&gClockEdit + 0xC))
+
 /* days before each month, normal and leap year */
 static s32 sDaysInMonth[12] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
 static s32 sDaysInMonthLeap[12] = { 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
@@ -56,13 +58,13 @@ void Clock_Commit(void) {
 
     switch (sClockShownSub) {
     case CLOCK_DATE:
-        OSTicksToCalendarTime(OSGetTime(), &gClockEdit.now);
+        OSTicksToCalendarTime(OSGetTime(), CLOCK_NOW);
         gClockEdit.now.year = gClockEdit.value[0];
         gClockEdit.now.mon = gClockEdit.value[1];
         gClockEdit.now.mday = gClockEdit.value[2];
         break;
     case CLOCK_TIME:
-        OSTicksToCalendarTime(OSGetTime(), &gClockEdit.now);
+        OSTicksToCalendarTime(OSGetTime(), CLOCK_NOW);
         gClockEdit.now.hour = gClockEdit.value[0];
         gClockEdit.now.min = gClockEdit.value[1];
         gClockEdit.now.sec = gClockEdit.value[2];
@@ -130,14 +132,14 @@ s32 Clock_UpdateMenu(void) {
         Sound_Play(SE_DECIDE);
         switch (sClockRow) {
         case CLOCKROW_DATE:
-            OSTicksToCalendarTime(OSGetTime(), &gClockEdit.now);
+            OSTicksToCalendarTime(OSGetTime(), CLOCK_NOW);
             gClockEdit.value[0] = gClockEdit.now.year;
             gClockEdit.value[1] = gClockEdit.now.mon;
             gClockEdit.value[2] = gClockEdit.now.mday;
             sClockSub = CLOCK_DATE;
             break;
         case CLOCKROW_TIME:
-            OSTicksToCalendarTime(OSGetTime(), &gClockEdit.now);
+            OSTicksToCalendarTime(OSGetTime(), CLOCK_NOW);
             gClockEdit.value[0] = gClockEdit.now.hour;
             gClockEdit.value[1] = gClockEdit.now.min;
             gClockEdit.value[2] = 0;

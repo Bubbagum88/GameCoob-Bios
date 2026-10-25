@@ -310,7 +310,7 @@ jaudio/rspsim.c:
 	.data       start:0x813F0EA0 end:0x813F1128
 	.sdata      start:0x814AD0D0 end:0x814AD0D8
 	.sbss       start:0x814AD630 end:0x814AD658
-	.bss        start:0x815604C0 end:0x815615E0
+	.bss        start:0x815604C0 end:0x815615E0 align:32
 
 jaudio/aictrl.c:
 	.text       start:0x81338400 end:0x81338CA0 align:32
@@ -395,6 +395,10 @@ jaudio/channel.c:
 
 jaudio/effect.c:
 	.text       start:0x81348CA0 end:0x81349920 align:32
+	.data       start:0x813F4760 end:0x813F4788
+	.sdata      start:0x814AD110 end:0x814AD118
+	.sbss       start:0x814AD788 end:0x814AD798
+	.sdata2     start:0x814AE2C8 end:0x814AE2F8
 
 jaudio/track.c:
 	.text       start:0x81349920 end:0x8134D2C0 align:32

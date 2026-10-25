@@ -129,28 +129,42 @@ void ClockIcon_UpdateFace(void) {
     sClockSecPos.y = 100.0f * CosS(-t.sec * 0x10000 / 60 - i);
 }
 
-static inline Vec ClockIcon_DialScale(s16 n) {
+/* Passing the scale through VecRef gives the IPL's stack layout for the
+ * by-value Vec argument (rodata copy, then the argument copy above it). */
+static inline Vec* VecRef(Vec* v) {
+    (void)v;
+    return v;
+}
+
+static inline void ClockIcon_SetDialMtx(J3DModelInstance* inst, Mtx m, s16 n) {
     Vec v = { 0.0f, 0.0f, 0.0f };
 
     v.x = 0.7f * (n > 30 ? 30 : n) / 30.0f;
     v.y = 0.7f * (n > 30 ? 30 : n) / 30.0f;
     v.z = 0.7f * (n > 30 ? 30 : n) / 30.0f;
-    return v;
+    J3D_SetModelMtx(inst, m, *VecRef(&v));
 }
 
-static inline Vec ClockIcon_SecScale(void) {
+/* min and hour each get their own copy of the 0.55 literal in .rodata */
+static inline void ClockIcon_SetMinMtx(J3DModelInstance* inst, Mtx m) {
+    Vec v = { 0.55f, 0.55f, 0.55f };
+
+    J3D_SetModelMtx(inst, m, *VecRef(&v));
+}
+
+static inline void ClockIcon_SetHourMtx(J3DModelInstance* inst, Mtx m) {
+    Vec v = { 0.55f, 0.55f, 0.55f };
+
+    J3D_SetModelMtx(inst, m, *VecRef(&v));
+}
+
+static inline void ClockIcon_SetSecMtx(J3DModelInstance* inst, Mtx m) {
     Vec v = { 0.0f, 0.0f, 0.0f };
 
     v.x = 0.55f * HAND_T() / 10.0f;
     v.y = 0.55f * HAND_T() / 10.0f;
     v.z = 0.55f * HAND_T() / 10.0f;
-    return v;
-}
-
-static inline Vec ClockIcon_HandScale(void) {
-    Vec v = { 0.55f, 0.55f, 0.55f };
-
-    return v;
+    J3D_SetModelMtx(inst, m, *VecRef(&v));
 }
 
 /* 0x81326808 */
@@ -167,8 +181,7 @@ void ClockIcon_CalcMtx(void) {
     for (i = 0; i < CLOCK_DIAL; i++) {
         PSMTXTrans(t, sClockDialPos[i].x, sClockDialPos[i].y, 0.0f);
         PSMTXConcat(base, t, m);
-        J3D_SetModelMtx(&sClockDial[i], m,
-                        ClockIcon_DialScale(sClockFrame));
+        ClockIcon_SetDialMtx(&sClockDial[i], m, sClockFrame);
         J3D_SetViewMtx(&sClockDial[i], Camera_GetView());
         J3D_CalcJoints(&sClockDial[i]);
     }
@@ -176,7 +189,7 @@ void ClockIcon_CalcMtx(void) {
     for (i = 0; i < CLOCK_MIN; i++) {
         PSMTXTrans(t, sClockMinPos[i].x, sClockMinPos[i].y, 0.0f);
         PSMTXConcat(base, t, m);
-        J3D_SetModelMtx(&sClockMin[i], m, ClockIcon_HandScale());
+        ClockIcon_SetMinMtx(&sClockMin[i], m);
         J3D_SetViewMtx(&sClockMin[i], Camera_GetView());
         J3D_CalcJoints(&sClockMin[i]);
     }
@@ -184,14 +197,14 @@ void ClockIcon_CalcMtx(void) {
     for (i = 0; i < CLOCK_HOUR; i++) {
         PSMTXTrans(t, sClockHourPos[i].x, sClockHourPos[i].y, 0.0f);
         PSMTXConcat(base, t, m);
-        J3D_SetModelMtx(&sClockHour[i], m, ClockIcon_HandScale());
+        ClockIcon_SetHourMtx(&sClockHour[i], m);
         J3D_SetViewMtx(&sClockHour[i], Camera_GetView());
         J3D_CalcJoints(&sClockHour[i]);
     }
 
     PSMTXTrans(t, sClockSecPos.x, sClockSecPos.y, 0.0f);
     PSMTXConcat(base, t, m);
-    J3D_SetModelMtx(&sClockSec, m, ClockIcon_SecScale());
+    ClockIcon_SetSecMtx(&sClockSec, m);
     J3D_SetViewMtx(&sClockSec, Camera_GetView());
     J3D_CalcJoints(&sClockSec);
 }

@@ -230,25 +230,30 @@ static inline void Scene_SquashWorld(Scene *s) {
     MtxScaleCols(sWorldMtx, &squash);
 }
 
-static inline Vec Scene_VecSplat(Scene *s) {
+/* See Scene_ColorRef: passing the Vec through this pointer helper gives the
+   original's stack layout for the by-value copy. */
+static inline Vec *Scene_VecRef(Vec *v) {
+    (void)v;
+    return v;
+}
+
+static inline void Scene_SetModelSplat(Scene *s, MtxPtr w) {
     Vec r = { 0.0f, 0.0f, 0.0f };
 
-    r.x = s->modelScale;
-    r.y = s->modelScale;
-    r.z = s->modelScale;
-    return r;
+    r.z = r.y = r.x = s->modelScale;
+    J3D_SetModelMtx(Scene_GetBgInner(), w, *Scene_VecRef(&r));
 }
 
-static inline Vec Scene_VecOne(void) {
+static inline void Scene_SetModelOne(MtxPtr w) {
     Vec r = { 1.0f, 1.0f, 1.0f };
 
-    return r;
+    J3D_SetModelMtx(Scene_GetLogo(), w, *Scene_VecRef(&r));
 }
 
-static inline Vec Scene_VecOuter(void) {
+static inline void Scene_SetModelOuter(MtxPtr w) {
     Vec r = { 1.01f, 1.01f, 1.01f };
 
-    return r;
+    J3D_SetModelMtx(Scene_GetBgOuter(), w, *Scene_VecRef(&r));
 }
 
 /* 0x8130C90C */
@@ -263,15 +268,15 @@ void Scene_DrawWorld(void) {
     PSMTXIdentity(id);
     PSMTXConcat(m, id, w);
     Scene_SquashWorld(s);
-    J3D_SetModelMtx(Scene_GetBgInner(), w, Scene_VecSplat(s));
+    Scene_SetModelSplat(s, w);
     view = Camera_GetView();
     J3D_SetViewMtx(Scene_GetBgInner(), view);
     J3D_CalcJoints(Scene_GetBgInner());
-    J3D_SetModelMtx(Scene_GetLogo(), w, Scene_VecOne());
+    Scene_SetModelOne(w);
     view = Camera_GetView();
     J3D_SetViewMtx(Scene_GetLogo(), view);
     J3D_CalcJoints(Scene_GetLogo());
-    J3D_SetModelMtx(Scene_GetBgOuter(), w, Scene_VecOuter());
+    Scene_SetModelOuter(w);
     view = Camera_GetView();
     J3D_SetViewMtx(Scene_GetBgOuter(), view);
     J3D_CalcJoints(Scene_GetBgOuter());
@@ -937,16 +942,24 @@ static void Scene_DrawAsk(Scene *s, u16 idx, s16 sel, u8 alpha) {
     Scene_DrawList(boxes, entries, 1, 2, y, listH, sel, alpha);
 }
 
-static inline void Scene_SetAmbDark(void) {
-    GXColor c[1] = { { 0x28, 0x28, 0x28, 0xFF } };
+/* Passing a struct through this pointer helper gives the original's stack
+   layout: the by-value copy sits right above the local, and the helper's
+   parameter slot goes to the bottom of the frame. */
+static inline GXColor *Scene_ColorRef(GXColor *c) {
+    (void)c;
+    return c;
+}
 
-    GXSetChanAmbColor(GX_COLOR0A0, c[0]);
+static inline void Scene_SetAmbDark(void) {
+    GXColor c = { 0x28, 0x28, 0x28, 0xFF };
+
+    GXSetChanAmbColor(GX_COLOR0A0, *Scene_ColorRef(&c));
 }
 
 static inline void Scene_SetAmbFull(void) {
-    GXColor c[1] = { { 0xFF, 0xFF, 0xFF, 0xFF } };
+    GXColor c = { 0xFF, 0xFF, 0xFF, 0xFF };
 
-    GXSetChanAmbColor(GX_COLOR0A0, c[0]);
+    GXSetChanAmbColor(GX_COLOR0A0, *Scene_ColorRef(&c));
 }
 
 /* 0x8130E17C */
@@ -991,10 +1004,6 @@ void Scene_Draw2DDisc(void) {
     }
 }
 
-static inline u8 Scene_ShakeAlpha(Scene *s, s32 shake) {
-    return s->shakeAlpha * shake / SCENE_SHAKE_MAX;
-}
-
 /* 0x8130E3C8 */
 void Scene_Draw2DSpinOut(void) {
     Scene *s = Scene_Get();
@@ -1007,7 +1016,7 @@ void Scene_Draw2DSpinOut(void) {
         if (shake > SCENE_SHAKE_MAX) {
             shake = SCENE_SHAKE_MAX;
         }
-        sBgInner.alpha = Scene_ShakeAlpha(s, shake);
+        sBgInner.alpha = (u8)(s->shakeAlpha * shake / SCENE_SHAKE_MAX);
         sBigCube.alpha = (u8)(s->bgAlpha * s->outFrame / s->outFadeFrames);
         sText.alpha = (u8)(s->bgAlpha * s->outFrame / s->outFadeFrames);
         sBgInner.alpha = (u8)((s->outFadeFrames - s->outFrame) * (s->shakeAlpha * shake) /
@@ -1039,10 +1048,10 @@ void Scene_Draw2DSpinOut(void) {
 
 /* 0x8130E5C0 */
 void Scene_Draw2DMenu(void) {
+    Scene *s = Scene_Get();
     MenuWork *menu;
     u8 alpha;
 
-    Scene_Get();
     menu = Menu_Get();
     alpha = menu->bgMinAlpha + (255 - menu->bgMinAlpha) * (0x7FFF - menu->zoom) / 0x7FFF;
     sBigCube.alpha = alpha;
