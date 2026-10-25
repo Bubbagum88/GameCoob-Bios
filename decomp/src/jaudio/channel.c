@@ -21,30 +21,32 @@ static void Nas_AddListHead(link* list, link* l);
 static void Nas_smzSetParam(channel* chan, drvparam* param) {
     f32 volL;
     f32 volR;
-    s32 strongL;
     s32 strongR;
+    s32 strongL;
     s32 halfPanIdx;
     f32 velocity;
     u8 pan;
     u8 panScale;
-    u8 reverbVol;
+    commonch* common;
     phase stereoPhase;
     s32 phaseEffects;
     STACK_PAD_VAR(2);
-    f32* REF_volL = &volL;
+    u8 reverbVol;
+    f32* REF_velocity = &velocity;
 
     phaseEffects = chan->playback_ch.stereo_headset_effects;
     Nas_smzSetPitch(chan, param->playback.pitch);
 
+    common = &chan->common_ch;
     velocity = param->playback.velocity;
     pan = param->playback.pan;
     reverbVol = param->playback.target_reverb_volume;
     stereoPhase = param->playback.stereo_phase;
     panScale = pan & 0x7F;
-    chan->common_ch.strong_right = FALSE;
-    chan->common_ch.strong_left = FALSE;
-    chan->common_ch.strong_reverb_right = stereoPhase.strong_reverb_right;
-    chan->common_ch.strong_reverb_left = stereoPhase.strong_reverb_left;
+    common->strong_right = FALSE;
+    common->strong_left = FALSE;
+    common->strong_reverb_right = stereoPhase.strong_reverb_right;
+    common->strong_reverb_left = stereoPhase.strong_reverb_left;
 
 
     if (phaseEffects && AG.sound_mode == SOUND_OUTPUT_HEADSET) {
@@ -53,17 +55,17 @@ static void Nas_smzSetParam(channel* chan, drvparam* param) {
             halfPanIdx = 0x3F;
         }
 
-        chan->common_ch.haas_effect_right_delay_size = CDELAYTABLE[halfPanIdx];
-        chan->common_ch.haas_effect_left_delay_size = CDELAYTABLE[0x3F - halfPanIdx];
-        chan->common_ch.use_haas_effect = TRUE;
+        common->haas_effect_right_delay_size = CDELAYTABLE[halfPanIdx];
+        common->haas_effect_left_delay_size = CDELAYTABLE[0x3F - halfPanIdx];
+        common->use_haas_effect = TRUE;
 
         volL = PhoneLeft[panScale];
         volR = PhoneLeft[0x7F - panScale];
     } else if (phaseEffects && AG.sound_mode == SOUND_OUTPUT_STEREO) {
         strongL = strongR = FALSE;
-        chan->common_ch.haas_effect_left_delay_size = 0;
-        chan->common_ch.haas_effect_right_delay_size = 0;
-        chan->common_ch.use_haas_effect = FALSE;
+        common->haas_effect_left_delay_size = 0;
+        common->haas_effect_right_delay_size = 0;
+        common->use_haas_effect = FALSE;
         volL = WideLeft[panScale];
         volR = WideLeft[0x7F - panScale];
 
@@ -73,36 +75,36 @@ static void Nas_smzSetParam(channel* chan, drvparam* param) {
             strongR = TRUE;
         }
 
-        chan->common_ch.strong_right = strongR;
-        chan->common_ch.strong_left = strongL;
+        common->strong_right = strongR;
+        common->strong_left = strongL;
 
         switch (stereoPhase.type) {
             case PHASE_TYPE_0:
                 break;
             case PHASE_TYPE_1:
-                chan->common_ch.strong_right = stereoPhase.strong_right;
-                chan->common_ch.strong_left = stereoPhase.strong_left;
+                common->strong_right = stereoPhase.strong_right;
+                common->strong_left = stereoPhase.strong_left;
                 break;
             case PHASE_TYPE_2:
-                chan->common_ch.strong_right = strongR | stereoPhase.strong_right;
-                chan->common_ch.strong_left = strongL | stereoPhase.strong_left;
+                common->strong_right = strongR | stereoPhase.strong_right;
+                common->strong_left = strongL | stereoPhase.strong_left;
                 break;
             case PHASE_TYPE_3:
-                chan->common_ch.strong_right = strongR ^ stereoPhase.strong_right;
-                chan->common_ch.strong_left = strongL ^ stereoPhase.strong_left;
+                common->strong_right = strongR ^ stereoPhase.strong_right;
+                common->strong_left = strongL ^ stereoPhase.strong_left;
                 break;
         }
     } else {
         switch (AG.sound_mode) {
             case SOUND_OUTPUT_MONO:
-                chan->common_ch.strong_reverb_right = FALSE;
-                chan->common_ch.strong_reverb_left = FALSE;
+                common->strong_reverb_right = FALSE;
+                common->strong_reverb_left = FALSE;
                 volL = 0.707f;
                 volR = 0.707f;
                 break;
             default:
-                chan->common_ch.strong_right = stereoPhase.strong_right;
-                chan->common_ch.strong_left = stereoPhase.strong_left;
+                common->strong_right = stereoPhase.strong_right;
+                common->strong_left = stereoPhase.strong_left;
                 volL = StereoLeft[panScale];
                 volR = StereoLeft[0x7F - panScale];
                 break;
@@ -117,15 +119,15 @@ static void Nas_smzSetParam(channel* chan, drvparam* param) {
         velocity = 1.0f;
     }
     
-    chan->common_ch.target_volume_left = (s32)((velocity * volL) * (0x1000 - 0.001f));
-    chan->common_ch.target_volume_right = (s32)((velocity * volR) * (0x1000 - 0.001f));
+    common->target_volume_left = (s32)((velocity * volL) * (0x1000 - 0.001f));
+    common->target_volume_right = (s32)((velocity * volR) * (0x1000 - 0.001f));
 
-    chan->common_ch.gain = param->playback.gain;
-    chan->common_ch.filter = param->playback.filter_buf;
-    chan->common_ch.comb_filter_size = param->comb_filter_size;
-    chan->common_ch.comb_filter_gain = param->comb_filter_gain;
-    chan->common_ch.target_reverb_volume = reverbVol;
-    chan->common_ch.surround_effect_idx = param->playback.surround_effect_idx;
+    common->gain = param->playback.gain;
+    common->filter = param->playback.filter_buf;
+    common->comb_filter_size = param->comb_filter_size;
+    common->comb_filter_gain = param->comb_filter_gain;
+    common->target_reverb_volume = reverbVol;
+    common->surround_effect_idx = param->playback.surround_effect_idx;
 }
 
 static void Nas_smzSetPitch(channel* chan, f32 pitch) {

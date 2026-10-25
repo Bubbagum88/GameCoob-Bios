@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="960" height="584" font-family="Verdana,DejaVu Sans,sans-serif">
 <rect width="100%" height="100%" fill="#0d1117"/>
 <rect x="0" y="0" width="960" height="44" fill="#161b22"/>
-<rect x="0" y="40" width="743.1" height="4" fill="#2ea043"/>
-<text x="12" y="27" font-size="16" fill="#e6edf3">BS2 PAL 1.0: 77.41% code, 45.32% data, 1895/2041 functions</text>
+<rect x="0" y="40" width="744.8" height="4" fill="#2ea043"/>
+<text x="12" y="27" font-size="16" fill="#e6edf3">BS2 PAL 1.0: 77.58% code, 45.32% data, 1896/2041 functions</text>
 <g><title>BS2 menu</title>
 <rect x="0.0" y="44.0" width="297.2" height="540.0" fill="#21262d" stroke="#0d1117"/>
 <text x="4.0" y="56.0" font-size="11" fill="#e6edf3">BS2 menu</text>
@@ -107,8 +107,8 @@
 <rect x="299.2" y="274.1" width="117.6" height="98.9" fill="#6e9d36" stroke="#0d1117" stroke-width="1"/>
 <text x="302.2" y="286.1" font-size="10" fill="#0d1117">memory</text>
 </g>
-<g><title>jaudio/channel: 7504 bytes, 61.7% matched, 96.8% fuzzy, 28/31 functions</title>
-<rect x="416.9" y="274.1" width="73.6" height="98.9" fill="#6d9d36" stroke="#0d1117" stroke-width="1"/>
+<g><title>jaudio/channel: 7504 bytes, 73.6% matched, 98.8% fuzzy, 29/31 functions</title>
+<rect x="416.9" y="274.1" width="73.6" height="98.9" fill="#599e3a" stroke="#0d1117" stroke-width="1"/>
 <text x="419.9" y="286.1" font-size="10" fill="#0d1117">channel</text>
 </g>
 <g><title>jaudio/driverinterface: 6488 bytes, 100.0% matched, 100.0% fuzzy, 33/33 functions</title>
