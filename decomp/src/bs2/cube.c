@@ -49,7 +49,7 @@ CubeState *Cube_Get(void) {
 
 /* 0x8130EF5C */
 static void Cube_ClearGrid(void) {
-    s32 f, x, y;
+    int f, x, y;
 
     for (f = 0; f < CUBE_FACES; f++) {
         for (x = 0; x < CUBE_GRID; x++) {
@@ -151,7 +151,7 @@ void Cube_Init(BOOL first) {
 
 /* 0x8130F2F0: advance tile lifetimes by one path step. */
 static void Cube_TickTiles(void) {
-    s32 f, x, y;
+    int f, x, y;
     CubeTile *t;
 
     for (f = 0; f < CUBE_FACES; f++) {
@@ -178,7 +178,6 @@ static void Cube_TickTiles(void) {
 /* 0x8130F418: move one cell (or over an edge onto another face) and leave
    a tile there. */
 static void Cube_StepGrid(void) {
-    CubeTile *t;
     s8 face;
 
     switch (sCube->dir) {
@@ -194,7 +193,9 @@ static void Cube_StepGrid(void) {
     case CUBE_DIR_YNEG:
         sCube->y = sCube->y > 0 ? sCube->y - 1 : 0;
         break;
-    default:
+    case CUBE_DIR_FACE0:
+    case CUBE_DIR_FACE0 + 1:
+    case CUBE_DIR_FACE0 + 2:
         face = sCube->dir - CUBE_DIR_FACE0;
         if ((face + 3 - sCube->face) % 3 == 1 && sCube->y == 16) {
             sCube->y = sCube->x;
@@ -217,8 +218,8 @@ static void Cube_StepGrid(void) {
 
 /* 0x8130F6B8: roll about the leading bottom edge. */
 static void Cube_CalcRollMtx(Mtx m) {
-    Mtx t;
     Mtx rot;
+    Mtx t;
     s32 angle;
     s32 max = 0x4000;
 
@@ -231,7 +232,7 @@ static void Cube_CalcRollMtx(Mtx m) {
     if (angle > max) {
         angle = max;
     }
-    MtxRotTrans(0, 0, 0, t, -sCube->size / 2, sCube->size / 2, -sCube->size / 2);
+    MtxRotTrans(0, 0, 0, t, -(s32)sCube->size / 2, sCube->size / 2, -sCube->size / 2);
     PSMTXConcat(m, t, m);
     MtxRotAxis(rot, 'x', angle);
     PSMTXConcat(rot, m, m);
@@ -240,9 +241,10 @@ static void Cube_CalcRollMtx(Mtx m) {
 /* 0x8130F7F0: turn to the step direction, move to the grid cell, and onto
    the current face. */
 static void Cube_CalcGridMtx(Mtx m) {
-    Mtx t;
     Mtx face;
+    Mtx t;
     s16 yaw = 0;
+    u8 unused[4];
 
     switch (sCube->dir) {
     case CUBE_DIR_XPOS:
@@ -258,9 +260,9 @@ static void Cube_CalcGridMtx(Mtx m) {
         yaw = 0;
         break;
     }
-    PSMTXTrans(t, sCube->size / 2, 0.0f, sCube->size / 2);
+    PSMTXTrans(t, (s32)sCube->size / 2, 0.0f, sCube->size / 2);
     PSMTXConcat(t, m, m);
-    MtxRotTrans(0, yaw, 0, t, -sCube->size / 2, 0.0f, -sCube->size / 2);
+    MtxRotTrans(0, yaw, 0, t, -(s32)sCube->size / 2, 0.0f, -sCube->size / 2);
     PSMTXConcat(t, m, m);
     PSMTXTrans(t, -(sCube->x - 16) * sCube->size, 0.0f, -(sCube->y - 16) * sCube->size);
     PSMTXConcat(t, m, m);
@@ -324,6 +326,15 @@ static s32 Cube_UpdateFall(void) {
     return CUBE_PHASE_FALL;
 }
 
+#pragma auto_inline on
+static f32 Cube_TextFrame(void) {
+    if (sCube->textFrame > sCube->textDelay) {
+        return 60.0f * ((f32)(sCube->textFrame - sCube->textDelay) / sCube->textFrames);
+    }
+    return 0.0f;
+}
+#pragma auto_inline reset
+
 /* 0x8130FBC4: grow to 1.5x while making riseTurns quarter turns. */
 static void Cube_CalcRiseMtx(Mtx m) {
     Mtx t;
@@ -332,6 +343,8 @@ static void Cube_CalcRiseMtx(Mtx m) {
     s32 angle;
     f32 y;
     f32 lo;
+    u8 unused[36];
+    CubeState *c;
 
     scale = 1.0f + 0.5f * (s32)sCube->riseFrame / (s32)sCube->riseFrames;
     if (scale > 1.5f) {
@@ -343,24 +356,15 @@ static void Cube_CalcRiseMtx(Mtx m) {
         angle = max;
     }
     PSMTXScale(m, scale, scale, scale);
-    y = sCube->size / 2 - sCube->riseFrame * ((1.0f + scale) * sCube->size) / sCube->riseFrames * 0.5f;
-    lo = -(scale * sCube->size * 0.5f);
+    y = sCube->size / 2 - sCube->riseFrame * ((1.0f + scale) * sCube->size) / sCube->riseFrames / 2.0f;
+    lo = -(scale * (c = sCube)->size / 2.0f);
     if (y < lo) {
         y = lo;
     }
-    MtxRotTrans(angle, 0, 0, t, scale * -sCube->size * 0.5f, y, scale * -sCube->size * 0.5f);
+    MtxRotTrans(angle, 0, 0, t, scale * -(s32)c->size / 2.0f, y, scale * -c->size / 2.0f);
     PSMTXConcat(t, m, m);
     MtxRotTrans(0, -0x4000, -0x4000, t, 0.0f, 0.0f, 0.0f);
     PSMTXConcat(t, m, m);
-}
-
-static inline Vec Cube_VecSplat(f32 v) {
-    Vec r = { 0.0f, 0.0f, 0.0f };
-
-    r.x = v;
-    r.y = v;
-    r.z = v;
-    return r;
 }
 
 static inline void Cube_DrawPath(void) {
@@ -371,14 +375,23 @@ static inline void Cube_DrawPath(void) {
     PSMTXIdentity(sCubeMtx);
     Cube_CalcRollMtx(sCubeMtx);
     Cube_CalcGridMtx(sCubeMtx);
-    MtxRotTrans(0, 0, 0, t, sCube->size * 3 / 2, sCube->size * 3 / 2, sCube->size * 3 / 2);
+    MtxRotTrans(0, 0, 0, t, (s32)sCube->size * 3 / 2, sCube->size * 3 / 2, sCube->size * 3L / 2);
     PSMTXConcat(t, sCubeMtx, sCubeMtx);
     PSMTXConcat(Scene_GetWorldMtx(), sCubeMtx, sCubeMtx);
-    if (sPhase == CUBE_PHASE_FALL) {
+    switch (sPhase) {
+    case CUBE_PHASE_FALL:
         PSMTXTrans(t, 0.0f, sCube->fallHeight, 0.0f);
         PSMTXConcat(t, sCubeMtx, sCubeMtx);
+        break;
     }
-    J3D_SetModelMtx(Cube_GetModel(), sCubeMtx, Cube_VecSplat(s->modelScale));
+    {
+        Vec scale = { 0.0f, 0.0f, 0.0f };
+
+        scale.x = s->modelScale;
+        scale.y = s->modelScale;
+        scale.z = s->modelScale;
+        J3D_SetModelMtx(Cube_GetModel(), sCubeMtx, scale);
+    }
     view = Camera_GetView();
     J3D_SetViewMtx(Cube_GetModel(), view);
     J3D_CalcJoints(Cube_GetModel());
@@ -388,6 +401,19 @@ static inline Vec Cube_VecOne(void) {
     Vec v = { 1.0f, 1.0f, 1.0f };
 
     return v;
+}
+
+static inline void Cube_SetModel(Scene *s) {
+    MtxPtr view;
+    Vec r = { 0.0f, 0.0f, 0.0f };
+
+    r.x = s->modelScale;
+    r.y = s->modelScale;
+    r.z = s->modelScale;
+    J3D_SetModelMtx(Cube_GetModel(), sCubeMtx, r);
+    view = Camera_GetView();
+    J3D_SetViewMtx(Cube_GetModel(), view);
+    J3D_CalcJoints(Cube_GetModel());
 }
 
 /* 0x8130FDE0: phases 2..4 (rise, drop, logo). */
@@ -402,7 +428,7 @@ static void Cube_DrawRise(void) {
 
     PSMTXIdentity(sCubeMtx);
     Cube_CalcRiseMtx(sCubeMtx);
-    MtxRotTrans(0, 0, 0, t, sCube->size * 3 / 2, sCube->size * 3 / 2, sCube->size * 3 / 2);
+    MtxRotTrans(0, 0, 0, t, (s32)sCube->size * 3 / 2, sCube->size * 3 / 2, sCube->size * 3L / 2);
     PSMTXConcat(t, sCubeMtx, sCubeMtx);
     PSMTXConcat(Scene_GetWorldMtx(), sCubeMtx, sCubeMtx);
     switch (sPhase) {
@@ -424,17 +450,7 @@ static void Cube_DrawRise(void) {
         break;
     }
     PSMTXConcat(t, sCubeMtx, sCubeMtx);
-    {
-        Vec scale = { 0.0f, 0.0f, 0.0f };
-
-        scale.x = s->modelScale;
-        scale.y = s->modelScale;
-        scale.z = s->modelScale;
-        J3D_SetModelMtx(Cube_GetModel(), sCubeMtx, scale);
-    }
-    view = Camera_GetView();
-    J3D_SetViewMtx(Cube_GetModel(), view);
-    J3D_CalcJoints(Cube_GetModel());
+    Cube_SetModel(s);
 }
 
 /* Phases 0 and 1: fall, then roll along the path. */
@@ -465,11 +481,7 @@ void Cube_Draw(void) {
 
     /* The "GAMECUBE" wordmark joint animation (60 frames) runs off the
        text clock that starts with the drop. */
-    if (sCube->textFrame > sCube->textDelay) {
-        frame = 60.0f * ((f32)(sCube->textFrame - sCube->textDelay) / sCube->textFrames);
-    } else {
-        frame = 0.0f;
-    }
+    frame = Cube_TextFrame();
     PSMTXIdentity(m);
     J3D_SetModelMtx(Scene_GetLogoText(), m, Cube_VecOne());
     view = Camera_GetView();
@@ -507,6 +519,7 @@ static void Cube_UpdateJingle(void) {
 s32 Cube_Update(BOOL playJingle) {
     Scene *s;
     BOOL textDone;
+    s32 next;
 
     sPhase = sNextPhase;
     if (playJingle) {
@@ -521,7 +534,7 @@ s32 Cube_Update(BOOL playJingle) {
             sCube->stepFrame = 0;
             sCube->stepDoneFrame = 0;
             sCube->step++;
-            if (sCubePath[sCube->step].dir == CUBE_DIR_END) {
+            if ((s32)sCubePath[sCube->step].dir == 8) {
                 sCube->done = 1;
                 Cube_TickTiles();
             } else {
@@ -530,11 +543,12 @@ s32 Cube_Update(BOOL playJingle) {
             }
         }
         if (sCube->dir == CUBE_DIR_RISE) {
-            sNextPhase = CUBE_PHASE_RISE;
+            next = CUBE_PHASE_RISE;
         } else {
             sCube->stepFrame++;
-            sNextPhase = CUBE_PHASE_PATH;
+            next = CUBE_PHASE_PATH;
         }
+        sNextPhase = next;
         break;
     case CUBE_PHASE_RISE:
         sRunning = FALSE;
@@ -555,15 +569,16 @@ s32 Cube_Update(BOOL playJingle) {
         sCube->dropVel += sCube->dropAccel;
         if (sCube->dropFrame > sCube->dropFrames + sCube->dropDelay) {
             sDropPending = TRUE;
-            sNextPhase = CUBE_PHASE_LOGO;
+            next = CUBE_PHASE_LOGO;
         } else {
             sCube->dropFrame++;
             sCube->textFrame++;
             if (sCube->textFrame >= sCube->textFrames + sCube->textDelay) {
                 sCube->textFrame = sCube->textFrames + sCube->textDelay;
             }
-            sNextPhase = CUBE_PHASE_DROP;
+            next = CUBE_PHASE_DROP;
         }
+        sNextPhase = next;
         break;
     case CUBE_PHASE_LOGO:
         s = Scene_Get();
