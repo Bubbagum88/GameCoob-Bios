@@ -262,23 +262,19 @@ void Scene_DrawWorld(void) {
     Scene *s = Scene_Get();
     Mtx m;
     Mtx id;
-    MtxPtr view;
 
     Scene_CalcWorldMtx(m);
     PSMTXIdentity(id);
     PSMTXConcat(m, id, w);
     Scene_SquashWorld(s, w);
     Scene_SetModelSplat(s, w);
-    view = Camera_GetView();
-    J3D_SetViewMtx(Scene_GetBgInner(), view);
+    J3D_SetViewMtx(Scene_GetBgInner(), Camera_GetView());
     J3D_CalcJoints(Scene_GetBgInner());
     Scene_SetModelOne(w);
-    view = Camera_GetView();
-    J3D_SetViewMtx(Scene_GetLogo(), view);
+    J3D_SetViewMtx(Scene_GetLogo(), Camera_GetView());
     J3D_CalcJoints(Scene_GetLogo());
     Scene_SetModelOuter(sWorldMtx);
-    view = Camera_GetView();
-    J3D_SetViewMtx(Scene_GetBgOuter(), view);
+    J3D_SetViewMtx(Scene_GetBgOuter(), Camera_GetView());
     J3D_CalcJoints(Scene_GetBgOuter());
 
     Cube_Draw();

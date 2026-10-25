@@ -132,7 +132,6 @@ s32 Scene_SpinOut(void) {
     Scene *t = Scene_Get();
     Mtx rot;
     Mtx wobble;
-    MtxPtr view;
     f32 k;    /* unused, but they take stack slots in the original */
     f32 rest;
 
@@ -151,8 +150,7 @@ s32 Scene_SpinOut(void) {
     PSMTXConcat(rot, wobble, sSpinOutMtx);
 
     Scene_SetBigCubeMtx(s);
-    view = Camera_GetView();
-    J3D_SetViewMtx(Scene_GetBigCube(), view);
+    J3D_SetViewMtx(Scene_GetBigCube(), Camera_GetView());
     J3D_CalcJoints(Scene_GetBigCube());
     if (s->outFrame <= s->outFadeFrames) {
         Scene_DrawWorld();
