@@ -1120,7 +1120,8 @@ s32 CardThread_FindInOther(u8 slot, s16 file) {
 /* 0x8131E130 */
 /* Re-read a file's entry after it changed. */
 inline void CardThread_ReloadEntry(u8 slot, s16 file, CARDDir* dir) {
-    if (__CARDGetStatusEx(slot, file, dir) == 0) {
+    s32 result = __CARDGetStatusEx(slot, file, dir);
+    if (result == 0) {
         CardThread_ReadEntry(slot, file, dir);
     }
 }
@@ -1160,7 +1161,7 @@ void CardThread_DoCopyMove(u8 slot, s16 file, s32 cmd) {
     u32 sector;
     s16 dst = -1;
     BOOL created = FALSE;
-    s32 error;
+    s32 error = 0;
     int other;
     s32 result;
 
@@ -1170,7 +1171,6 @@ void CardThread_DoCopyMove(u8 slot, s16 file, s32 cmd) {
         return;
     }
 
-    error = 0;
     sector = 0;
     result = CARDGetSectorSize(0, &sector0);
     if (result < 0) {
