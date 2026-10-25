@@ -885,18 +885,20 @@ void Scene_Draw2DMode0(void) {
 }
 
 /* 0x8130DF64: string `idx` with a yes/no choice under it, in a frame. */
-static inline void Scene_MeasureList(GlhTextBox *boxes, SthEntry *entries, u16 first, u16 count, u16 *maxW, u16 *w, u16 *h) {
+/* Widest of `count` strings from entry `first` into *outW; their height goes to *h. */
+static inline void Scene_MeasureList(GlhTextBox *boxes, SthEntry *entries, u16 first, u16 count, u16 *outW, u16 *h) {
+    u16 maxW = 0;
+    u16 w = 0;
     u16 i;
 
-    *maxW = 0;
-    *w = 0;
     for (i = 0; i < count; i++) {
         char *str = (char *)&entries[i + first] + entries[first + i].ofs;
-        Glh_MeasureString(&boxes[entries[first + i].box], str, w, h);
-        if (*maxW < *w) {
-            *maxW = *w;
+        Glh_MeasureString(&boxes[entries[first + i].box], str, &w, h);
+        if (maxW < w) {
+            maxW = w;
         }
     }
+    *outW = maxW;
 }
 
 static void Scene_DrawAsk(Scene *s, u16 idx, s16 sel, u8 alpha) {
@@ -914,18 +916,17 @@ static void Scene_DrawAsk(Scene *s, u16 idx, s16 sel, u8 alpha) {
     u16 totalH;
     u16 x;
     u16 y;
-    u16 w;
 
     c.a = alpha;
     GX_Setup2DView();
     GX_Setup2DText();
     e = &entries[idx];
     Glh_MeasureString(&boxes[e->box], (char *)e + e->ofs, &textW, &textH);
-    Scene_MeasureList(boxes, entries, 1, 2, &maxW, &w, &listH);
+    Scene_MeasureList(boxes, entries, 1, 2, &maxW, &listH);
     frameH = listH + boxes[entries[1].box].spacing * 16;
     textH += disp->textPad << 5;
     frameH += disp->textPad << 5;
-    totalH = textH + (frameH + s->askGap * 16);
+    totalH = textH + frameH + s->askGap * 16;
     Glh_DrawStringOfs(idx, sDialogSth, sDialogGlh, &c, 0, (u16)(-totalH / 2 + textH / 2));
     box = &boxes[e->box];
     x = box->x - (maxW / 2 + disp->textPad * 16);
