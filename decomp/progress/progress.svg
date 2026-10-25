@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="960" height="584" font-family="Verdana,DejaVu Sans,sans-serif">
 <rect width="100%" height="100%" fill="#0d1117"/>
 <rect x="0" y="0" width="960" height="44" fill="#161b22"/>
-<rect x="0" y="40" width="768.6" height="4" fill="#2ea043"/>
-<text x="12" y="27" font-size="16" fill="#e6edf3">BS2 PAL 1.0: 80.06% code, 45.33% data, 1923/2041 functions</text>
+<rect x="0" y="40" width="799.8" height="4" fill="#2ea043"/>
+<text x="12" y="27" font-size="16" fill="#e6edf3">BS2 PAL 1.0: 83.31% code, 45.58% data, 1944/2041 functions</text>
 <g><title>BS2 menu</title>
 <rect x="0.0" y="44.0" width="297.2" height="540.0" fill="#21262d" stroke="#0d1117"/>
 <text x="4.0" y="56.0" font-size="11" fill="#e6edf3">BS2 menu</text>
@@ -11,30 +11,30 @@
 <rect x="2.0" y="60.0" width="154.8" height="186.4" fill="#34a042" stroke="#0d1117" stroke-width="1"/>
 <text x="5.0" y="72.0" font-size="10" fill="#0d1117">menu_fx</text>
 </g>
-<g><title>bs2/menu/memcard: 26548 bytes, 55.9% matched, 98.5% fuzzy, 38/55 functions</title>
-<rect x="156.8" y="60.0" width="138.4" height="186.4" fill="#769d34" stroke="#0d1117" stroke-width="1"/>
+<g><title>bs2/menu/memcard: 26548 bytes, 62.5% matched, 98.7% fuzzy, 42/55 functions</title>
+<rect x="156.8" y="60.0" width="138.4" height="186.4" fill="#6c9d37" stroke="#0d1117" stroke-width="1"/>
 <text x="159.8" y="72.0" font-size="10" fill="#0d1117">memcard</text>
 </g>
-<g><title>bs2/menu/menu: 18380 bytes, 63.1% matched, 98.9% fuzzy, 23/30 functions</title>
-<rect x="2.0" y="246.4" width="131.9" height="135.4" fill="#6a9d37" stroke="#0d1117" stroke-width="1"/>
+<g><title>bs2/menu/menu: 18380 bytes, 68.4% matched, 98.9% fuzzy, 24/30 functions</title>
+<rect x="2.0" y="246.4" width="131.9" height="135.4" fill="#629e39" stroke="#0d1117" stroke-width="1"/>
 <text x="5.0" y="258.4" font-size="10" fill="#0d1117">menu</text>
 </g>
-<g><title>bs2/menu/memcard_card: 11856 bytes, 52.5% matched, 96.0% fuzzy, 35/42 functions</title>
-<rect x="133.9" y="246.4" width="85.1" height="135.4" fill="#7c9d33" stroke="#0d1117" stroke-width="1"/>
+<g><title>bs2/menu/memcard_card: 11856 bytes, 63.3% matched, 98.8% fuzzy, 37/42 functions</title>
+<rect x="133.9" y="246.4" width="85.1" height="135.4" fill="#6a9d37" stroke="#0d1117" stroke-width="1"/>
 <text x="136.9" y="258.4" font-size="10" fill="#0d1117">memcard_card</text>
 </g>
 <g><title>bs2/menu/memcard_draw: 10612 bytes, 30.3% matched, 98.9% fuzzy, 12/21 functions</title>
 <rect x="219.0" y="246.4" width="76.2" height="135.4" fill="#a09b2c" stroke="#0d1117" stroke-width="1"/>
 </g>
-<g><title>bs2/menu/menu_icon_option: 9444 bytes, 71.0% matched, 99.9% fuzzy, 14/18 functions</title>
-<rect x="2.0" y="381.8" width="86.3" height="106.4" fill="#5e9e39" stroke="#0d1117" stroke-width="1"/>
+<g><title>bs2/menu/menu_icon_option: 9444 bytes, 76.2% matched, 99.9% fuzzy, 15/18 functions</title>
+<rect x="2.0" y="381.8" width="86.3" height="106.4" fill="#559e3b" stroke="#0d1117" stroke-width="1"/>
 </g>
 <g><title>bs2/menu/menu_fx_anim: 8328 bytes, 100.0% matched, 100.0% fuzzy, 98/98 functions</title>
 <rect x="2.0" y="488.2" width="86.3" height="93.8" fill="#2ea043" stroke="#0d1117" stroke-width="1"/>
 <text x="5.0" y="500.2" font-size="10" fill="#0d1117">menu_fx_anim</text>
 </g>
-<g><title>bs2/menu/menu_fx_grid: 7520 bytes, 46.5% matched, 99.9% fuzzy, 10/11 functions</title>
-<rect x="88.3" y="381.8" width="92.6" height="78.9" fill="#869c31" stroke="#0d1117" stroke-width="1"/>
+<g><title>bs2/menu/menu_fx_grid: 7520 bytes, 100.0% matched, 100.0% fuzzy, 11/11 functions</title>
+<rect x="88.3" y="381.8" width="92.6" height="78.9" fill="#2ea043" stroke="#0d1117" stroke-width="1"/>
 <text x="91.3" y="393.8" font-size="10" fill="#0d1117">menu_fx_grid</text>
 </g>
 <g><title>bs2/menu/menu_icon_card: 6184 bytes, 48.8% matched, 99.9% fuzzy, 9/13 functions</title>
@@ -45,21 +45,21 @@
 <rect x="88.3" y="525.6" width="92.6" height="56.4" fill="#3b9f40" stroke="#0d1117" stroke-width="1"/>
 <text x="91.3" y="537.6" font-size="10" fill="#0d1117">menu_fx_spark</text>
 </g>
-<g><title>bs2/menu/menu_icon_clock: 5304 bytes, 24.4% matched, 99.8% fuzzy, 5/8 functions</title>
-<rect x="180.9" y="381.8" width="68.7" height="75.0" fill="#aa9b2a" stroke="#0d1117" stroke-width="1"/>
+<g><title>bs2/menu/menu_icon_clock: 5304 bytes, 46.7% matched, 99.8% fuzzy, 6/8 functions</title>
+<rect x="180.9" y="381.8" width="68.7" height="75.0" fill="#859c31" stroke="#0d1117" stroke-width="1"/>
 </g>
-<g><title>bs2/menu/options: 3520 bytes, 52.2% matched, 99.3% fuzzy, 9/12 functions</title>
-<rect x="249.6" y="381.8" width="45.6" height="75.0" fill="#7c9d33" stroke="#0d1117" stroke-width="1"/>
+<g><title>bs2/menu/options: 3520 bytes, 100.0% matched, 100.0% fuzzy, 12/12 functions</title>
+<rect x="249.6" y="381.8" width="45.6" height="75.0" fill="#2ea043" stroke="#0d1117" stroke-width="1"/>
 </g>
-<g><title>bs2/menu/menu_fx_wipe: 3360 bytes, 54.9% matched, 100.0% fuzzy, 7/8 functions</title>
-<rect x="180.9" y="456.8" width="59.9" height="54.5" fill="#789d34" stroke="#0d1117" stroke-width="1"/>
+<g><title>bs2/menu/menu_fx_wipe: 3360 bytes, 100.0% matched, 100.0% fuzzy, 8/8 functions</title>
+<rect x="180.9" y="456.8" width="59.9" height="54.5" fill="#2ea043" stroke="#0d1117" stroke-width="1"/>
 </g>
-<g><title>bs2/menu/calendar: 3052 bytes, 90.0% matched, 99.9% fuzzy, 10/11 functions</title>
-<rect x="240.8" y="456.8" width="54.4" height="54.5" fill="#3e9f40" stroke="#0d1117" stroke-width="1"/>
+<g><title>bs2/menu/calendar: 3052 bytes, 100.0% matched, 100.0% fuzzy, 11/11 functions</title>
+<rect x="240.8" y="456.8" width="54.4" height="54.5" fill="#2ea043" stroke="#0d1117" stroke-width="1"/>
 <text x="243.8" y="468.8" font-size="10" fill="#0d1117">calendar</text>
 </g>
-<g><title>bs2/menu/menu_icon_game: 2880 bytes, 87.5% matched, 100.0% fuzzy, 7/8 functions</title>
-<rect x="180.9" y="511.3" width="39.6" height="70.7" fill="#429f3f" stroke="#0d1117" stroke-width="1"/>
+<g><title>bs2/menu/menu_icon_game: 2880 bytes, 100.0% matched, 100.0% fuzzy, 8/8 functions</title>
+<rect x="180.9" y="511.3" width="39.6" height="70.7" fill="#2ea043" stroke="#0d1117" stroke-width="1"/>
 </g>
 <g><title>bs2/menu/game: 2328 bytes, 100.0% matched, 100.0% fuzzy, 9/9 functions</title>
 <rect x="220.5" y="511.3" width="45.3" height="49.9" fill="#2ea043" stroke="#0d1117" stroke-width="1"/>
@@ -251,8 +251,8 @@
 <rect x="556.1" y="44.0" width="279.4" height="250.0" fill="#21262d" stroke="#0d1117"/>
 <text x="560.1" y="56.0" font-size="11" fill="#e6edf3">bs2</text>
 </g>
-<g><title>bs2/scene_intro: 9404 bytes, 80.4% matched, 99.3% fuzzy, 23/27 functions</title>
-<rect x="558.1" y="60.0" width="87.9" height="99.7" fill="#4e9f3d" stroke="#0d1117" stroke-width="1"/>
+<g><title>bs2/scene_intro: 9404 bytes, 89.3% matched, 99.4% fuzzy, 25/27 functions</title>
+<rect x="558.1" y="60.0" width="87.9" height="99.7" fill="#409f3f" stroke="#0d1117" stroke-width="1"/>
 <text x="561.1" y="72.0" font-size="10" fill="#0d1117">scene_intro</text>
 </g>
 <g><title>bs2/cube: 6512 bytes, 52.1% matched, 99.8% fuzzy, 15/19 functions</title>
@@ -299,8 +299,8 @@
 <g><title>bs2/scene_spinout: 2108 bytes, 36.8% matched, 96.4% fuzzy, 2/4 functions</title>
 <rect x="707.9" y="192.3" width="38.4" height="51.2" fill="#969c2e" stroke="#0d1117" stroke-width="1"/>
 </g>
-<g><title>bs2/gMRanim: 1996 bytes, 33.9% matched, 99.8% fuzzy, 3/5 functions</title>
-<rect x="707.9" y="243.5" width="38.4" height="48.5" fill="#9a9b2d" stroke="#0d1117" stroke-width="1"/>
+<g><title>bs2/gMRanim: 1996 bytes, 100.0% matched, 100.0% fuzzy, 5/5 functions</title>
+<rect x="707.9" y="243.5" width="38.4" height="48.5" fill="#2ea043" stroke="#0d1117" stroke-width="1"/>
 </g>
 <g><title>bs2/pad: 1896 bytes, 100.0% matched, 100.0% fuzzy, 7/7 functions</title>
 <rect x="746.3" y="192.3" width="46.1" height="38.4" fill="#2ea043" stroke="#0d1117" stroke-width="1"/>
@@ -402,8 +402,8 @@
 <rect x="610.3" y="310.0" width="54.8" height="56.2" fill="#2ea043" stroke="#0d1117" stroke-width="1"/>
 <text x="613.3" y="322.0" font-size="10" fill="#0d1117">OSRtc</text>
 </g>
-<g><title>dolphin/os/OS: 2184 bytes, 61.9% matched, 100.0% fuzzy, 11/12 functions</title>
-<rect x="665.1" y="310.0" width="34.7" height="56.2" fill="#6c9d36" stroke="#0d1117" stroke-width="1"/>
+<g><title>dolphin/os/OS: 2184 bytes, 100.0% matched, 100.0% fuzzy, 12/12 functions</title>
+<rect x="665.1" y="310.0" width="34.7" height="56.2" fill="#2ea043" stroke="#0d1117" stroke-width="1"/>
 <text x="668.1" y="322.0" font-size="10" fill="#0d1117">OS</text>
 </g>
 <g><title>dolphin/os/OSContext: 2152 bytes, 100.0% matched, 100.0% fuzzy, 12/12 functions</title>

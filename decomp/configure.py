@@ -604,7 +604,7 @@ config.libs = [
             Object(Matching, "bs2/gMRdraw.c", extra_cflags=["-fp_contract off"]),
             Object(Matching, "bs2/gMRshape.c"),
             Object(NonMatching, "bs2/gMRtexture.c"),
-            Object(NonMatching, "bs2/gMRanim.c"),
+            Object(Matching, "bs2/gMRanim.c"),
             Object(NonMatching, "bs2/mtx.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
             Object(Matching, "bs2/gBase.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
             Object(Matching, "bs2/rnd.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
