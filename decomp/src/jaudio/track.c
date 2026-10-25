@@ -2134,18 +2134,15 @@ static void Nas_GroupSeq(group* grp) {
 }
 
 extern void Nas_MySeqMain(u32 frames_left) {
-    group* grp;
     group* main_grp;
     u32 i;
     STACK_PAD_VAR(4);
 
     AG.sample_state_offset = (AG.audio_params.updates_per_frame - (frames_left + 1)) * AG.num_channels;
     for (i = 0; i < AG.audio_params.num_groups; i++) {
-        grp = &AG.groups[i];
-
-        if (grp->flags.enabled == TRUE) {
-            Nas_GroupSeq(grp);
-            Nas_MainCtrl(grp);
+        if (AG.groups[i].flags.enabled == TRUE) {
+            Nas_GroupSeq(&AG.groups[i]);
+            Nas_MainCtrl(&AG.groups[i]);
         }
     }
 

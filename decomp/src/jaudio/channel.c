@@ -364,6 +364,7 @@ extern void Nas_UpdateChannel(void) {
 
 extern wtstr* NoteToVoice(voicetable* vtbl, s32 note) {
     wtstr* voice_p;
+    wtstr* ret;
 
     if (note < vtbl->normal_range_low) {
         return &vtbl->low_pitch_tuned_sample;
@@ -373,7 +374,8 @@ extern wtstr* NoteToVoice(voicetable* vtbl, s32 note) {
         voice_p = &vtbl->high_pitch_tuned_sample;
     }
 
-    return voice_p;
+    // FAKE: the copy keeps voice_p out of r3
+    return ret = voice_p;
 }
 
 extern voicetable* ProgToVp(s32 prog, s32 inst) {
@@ -769,13 +771,13 @@ extern void Nas_AllocVoices(chnode* node, s32 count) {
     link* src;
     link* dst;
     
+    (void)&j;
     Nas_DeAllocAllVoices(node);
     
     for (i = 0, j = 0; j < count; i++) {
         if (i == 4) {
             return;
         }
-    s32* REF_count = &count;
 
         switch (i) {
             case 0:
@@ -1036,27 +1038,32 @@ null_return:
 
 extern void Nas_ChannelInit(void) {
     s32 i;
+    STACK_PAD_VAR(1);
     channel* chan;
+    u8 pad[8];
+    playbackch* pb;
     s32* REF_i = &i;
+    channel** REF_chan = &chan;
 
     for (i = 0; i < AG.num_channels; i++) {
         chan = &AG.channels[i];
+        pb = &chan->playback_ch;
         chan->common_ch = NA_CHINIT_TABLE[0];
-        chan->playback_ch.priority = 0;
-        chan->playback_ch.status = 0;
-        chan->playback_ch.current_parent_note = NA_NO_NOTE;
-        chan->playback_ch.wanted_parent_note = NA_NO_NOTE;
-        chan->playback_ch.previous_parent_note = NA_NO_NOTE;
-        chan->playback_ch.wave_id = 0;
-        chan->playback_ch.params.velocity = 0.0f;
-        chan->playback_ch.adsr_volume_scale_unused = 0;
-        chan->playback_ch.adsr_envp.state.as_byte = 0;
-        chan->playback_ch.vibrato_tmtable.active = FALSE;
-        chan->playback_ch.portamento_sweep.current = 0;
-        chan->playback_ch.portamento_sweep.speed = 0;
-        chan->playback_ch.stereo_headset_effects = FALSE;
-        chan->playback_ch.start_sample_pos = 0;
+        pb->priority = 0;
+        pb->status = 0;
+        pb->current_parent_note = NA_NO_NOTE;
+        pb->wanted_parent_note = NA_NO_NOTE;
+        pb->previous_parent_note = NA_NO_NOTE;
+        pb->wave_id = 0;
+        pb->params.velocity = 0.0f;
+        pb->adsr_volume_scale_unused = 0;
+        pb->adsr_envp.state.as_byte = 0;
+        pb->vibrato_tmtable.active = FALSE;
+        pb->portamento_sweep.current = 0;
+        pb->portamento_sweep.speed = 0;
+        pb->stereo_headset_effects = FALSE;
+        pb->start_sample_pos = 0;
         chan->driver_ch.synth_params = (synthparams*)Nas_NcHeapAlloc(&AG.misc_heap, sizeof(synthparams));
-        chan->playback_ch.params.filter_buf = (s16*)Nas_NcHeapAlloc(&AG.misc_heap, 8 * sizeof(s16));
+        pb->params.filter_buf = (s16*)Nas_NcHeapAlloc(&AG.misc_heap, 8 * sizeof(s16));
     }
 }

@@ -252,20 +252,17 @@ extern void Nap_SetU16(u32 cmd, u16 param) {
 extern s32 Nap_SendStart(void) {
     static u8 worst = 0;
     s32 msg;
-    s32 pending;
-    STACK_PAD_VAR(6);
+    STACK_PAD_VAR(5);
 
     if (AUDIO_SYSTEM_READY != TRUE) {
         return -1;
     }
 
-    // IPL: tracks the deepest command backlog instead of AC's OSReport.
-    pending = (u8)((AG.thread_cmd_write_pos + 0x100) - AG.thread_cmd_read_pos);
-    if (worst < pending) {
-        worst = pending;
+    if (worst < (s32)(u8)((AG.thread_cmd_write_pos + 0x100) - AG.thread_cmd_read_pos)) {
+        worst = (u8)((AG.thread_cmd_write_pos + 0x100) - AG.thread_cmd_read_pos);
     }
 
-    msg = (AG.thread_cmd_write_pos & 0xFF) | ((AG.thread_cmd_read_pos & 0xFF) << 8);
+    msg = (((s32)AG.thread_cmd_read_pos & 0xFF) << 8) | ((s32)AG.thread_cmd_write_pos & 0xFF);
     if (Z_osSendMesg(AG.thread_cmd_proc_mq_p, (OSMesg)msg, OS_MESG_NOBLOCK) != -1) {
         AG.thread_cmd_read_pos = AG.thread_cmd_write_pos;
     } else {
@@ -316,22 +313,26 @@ extern void Nap_Process1Command(AudioPort* port) {
 
 extern void Nap_AudioPortProcess(u32 msg) {
     static u8 begin = 0;
-    STACK_PAD_VAR(4);
+    u8 end;
+    AudioPort* port;
+    u8 now;
+    u8* REF_end = &end;
+    STACK_PAD_VAR(3);
 
     if (AG.thread_cmd_queue_finished == FALSE) {
         begin = (msg >> 8) & 0xFF;
     }
 
-    while (TRUE) {
-        u32 now = begin;
-        AudioPort* port;
+    end = msg & 0xFF;
 
-        if (now == (msg & 0xFF)) {
+    while (TRUE) {
+        now = begin;
+        if (now == end) {
             AG.thread_cmd_queue_finished = FALSE;
             return;
         }
 
-        port = &AG.audio_port_cmds[now];
+        port = &AG.audio_port_cmds[now & 0xFF];
         begin++;
         if (port->command.opcode == AUDIOCMD_SYS_STOP_PROCESSING) {
             AG.thread_cmd_queue_finished = TRUE;

@@ -1313,8 +1313,9 @@ void __SearchBank(SwMember* entry, s32 bank) {
  */
 void __KillSwMember(SwMember* a) {
     for (int i = 0, end = AG.bank_header->numEntries; i < end; i++) {
-        int bank0 = AG.voice_info[i].wave_bank_id0;
-        int bank1 = AG.voice_info[i].wave_bank_id1;
+        voiceinfo* vi = &AG.voice_info[i];
+        int bank0 = vi->wave_bank_id0;
+        int bank1 = vi->wave_bank_id1;
         int* REF_end = &end;
         int* REF_bank0 = &bank0;
         int* REF_bank1 = &bank1;
@@ -1388,10 +1389,12 @@ void Emem_KillSwMember() {
         s32* REF_id1 = &id1;
         if ((id0 != 0xff || id1 != 0xff) && Nas_SzCacheCheck(1, 3, i) && Nas_CheckIDbank(i)) {
             for (j = 0; j < AG.emem_persistent_wave_heap.num_entries; j++) {
-                __Do_EmemKill(&AG.emem_persistent_wave_heap.entries[j], id0, id1, i);
+                SwMember* m = &AG.emem_persistent_wave_heap.entries[j];
+                __Do_EmemKill(m, id0, id1, i);
             }
             for (j = 0; j < AG.emem_temporary_wave_heap.num_entries; j++) {
-                __Do_EmemKill(&AG.emem_temporary_wave_heap.entries[j], id0, id1, i);
+                SwMember* m = &AG.emem_temporary_wave_heap.entries[j];
+                __Do_EmemKill(m, id0, id1, i);
             }
         }
     }

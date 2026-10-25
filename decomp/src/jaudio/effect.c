@@ -147,8 +147,6 @@ static f32 Nas_Modulator(tmtable* table) {
     f32 invDepth;
     f32 result;
     f32 t;
-    f32* REF_t = &t;
-    f32* REF_depth = &depth;
 
     if (table->delay != 0) {
         table->delay--;
@@ -196,10 +194,14 @@ static f32 Nas_Modulator(tmtable* table) {
     }
 
     mod = Nas_ModTableRead(table);
-    t = table->depth;
-    depth = 1.0f + (t / 4096.0f);
+    depth = 1.0f + (table->depth / 4096.0f);
     invDepth = 1.0f / depth;
     result = 1.0f / ((depth - invDepth) * (mod + 32768.0f) / 65536.0f + invDepth);
+
+    static f32 activeVibratoFreqScaleSum = 0.0f;
+    static s32 activeVibratoCount = 0;
+    activeVibratoFreqScaleSum += result;
+    activeVibratoCount++;
     return result;
 }
 
@@ -218,17 +220,24 @@ extern void Nas_ChannelModulation(channel* channel) {
     }
 }
 
+// IPL name of AC's WAVEMEM_TABLE (synth-wave table, 813F3340).
+extern s16* Nas_WaveSamples[];
+
 extern void Nas_ChannelModInit(channel* chan) {
-    tmtable* table = &chan->playback_ch.vibrato_tmtable;
+    tmtable* table;
+    playbackch* pb;
     vibparam* param;
 
-    table->active = TRUE;
-    table->curve = WAVEMEM_TABLE[2];
+    pb = &chan->playback_ch;
+    table = &pb->vibrato_tmtable;
 
-    if (chan->playback_ch.current_parent_note->_0A.flags.use_vibrato == TRUE) {
-        table->vibrato_params = &chan->playback_ch.current_parent_note->sub_track->vibrato_params;
+    table->active = TRUE;
+    table->curve = Nas_WaveSamples[2];
+
+    if (pb->current_parent_note->_0A.flags.use_vibrato == TRUE) {
+        table->vibrato_params = &pb->current_parent_note->sub_track->vibrato_params;
     } else {
-        table->vibrato_params = &chan->playback_ch.current_parent_note->vibrato_params;
+        table->vibrato_params = &pb->current_parent_note->vibrato_params;
     }
 
     param = table->vibrato_params;
@@ -244,7 +253,7 @@ extern void Nas_ChannelModInit(channel* chan) {
         table->rate = (int)param->rate_start;
     }
 
-    chan->playback_ch.vibrato_frequency_scale = 1.0f;
+    pb->vibrato_frequency_scale = 1.0f;
     table->time = 0;
     table->delay = param->delay;
 }

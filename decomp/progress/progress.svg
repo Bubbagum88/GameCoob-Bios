@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="960" height="584" font-family="Verdana,DejaVu Sans,sans-serif">
 <rect width="100%" height="100%" fill="#0d1117"/>
 <rect x="0" y="0" width="960" height="44" fill="#161b22"/>
-<rect x="0" y="40" width="736.6" height="4" fill="#2ea043"/>
-<text x="12" y="27" font-size="16" fill="#e6edf3">BS2 PAL 1.0: 76.72% code, 45.32% data, 1884/2041 functions</text>
+<rect x="0" y="40" width="743.1" height="4" fill="#2ea043"/>
+<text x="12" y="27" font-size="16" fill="#e6edf3">BS2 PAL 1.0: 77.41% code, 45.32% data, 1895/2041 functions</text>
 <g><title>BS2 menu</title>
 <rect x="0.0" y="44.0" width="297.2" height="540.0" fill="#21262d" stroke="#0d1117"/>
 <text x="4.0" y="56.0" font-size="11" fill="#e6edf3">BS2 menu</text>
@@ -95,20 +95,20 @@
 <rect x="430.0" y="60.0" width="124.1" height="112.6" fill="#499f3e" stroke="#0d1117" stroke-width="1"/>
 <text x="433.0" y="72.0" font-size="10" fill="#0d1117">jammain_2</text>
 </g>
-<g><title>jaudio/track: 14260 bytes, 39.9% matched, 98.7% fuzzy, 31/36 functions</title>
-<rect x="299.2" y="172.6" width="136.2" height="101.5" fill="#919c2f" stroke="#0d1117" stroke-width="1"/>
+<g><title>jaudio/track: 14260 bytes, 41.2% matched, 98.8% fuzzy, 32/36 functions</title>
+<rect x="299.2" y="172.6" width="136.2" height="101.5" fill="#8e9c30" stroke="#0d1117" stroke-width="1"/>
 <text x="302.2" y="184.6" font-size="10" fill="#0d1117">track</text>
 </g>
-<g><title>jaudio/driver: 12428 bytes, 60.0% matched, 95.3% fuzzy, 41/46 functions</title>
-<rect x="435.4" y="172.6" width="118.7" height="101.5" fill="#709d36" stroke="#0d1117" stroke-width="1"/>
+<g><title>jaudio/driver: 12428 bytes, 67.5% matched, 97.4% fuzzy, 43/46 functions</title>
+<rect x="435.4" y="172.6" width="118.7" height="101.5" fill="#639e38" stroke="#0d1117" stroke-width="1"/>
 <text x="438.4" y="184.6" font-size="10" fill="#0d1117">driver</text>
 </g>
-<g><title>jaudio/memory: 11992 bytes, 56.4% matched, 97.2% fuzzy, 44/51 functions</title>
-<rect x="299.2" y="274.1" width="117.6" height="98.9" fill="#759d35" stroke="#0d1117" stroke-width="1"/>
+<g><title>jaudio/memory: 11992 bytes, 60.8% matched, 97.2% fuzzy, 46/51 functions</title>
+<rect x="299.2" y="274.1" width="117.6" height="98.9" fill="#6e9d36" stroke="#0d1117" stroke-width="1"/>
 <text x="302.2" y="286.1" font-size="10" fill="#0d1117">memory</text>
 </g>
-<g><title>jaudio/channel: 7504 bytes, 54.0% matched, 95.9% fuzzy, 25/31 functions</title>
-<rect x="416.9" y="274.1" width="73.6" height="98.9" fill="#799d34" stroke="#0d1117" stroke-width="1"/>
+<g><title>jaudio/channel: 7504 bytes, 61.7% matched, 96.8% fuzzy, 28/31 functions</title>
+<rect x="416.9" y="274.1" width="73.6" height="98.9" fill="#6d9d36" stroke="#0d1117" stroke-width="1"/>
 <text x="419.9" y="286.1" font-size="10" fill="#0d1117">channel</text>
 </g>
 <g><title>jaudio/driverinterface: 6488 bytes, 100.0% matched, 100.0% fuzzy, 33/33 functions</title>
@@ -118,8 +118,8 @@
 <rect x="299.2" y="373.0" width="63.1" height="85.0" fill="#2ea043" stroke="#0d1117" stroke-width="1"/>
 <text x="302.2" y="385.0" font-size="10" fill="#0d1117">oneshot</text>
 </g>
-<g><title>jaudio/sub_sys: 4484 bytes, 42.5% matched, 96.0% fuzzy, 8/13 functions</title>
-<rect x="299.2" y="458.0" width="63.1" height="69.0" fill="#8c9c30" stroke="#0d1117" stroke-width="1"/>
+<g><title>jaudio/sub_sys: 4484 bytes, 47.0% matched, 96.7% fuzzy, 9/13 functions</title>
+<rect x="299.2" y="458.0" width="63.1" height="69.0" fill="#859c32" stroke="#0d1117" stroke-width="1"/>
 <text x="302.2" y="470.0" font-size="10" fill="#0d1117">sub_sys</text>
 </g>
 <g><title>jaudio/seqsetup: 3576 bytes, 100.0% matched, 100.0% fuzzy, 15/15 functions</title>
@@ -134,8 +134,8 @@
 <rect x="427.3" y="373.0" width="65.0" height="48.0" fill="#2ea043" stroke="#0d1117" stroke-width="1"/>
 <text x="430.3" y="385.0" font-size="10" fill="#0d1117">dvdthread</text>
 </g>
-<g><title>jaudio/effect: 3060 bytes, 66.1% matched, 95.6% fuzzy, 8/10 functions</title>
-<rect x="492.3" y="373.0" width="61.8" height="48.0" fill="#669e38" stroke="#0d1117" stroke-width="1"/>
+<g><title>jaudio/effect: 3060 bytes, 100.0% matched, 100.0% fuzzy, 10/10 functions</title>
+<rect x="492.3" y="373.0" width="61.8" height="48.0" fill="#2ea043" stroke="#0d1117" stroke-width="1"/>
 <text x="495.3" y="385.0" font-size="10" fill="#0d1117">effect</text>
 </g>
 <g><title>jaudio/ipl_8135A8E0: 2420 bytes, 100.0% matched, 100.0% fuzzy, 17/17 functions</title>
