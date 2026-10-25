@@ -1412,14 +1412,17 @@ void Emem_KillSwMember() {
  */
 s32 EXGTYPE;
 void __RestoreAddr(Wavelookuptable* a, smzwavetable* b) {
-    if (b != NULL && (b->medium == a->medium || EXGTYPE != 1) && (b->medium == 0 || EXGTYPE != 0)) {
+    u32 base;
+    s32 ofs;
 
+    if (b != NULL && (b->medium == a->medium || EXGTYPE != 1) && (b->medium == 0 || EXGTYPE != 0)) {
         u8* a_sample = a->sample;
         u8* b_sample = b->sample;
         u8* o = a_sample + a->_08;
+        //! FAKE:
+        if (EXGTYPE && EXGTYPE && EXGTYPE) {}
         if (b_sample >= a_sample && b_sample < o) {
-            // fakematch?
-            b->sample = (u8*)((u32)a->_04 + (b_sample - a_sample));
+            b->sample = (u8*)((ofs = b_sample - a_sample) + (base = (u32)a->_04));
             if (EXGTYPE == 0) {
                 b->medium = a->medium;
             } else {
