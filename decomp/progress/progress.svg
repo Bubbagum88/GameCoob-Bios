@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="960" height="584" font-family="Verdana,DejaVu Sans,sans-serif">
 <rect width="100%" height="100%" fill="#0d1117"/>
 <rect x="0" y="0" width="960" height="44" fill="#161b22"/>
-<rect x="0" y="40" width="744.8" height="4" fill="#2ea043"/>
-<text x="12" y="27" font-size="16" fill="#e6edf3">BS2 PAL 1.0: 77.58% code, 45.32% data, 1896/2041 functions</text>
+<rect x="0" y="40" width="745.9" height="4" fill="#2ea043"/>
+<text x="12" y="27" font-size="16" fill="#e6edf3">BS2 PAL 1.0: 77.70% code, 45.32% data, 1897/2041 functions</text>
 <g><title>BS2 menu</title>
 <rect x="0.0" y="44.0" width="297.2" height="540.0" fill="#21262d" stroke="#0d1117"/>
 <text x="4.0" y="56.0" font-size="11" fill="#e6edf3">BS2 menu</text>
@@ -118,8 +118,8 @@
 <rect x="299.2" y="373.0" width="63.1" height="85.0" fill="#2ea043" stroke="#0d1117" stroke-width="1"/>
 <text x="302.2" y="385.0" font-size="10" fill="#0d1117">oneshot</text>
 </g>
-<g><title>jaudio/sub_sys: 4484 bytes, 47.0% matched, 96.7% fuzzy, 9/13 functions</title>
-<rect x="299.2" y="458.0" width="63.1" height="69.0" fill="#859c32" stroke="#0d1117" stroke-width="1"/>
+<g><title>jaudio/sub_sys: 4484 bytes, 60.7% matched, 98.8% fuzzy, 10/13 functions</title>
+<rect x="299.2" y="458.0" width="63.1" height="69.0" fill="#6e9d36" stroke="#0d1117" stroke-width="1"/>
 <text x="302.2" y="470.0" font-size="10" fill="#0d1117">sub_sys</text>
 </g>
 <g><title>jaudio/seqsetup: 3576 bytes, 100.0% matched, 100.0% fuzzy, 15/15 functions</title>

@@ -1231,13 +1231,13 @@ static void __SetVlute(s32 bank_id) {
 }
 
 void Nas_InitAudio(u64* heap_p, s32 heap_size) {
+    s32 bank_count;
     s32 i;
     s32* REF_i = &i;
     u8 pad[112];
     u8* seq_p;
     u8* bank_p;
     u8* wave_p;
-    s32 bank_count;
     u8* emem_heap;
 
     NA_VFRAME_CALLBACK = NULL;

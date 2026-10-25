@@ -651,8 +651,13 @@ extern void Nas_InitGAudio(void) {
 
 extern s32 CreateAudioTask(Acmd* cmds, s16* pSamples, u32 nSamples, s32 param_4) {
     s32 i;
+    s32 processed_cmds;
+    u32 msg;
+    s32 remaining;
     s32 max;
-    STACK_PAD_VAR(6);
+    s32* REF_max = &max;
+    s32* REF_remaining = &remaining;
+    STACK_PAD_VAR(2);
 
     AG.audio_random_seed = (AG.audio_random_seed + AG.frame_audio_task_count) * OSGetTick();
     AG.frame_audio_task_count++;
@@ -663,12 +668,20 @@ extern s32 CreateAudioTask(Acmd* cmds, s16* pSamples, u32 nSamples, s32 param_4)
         (*NA_VFRAME_CALLBACK)();
     }
 
+    remaining = AG.current_frame_dma_count;
     for (i = 0; i < AG.current_frame_dma_count; i++) {
-        Z_osRecvMesg(&AG.cur_audio_frame_dma_queue, nullptr, OS_MESG_NOBLOCK);
+        if (Z_osRecvMesg(&AG.cur_audio_frame_dma_queue, nullptr, OS_MESG_NOBLOCK) == 0) {
+            remaining--;
+        }
     }
 
-    max = AG.cur_audio_frame_dma_queue.validCount;
-    if (max != 0) {
+    if (remaining != 0) {
+        for (i = 0; i < remaining; i++) {
+            Z_osRecvMesg(&AG.cur_audio_frame_dma_queue, nullptr, OS_MESG_BLOCK);
+        }
+    }
+
+    if ((max = AG.cur_audio_frame_dma_queue.validCount) != 0) {
         for (i = 0; i < max; i++) {
             Z_osRecvMesg(&AG.cur_audio_frame_dma_queue, nullptr, OS_MESG_NOBLOCK);
         }
@@ -689,7 +702,6 @@ extern s32 CreateAudioTask(Acmd* cmds, s16* pSamples, u32 nSamples, s32 param_4)
         return 0;
     } else {
         s32 port_cmds;
-        s32 processed_cmds;
 
         if (AG.reset_timer != 0) {
             AG.reset_timer++;
@@ -697,8 +709,6 @@ extern s32 CreateAudioTask(Acmd* cmds, s16* pSamples, u32 nSamples, s32 param_4)
 
         port_cmds = 0;
         if (AG.reset_status == 0) {
-            u32 msg;
-
             while (Z_osRecvMesg(AG.thread_cmd_proc_mq_p, (OSMesg*)&msg, OS_MESG_NOBLOCK) != -1) {
                 Nap_AudioPortProcess(msg);
                 port_cmds++;
