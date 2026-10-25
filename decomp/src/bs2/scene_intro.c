@@ -56,7 +56,6 @@ void fn_813095A0(GXColor *in, GXColor *out);                /* 0x813095A0 */
 s32 Res_DialogLayout(void);                                 /* 0x8130B8AC */
 s32 Res_DialogStrings(void);                                /* 0x8130B920 */
 void Sound_UpdateSpin(s32 id, f32 level);                   /* 0x8135A8E0 */
-void GXSetFog_(s32 type, GXColor color);                    /* 0x8137759C */
 
 static void *sDialogGlh;             /* 0x814AD3C8 */
 static void *sDialogSth;             /* 0x814AD3CC */
@@ -409,45 +408,45 @@ s32 Scene_UpdateMode0(void) {
     }
     if (!cube->done) {
         Scene_UpdateWobble();
-        return Cube_Update(TRUE);
-    }
-
-    switch (s->m0State) {
-    case 0:
-        s->m0LogoFade--;
-        if (s->m0LogoFade < 0) {
-            s->m0LogoFade = 0;
-            s->m0State = 1;
+        Cube_Update(TRUE);
+    } else {
+        switch (s->m0State) {
+        case 0:
+            s->m0LogoFade--;
+            if (s->m0LogoFade < 0) {
+                s->m0LogoFade = 0;
+                s->m0State = 1;
+            }
+            break;
+        case 1:
+            s->m0TextFade++;
+            if (s->m0TextFade > s->m0TextFrames) {
+                s->m0TextFade = s->m0TextFrames;
+                s->m0State = 3;
+            }
+            break;
+        case 3:
+            if (gMenuPad.buttonDown & 0x1F70) {
+                Sound_Play(SE_DECIDE);
+                s->m0State = 4;
+            }
+            break;
+        case 4:
+            s->m0TextFade--;
+            if (s->m0TextFade < 0) {
+                s->m0TextFade = 0;
+                s->m0State = 6;
+            }
+            break;
+        case 6:
+            Scene_UpdateSpin(TRUE);
+            Scene_UpdateWobble();
+            if (s->spinSpeed > s->spinThreshold) {
+                s->spin = s->spinRest;
+                return SCENE_SPINOUT;
+            }
+            break;
         }
-        break;
-    case 1:
-        s->m0TextFade++;
-        if (s->m0TextFade > s->m0TextFrames) {
-            s->m0TextFade = s->m0TextFrames;
-            s->m0State = 3;
-        }
-        break;
-    case 3:
-        if (gMenuPad.buttonDown & 0x1F70) {
-            Sound_Play(SE_DECIDE);
-            s->m0State = 4;
-        }
-        break;
-    case 4:
-        s->m0TextFade--;
-        if (s->m0TextFade < 0) {
-            s->m0TextFade = 0;
-            s->m0State = 6;
-        }
-        break;
-    case 6:
-        Scene_UpdateSpin(TRUE);
-        Scene_UpdateWobble();
-        if (s->spinSpeed > s->spinThreshold) {
-            s->spin = s->spinRest;
-            return SCENE_SPINOUT;
-        }
-        break;
     }
     return SCENE_MODE0;
 }
@@ -889,9 +888,23 @@ void Scene_Draw2DMode0(void) {
 }
 
 /* 0x8130DF64: string `idx` with a yes/no choice under it, in a frame. */
+static inline void Scene_MeasureList(GlhTextBox *boxes, SthEntry *entries, u16 first, u16 count, u16 *maxW, u16 *w, u16 *h) {
+    u16 i;
+
+    *maxW = 0;
+    *w = 0;
+    for (i = 0; i < count; i++) {
+        char *str = (char *)&entries[i + first] + entries[first + i].ofs;
+        Glh_MeasureString(&boxes[entries[first + i].box], str, w, h);
+        if (*maxW < *w) {
+            *maxW = *w;
+        }
+    }
+}
+
 static void Scene_DrawAsk(Scene *s, u16 idx, s16 sel, u8 alpha) {
     DispSettings *disp = Disp_GetSettings();
-    u16 maxW = 0;
+    u16 maxW;
     u16 textW = 0;
     u16 textH = 0;
     u16 listH = 0;
@@ -900,35 +913,40 @@ static void Scene_DrawAsk(Scene *s, u16 idx, s16 sel, u8 alpha) {
     GXColor c = { 255, 255, 255, 255 };
     SthEntry *e;
     GlhTextBox *box;
-    u16 w;
-    u16 i;
     u16 frameH;
     u16 totalH;
+    u16 x;
     u16 y;
+    u16 w;
 
     c.a = alpha;
     GX_Setup2DView();
     GX_Setup2DText();
     e = &entries[idx];
     Glh_MeasureString(&boxes[e->box], (char *)e + e->ofs, &textW, &textH);
-    w = 0;
-    for (i = 0; i < 2; i++) {
-        char *str = (char *)&entries[i + 1] + entries[1 + i].ofs;
-        Glh_MeasureString(&boxes[entries[1 + i].box], str, &w, &listH);
-        if (maxW < w) {
-            maxW = w;
-        }
-    }
+    Scene_MeasureList(boxes, entries, 1, 2, &maxW, &w, &listH);
     frameH = listH + boxes[entries[1].box].spacing * 16;
     textH += disp->textPad << 5;
     frameH += disp->textPad << 5;
     totalH = textH + (frameH + s->askGap * 16);
     Glh_DrawStringOfs(idx, sDialogSth, sDialogGlh, &c, 0, (u16)(-totalH / 2 + textH / 2));
     box = &boxes[e->box];
+    x = box->x - (maxW / 2 + disp->textPad * 16);
     y = totalH / 2 + box->y - frameH;
-    Glh_DrawPaneRect(box->pane, sDialogGlh, &c, (u16)(box->x - (maxW / 2 + disp->textPad * 16)), y,
-                     maxW + (disp->textPad << 5), frameH);
+    Glh_DrawPaneRect(box->pane, sDialogGlh, &c, x, y, maxW + (disp->textPad << 5), frameH);
     Scene_DrawList(boxes, entries, 1, 2, y, listH, sel, alpha);
+}
+
+static inline void Scene_SetAmbDark(void) {
+    GXColor c[1] = { { 0x28, 0x28, 0x28, 0xFF } };
+
+    GXSetChanAmbColor(GX_COLOR0A0, c[0]);
+}
+
+static inline void Scene_SetAmbFull(void) {
+    GXColor c[1] = { { 0xFF, 0xFF, 0xFF, 0xFF } };
+
+    GXSetChanAmbColor(GX_COLOR0A0, c[0]);
 }
 
 /* 0x8130E17C */
@@ -1000,16 +1018,16 @@ void Scene_Draw2DSpinOut(void) {
         sBigCube.alpha = s->bgAlpha;
     }
     if (sBigCube.alpha > 0) {
-        GXColor fog = { 0x28, 0x28, 0x28, 0xFF };
-        GXColor nofog = { 0xFF, 0xFF, 0xFF, 0xFF };
-        GXSetFog_(4, fog);
+        Scene_SetAmbDark();
         J3D_Draw(&sBigCube);
-        GXSetFog_(4, nofog);
+        Scene_SetAmbFull();
     }
     end = s->outTurnFrames + s->outSettleFrames + s->outCoastFrames;
     start = end - s->outFaceFrames;
     if (s->outFrame >= start && s->outFrame <= end) {
-        Menu_DrawSpinOutFace(Scene_GetSpinOutMtx(), (s16)((s->outFrame - start) * 255 / (end - start)));
+        s16 alpha = (s->outFrame - start) * 255 / (end - start);
+
+        Menu_DrawSpinOutFace(Scene_GetSpinOutMtx(), alpha);
     } else if (s->outFrame > end) {
         Menu_DrawSpinOutFace(Scene_GetSpinOutMtx(), 255);
     }
@@ -1025,22 +1043,18 @@ void Scene_Draw2DMenu(void) {
     alpha = menu->bgMinAlpha + (255 - menu->bgMinAlpha) * (0x7FFF - menu->zoom) / 0x7FFF;
     sBigCube.alpha = alpha;
     if (sBigCube.alpha > 0) {
-        GXColor fog = { 0x28, 0x28, 0x28, 0xFF };
-        GXColor nofog = { 0xFF, 0xFF, 0xFF, 0xFF };
-        GXSetFog_(4, fog);
+        Scene_SetAmbDark();
         J3D_DrawPacket(&sBigCube, (u8 *)sBigCube.model->packets + 0x78);
-        GXSetFog_(4, nofog);
+        Scene_SetAmbFull();
     }
     CardIcon_Draw();
     GameIcon_Draw();
     OptionIcon_Draw();
     ClockIcon_Draw();
     if (sBigCube.alpha > 0) {
-        GXColor fog = { 0x28, 0x28, 0x28, 0xFF };
-        GXColor nofog = { 0xFF, 0xFF, 0xFF, 0xFF };
-        GXSetFog_(4, fog);
+        Scene_SetAmbDark();
         J3D_DrawPacket(&sBigCube, (u8 *)sBigCube.model->packets + 0x168);
-        GXSetFog_(4, nofog);
+        Scene_SetAmbFull();
     }
     Menu_Draw2D(alpha);
 }
