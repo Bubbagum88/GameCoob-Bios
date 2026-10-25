@@ -405,6 +405,7 @@ config.libs = [
             Object(Matching, "Runtime/PPCEABI/H/__va_arg.c"),
             Object(Matching, "Runtime/PPCEABI/H/global_destructor_chain.c"),
             Object(Matching, "Runtime/PPCEABI/H/runtime.c"),
+            Object(Matching, "Runtime/PPCEABI/H/__mem.c"),
         ],
     },
     {
@@ -480,6 +481,9 @@ config.libs = [
             Object(Matching, "dolphin/os/OSSync.c"),
             Object(Matching, "dolphin/os/OSThread.c"),
             Object(Matching, "dolphin/os/OSTime.c", extra_cflags=["-inline noauto"]),
+            Object(Matching, "dolphin/os/OSUartExi.c"),
+            Object(Matching, "dolphin/os/__start.c"),
+            Object(Matching, "dolphin/os/__ppc_eabi_init.cpp"),
         ],
     ),
     DolphinLib(
@@ -690,7 +694,8 @@ config.libs = [
             Object(Matching, "jaudio/centcalc.c"),
             Object(Matching, "jaudio/jamosc.c"),
             Object(Matching, "jaudio/oneshot.c"),
-            Object(NonMatching, "jaudio/ipl_8135A8E0.c"),  # Sound_* and boot helpers, built like JAudio (32-byte aligned)
+            Object(Matching, "jaudio/ipl_8135A8E0.c"),  # Sound_* and boot helpers, built like JAudio (32-byte aligned)
+            Object(NonMatching, "jaudio/ipl_8135B360.c"),  # sound archive lookups, same flags
         ],
     },
 ]
