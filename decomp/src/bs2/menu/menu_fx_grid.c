@@ -137,6 +137,33 @@ void fn_81334C60(FxCube *src) {
     }
 }
 
+static inline Vec *VecRef(Vec *v) {
+    (void)v;
+    return v;
+}
+
+/* One flight starter per call site: each holds its own dir (and rodata init),
+ * and the by-value copy goes through VecRef, as in the original's stack frame. */
+#define FX_GRID_FLY(name, y)                              \
+    static inline void name(s16 from, s16 to) {           \
+        Vec dir = { 0.0f, y, 0.0f };                      \
+                                                          \
+        fn_81336650(*VecRef(&dir), from, to);             \
+    }
+
+FX_GRID_FLY(FxGridFlyUp0, 1.0f)
+FX_GRID_FLY(FxGridFlyDown0, -1.0f)
+FX_GRID_FLY(FxGridFlyUp1, 1.0f)
+FX_GRID_FLY(FxGridFlyDown1, -1.0f)
+FX_GRID_FLY(FxGridFlyUp2, 1.0f)
+FX_GRID_FLY(FxGridFlyDown2, -1.0f)
+FX_GRID_FLY(FxGridFlyUp3, 1.0f)
+FX_GRID_FLY(FxGridFlyDown3, -1.0f)
+FX_GRID_FLY(FxGridFlyUp4, 1.0f)
+FX_GRID_FLY(FxGridFlyDown4, -1.0f)
+FX_GRID_FLY(FxGridFlyUp5, 1.0f)
+FX_GRID_FLY(FxGridFlyDown5, -1.0f)
+
 static inline f64 FxFabs(f64 x) {
     return __fabs(x);
 }
@@ -171,39 +198,27 @@ void fn_813355E0(FxCube *src) {
         switch (fn_8132CFE8()->dateField) {
         case 0:
             if ((cur[0] == 2099 && prev[0] == 2000) || (cur[0] == 2000 && prev[0] == 2099)) {
-                Vec dir = { 0.0f, 1.0f, 0.0f };
-
-                fn_81336650(*(Vec *)&dir, prev[0], cur[0]);
+                FxGridFlyUp0(prev[0], cur[0]);
             } else {
-                Vec dir = { 0.0f, -1.0f, 0.0f };
-
-                fn_81336650(*(Vec *)&dir, prev[0], cur[0]);
+                FxGridFlyDown0(prev[0], cur[0]);
             }
             l1 = fn_813321F4();
             l2 = fn_81332298();
             break;
         case 1:
             if ((cur[1] == 12 && prev[1] == 1) || (cur[1] == 1 && prev[1] == 12)) {
-                Vec dir = { 0.0f, 1.0f, 0.0f };
-
-                fn_81336650(*(Vec *)&dir, prev[1], cur[1]);
+                FxGridFlyUp1(prev[1], cur[1]);
             } else {
-                Vec dir = { 0.0f, -1.0f, 0.0f };
-
-                fn_81336650(*(Vec *)&dir, prev[1], cur[1]);
+                FxGridFlyDown1(prev[1], cur[1]);
             }
             l1 = fn_81331CD4();
             l2 = fn_81331D78();
             break;
         case 2:
             if (((cur[2] == 31 || cur[2] == 30 || cur[2] == 29 || cur[2] == 28) && prev[2] == 1) || (cur[2] == 1 && (prev[2] == 31 || prev[2] == 30 || prev[2] == 29 || prev[2] == 28))) {
-                Vec dir = { 0.0f, 1.0f, 0.0f };
-
-                fn_81336650(*(Vec *)&dir, prev[2], cur[2]);
+                FxGridFlyUp2(prev[2], cur[2]);
             } else {
-                Vec dir = { 0.0f, -1.0f, 0.0f };
-
-                fn_81336650(*(Vec *)&dir, prev[2], cur[2]);
+                FxGridFlyDown2(prev[2], cur[2]);
             }
             l1 = fn_81331710();
             l2 = fn_813317B4();
@@ -213,39 +228,27 @@ void fn_813355E0(FxCube *src) {
         switch (fn_8132CFE8()->timeField) {
         case 0:
             if ((cur[3] == 23 && prev[3] == 0) || (cur[3] == 0 && prev[3] == 23)) {
-                Vec dir = { 0.0f, 1.0f, 0.0f };
-
-                fn_81336650(*(Vec *)&dir, prev[3], cur[3]);
+                FxGridFlyUp3(prev[3], cur[3]);
             } else {
-                Vec dir = { 0.0f, -1.0f, 0.0f };
-
-                fn_81336650(*(Vec *)&dir, prev[3], cur[3]);
+                FxGridFlyDown3(prev[3], cur[3]);
             }
             l1 = fn_813318FC();
             l2 = fn_813319A0();
             break;
         case 1:
             if ((cur[4] == 59 && prev[4] == 0) || (cur[4] == 0 && prev[4] == 59)) {
-                Vec dir = { 0.0f, 1.0f, 0.0f };
-
-                fn_81336650(*(Vec *)&dir, prev[4], cur[4]);
+                FxGridFlyUp4(prev[4], cur[4]);
             } else {
-                Vec dir = { 0.0f, -1.0f, 0.0f };
-
-                fn_81336650(*(Vec *)&dir, prev[4], cur[4]);
+                FxGridFlyDown4(prev[4], cur[4]);
             }
             l1 = fn_81331AE8();
             l2 = fn_81331B8C();
             break;
         case 2:
             if ((cur[5] == 59 && prev[5] == 0) || (cur[5] == 0 && prev[5] == 59)) {
-                Vec dir = { 0.0f, 1.0f, 0.0f };
-
-                fn_81336650(*(Vec *)&dir, prev[5], cur[5]);
+                FxGridFlyUp5(prev[5], cur[5]);
             } else {
-                Vec dir = { 0.0f, -1.0f, 0.0f };
-
-                fn_81336650(*(Vec *)&dir, prev[5], cur[5]);
+                FxGridFlyDown5(prev[5], cur[5]);
             }
             l1 = fn_81331EC0();
             l2 = fn_81331F64();
@@ -271,8 +274,8 @@ void fn_813355E0(FxCube *src) {
             fn_8132C660(&p, cur[2]);
             break;
         }
-        sFxGridTo.x = sFxGridFrom.x = p.x;
-        sFxGridTo.y = sFxGridFrom.y = p.y;
+        sFxGridFrom.x = sFxGridTo.x = p.x;
+        sFxGridFrom.y = sFxGridTo.y = p.y;
     }
     if (fn_8132CFE8()->timeField != fn_8132CFF4()->timeField) {
         sFxGridFrame.x = Menu_Get()->fxD4;
@@ -288,8 +291,8 @@ void fn_813355E0(FxCube *src) {
             fn_8132C660(&p, cur[5]);
             break;
         }
-        sFxGridTo.x = sFxGridFrom.x = p.x;
-        sFxGridTo.y = sFxGridFrom.y = p.y;
+        sFxGridFrom.x = sFxGridTo.x = p.x;
+        sFxGridFrom.y = sFxGridTo.y = p.y;
     }
     FXGRID_MOVE(src, l1, l2, n)
     if (sFxGridFrame.x < Menu_Get()->fxD4) {

@@ -310,7 +310,7 @@ jaudio/rspsim.c:
 	.data       start:0x813F0EA0 end:0x813F1128
 	.sdata      start:0x814AD0D0 end:0x814AD0D8
 	.sbss       start:0x814AD630 end:0x814AD658
-	.bss        start:0x815604C0 end:0x815615E0
+	.bss        start:0x815604C0 end:0x815615E0 align:32
 
 jaudio/aictrl.c:
 	.text       start:0x81338400 end:0x81338CA0 align:32

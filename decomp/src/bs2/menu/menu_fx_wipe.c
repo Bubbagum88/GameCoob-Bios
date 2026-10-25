@@ -36,29 +36,28 @@ void fn_81336988(void) {
     sFxWipeFrame = Menu_Get()->fxD4;
 }
 
+static inline Vec *VecRef(Vec *v) {
+    (void)v;
+    return v;
+}
+
 /* Start the wipe along -x / +x from the old text to the new one. */
 static inline void FxWipeTabLeft(void) {
-    Vec *d;
     Vec dir = { -1.0f, 0.0f, 0.0f };
 
-    d = &dir;
-    fn_8133758C(*d, fn_8132CFF4()->tab, fn_8132CFE8()->tab);
+    fn_8133758C(*VecRef(&dir), fn_8132CFF4()->tab, fn_8132CFE8()->tab);
 }
 
 static inline void FxWipeTabRight(void) {
-    Vec *d;
     Vec dir = { 1.0f, 0.0f, 0.0f };
 
-    d = &dir;
-    fn_8133758C(*d, fn_8132CFF4()->tab, fn_8132CFE8()->tab);
+    fn_8133758C(*VecRef(&dir), fn_8132CFF4()->tab, fn_8132CFE8()->tab);
 }
 
 static inline void FxWipeGameLeft(void) {
-    Vec *d;
     Vec dir = { -1.0f, 0.0f, 0.0f };
 
-    d = &dir;
-    fn_8133758C(*d, fn_8132CFF4()->gameItem, fn_8132CFE8()->gameItem);
+    fn_8133758C(*VecRef(&dir), fn_8132CFF4()->gameItem, fn_8132CFE8()->gameItem);
 }
 
 /* 0x813369B0: Options tab changed, wipe the old tab text out and the new one in. */
