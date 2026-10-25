@@ -776,7 +776,7 @@ inline void CardThread_Error(u8 slot, s32 cmd, s32 result) {
 }
 
 /* Refresh the block counts the UI shows for a card. */
-inline void CardThread_UpdateSlot(u8 slot) {
+inline void CardThread_UpdateSlot(s32 slot) {
     u32 sector;
     s32 freeBytes;
     s32 freeFiles;
@@ -1118,6 +1118,39 @@ s32 CardThread_FindInOther(u8 slot, s16 file) {
 
 
 /* 0x8131E130 */
+/* Re-read a file's entry after it changed. */
+inline void CardThread_ReloadEntry(u8 slot, s16 file, CARDDir* dir) {
+    if (__CARDGetStatusEx(slot, file, dir) == 0) {
+        CardThread_ReadEntry(slot, file, dir);
+    }
+}
+
+/* Make the destination file under a free "Broken File" name. */
+inline s16 CardThread_CreateTmp(u8 slot, u32 size) {
+    s32 result;
+    s16 file;
+    int n = 0;
+
+    for (;;) {
+        sprintf(sCardTmpName, "Broken File%03d", n);
+        result = CARDCreate(slot, sCardTmpName, size, &sCardDstInfo);
+        if (result < 0 && result != CARD_RESULT_EXIST) {
+            file = result;
+            break;
+        }
+        n++;
+        if (result == CARD_RESULT_READY || n >= 128) {
+            if (n < 128) {
+                file = sCardDstInfo.fileNo;
+            } else {
+                file = -128;
+            }
+            break;
+        }
+    }
+    return file;
+}
+
 void CardThread_DoCopyMove(u8 slot, s16 file, s32 cmd) {
     CARDDir dir2;
     BOOL done = FALSE;
@@ -1125,11 +1158,10 @@ void CardThread_DoCopyMove(u8 slot, s16 file, s32 cmd) {
     u32 sector0;
     CARDDir dir;
     u32 sector;
-    BOOL created = FALSE;
     s16 dst = -1;
+    BOOL created = FALSE;
     s32 error;
-    s16 n;
-    u8 other;
+    int other;
     s32 result;
 
     result = CardThread_FindInOther(slot, file);
@@ -1182,21 +1214,7 @@ void CardThread_DoCopyMove(u8 slot, s16 file, s32 cmd) {
 
     if (__CARDGetStatusEx(slot, file, &dir2) >= 0) {
         other = slot ^ 1;
-        n = 0;
-        for (;;) {
-            sprintf(sCardTmpName, "Broken File%03d", n);
-            result = CARDCreate(other, sCardTmpName, dir2.length * sector, &sCardDstInfo);
-            if (result < 0 && result != CARD_RESULT_EXIST) {
-                break;
-            }
-            n++;
-            if (result == CARD_RESULT_READY || n >= 128) {
-                result = n < 128 ? sCardDstInfo.fileNo : -128;
-                break;
-            }
-        }
-        dst = result;
-        if (dst < 0) {
+        if ((dst = CardThread_CreateTmp(other, dir2.length * sector)) < 0) {
             CardThread_Error(other, cmd, dst);
             return;
         }
@@ -1212,9 +1230,9 @@ void CardThread_DoCopyMove(u8 slot, s16 file, s32 cmd) {
             CardThread_UpdateSlot(slot);
             CardThread_UpdateSlot(other);
             CardThread_MarkConflicts();
-            OSSendMessage(&sCardReplyQueue, (OSMessage)((file << 24) | ((slot << 16) & 0x10000) | (CARD_CMD_MOUNT & 0xFF)), OS_MESSAGE_BLOCK);
+            OSSendMessage(&sCardReplyQueue, (OSMessage)(((u8)file << 24) | ((slot << 16) & 0x10000)), OS_MESSAGE_BLOCK);
             CardThread_MarkConflicts();
-            OSSendMessage(&sCardReplyQueue, (OSMessage)CARD_MSG(cmd, 0, other, dst), OS_MESSAGE_BLOCK);
+            OSSendMessage(&sCardReplyQueue, (OSMessage)((dst << 24) | ((other << 16) & 0x10000) | (cmd & 0xFF)), OS_MESSAGE_BLOCK);
             return;
         }
     }
@@ -1228,12 +1246,12 @@ cleanup:
         if (created && !done) {
             CARDFastDelete(other, dst);
         }
-        if (done && __CARDGetStatusEx(other, dst, &dir2) == 0) {
-            CardThread_ReadEntry(other, dst, &dir2);
+        if (done) {
+            CardThread_ReloadEntry(other, dst, &dir2);
         }
         CardThread_UpdateSlot(other);
         CardThread_MarkConflicts();
-        OSSendMessage(&sCardReplyQueue, (OSMessage)CARD_MSG(CARD_CMD_MOUNT, 0, other, file), OS_MESSAGE_BLOCK);
+        OSSendMessage(&sCardReplyQueue, (OSMessage)(((u8)file << 24) | ((other << 16) & 0x10000)), OS_MESSAGE_BLOCK);
     }
     result = CARDGetResultCode(slot);
     if (result < 0) {
@@ -1242,7 +1260,7 @@ cleanup:
     }
     CardThread_UpdateSlot(slot);
     CardThread_MarkConflicts();
-    OSSendMessage(&sCardReplyQueue, (OSMessage)CARD_MSG(CARD_CMD_MOUNT, 0, slot, file), OS_MESSAGE_BLOCK);
+    OSSendMessage(&sCardReplyQueue, (OSMessage)(((u8)file << 24) | ((slot << 16) & 0x10000)), OS_MESSAGE_BLOCK);
 }
 
 /* 0x8131E994 */
