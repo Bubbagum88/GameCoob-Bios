@@ -68,13 +68,13 @@ static s32 Scene_UpdateSpinOut(void) {
 static void Scene_CalcSpinOutMtx(Mtx m, u8 advance) {
     Scene *s = Scene_Get();
     MenuWork *menu = Menu_Get();
-    f32 amp = s->wobbleAmp;
-    f32 k = s->spinSpeed / s->spinThreshold;
     s16 frame = menu->wobbleFrame;
     s16 phase = s->wobblePhase;
-    f32 tilt = 1.0f - s->spinTilt;
     f32 tx, ty;
     f32 a, b;
+    f32 amp = s->wobbleAmp;
+    f32 k = s->spinSpeed / s->spinThreshold;
+    f32 tilt = 1.0f - s->spinTilt;
     Mtx t;
 
     if (s->outFrame == 1) {
@@ -119,6 +119,7 @@ s32 Scene_SpinOut(void) {
     f32 k;
     f32 rest;
     f32 xz;
+    Vec sc;
 
     if (t->outFirst) {
         t->outStart = t->spin;
@@ -137,8 +138,8 @@ s32 Scene_SpinOut(void) {
     k = s->spinSpeed / s->spinThreshold;
     rest = 1.1f * (1.0f - k);
     xz = s->modelScale * (rest + (1.0f - (1.0f - s->squashXZ)) * k);
-    J3D_SetModelMtx(Scene_GetBigCube(), sSpinOutMtx,
-                    Scene_VecXYZ(xz, s->modelScale * (rest + (1.0f + s->stretchY) * k), xz));
+    sc = Scene_VecXYZ(xz, s->modelScale * (rest + (1.0f + s->stretchY) * k), xz);
+    J3D_SetModelMtx(Scene_GetBigCube(), sSpinOutMtx, sc);
     view = Camera_GetView();
     J3D_SetViewMtx(Scene_GetBigCube(), view);
     J3D_CalcJoints(Scene_GetBigCube());

@@ -188,12 +188,15 @@ void Glh_DrawPaneRect(u16 pane, void *glh, GXColor *c, s32 x, s32 y, s32 w, s32 
 /* 0x81309C3C: every frame with this tag at its own size */
 void Glh_DrawFrame(u32 tag, void *glh, GXColor *c) {
     GlhFrame *f = GLH_FRAMES(glh);
+    u32 ofs = 0;
     u16 i;
+    u8 pad[8];
 
-    for (i = 0; i < ((Glh *)glh)->nFrames; f++, i++) {
+    for (i = 0; i < ((Glh *)glh)->nFrames; f++, ofs += sizeof(GlhFrame), i++) {
+        Glh *g = glh;
         if (tag == f->tag) {
-            Glh_DrawPaneRect(i, glh, c, GLH_FRAMES(glh)[i].x - f->innerW / 2,
-                             GLH_FRAMES(glh)[i].y - f->innerH / 2, f->innerW, f->innerH);
+            GlhFrame *at = (GlhFrame *)((u8 *)glh + (g->frames + ofs));
+            Glh_DrawPaneRect(i, glh, c, at->x - f->innerW / 2, at->y - f->innerH / 2, f->innerW, f->innerH);
         }
     }
 }
@@ -321,11 +324,12 @@ void Glh_DrawPicture(u16 idx, void *glh, GXColor *c, TexHeader *tex, s16 dx, s16
 
 /* 0x8130A158 */
 void Glh_DrawAll(void *glh, GXColor *c) {
+    GlhPic *pics = GLH_PICS(glh);
     GlhPic *p;
     u16 i;
 
-    for (i = 0, p = &GLH_PICS(glh)[i]; i < ((Glh *)glh)->nPics; p++, i++) {
-        Glh_DrawPicture(i, glh, c, TXH_TEX(p->tex), 0, 0);
+    for (i = 0, p = &pics[i]; i < ((Glh *)glh)->nPics; p++, i++) {
+        Glh_DrawPicture(i, glh, c, TXH_TEX(pics[i].tex), 0, 0);
     }
 }
 
@@ -345,6 +349,7 @@ void Glh_DrawPane(u32 tag, void *glh, GXColor *c) {
 void Glh_DrawPaneOfs(u32 tag, void *glh, GXColor *c, s16 dx, s16 dy) {
     GlhPic *p = GLH_PICS(glh);
     u16 i;
+    u8 pad[8];
 
     for (i = 0; i < ((Glh *)glh)->nPics; p++, i++) {
         if (tag == p->tag) {
@@ -357,6 +362,7 @@ void Glh_DrawPaneOfs(u32 tag, void *glh, GXColor *c, s16 dx, s16 dy) {
 void Glh_DrawPaneTex(u32 tag, void *glh, GXColor *c, void *tex) {
     GlhPic *p = GLH_PICS(glh);
     u16 i;
+    u8 pad[8];
 
     for (i = 0; i < ((Glh *)glh)->nPics; p++, i++) {
         if (tag == p->tag) {

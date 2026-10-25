@@ -435,8 +435,8 @@ inline void CardBlock_Finish(CardBlock* b) {
 
 /* 0x81320094: start Copy / Move (the block flies off) or Erase */
 void fn_81320094(u8 slot, u16 dest, u16 file, u16 kind) {
-    Vec pos;
     Vec vel;
+    Vec pos;
     u16 a;
 
     sOpDest = dest;
