@@ -969,6 +969,9 @@ static inline BOOL Card_UpdateMaxTop(u8 slot) {
 void CardUi_OnSlotRefresh(u8 slot) {
     CardSlot* s = &CardThread_GetSlots()[slot];
 
+    /* fake match: gives slot a fresh value for the register allocator */
+    slot++;
+    slot--;
     s->dirty = FALSE;
     if (Card_UpdateMaxTop(slot)) {
         Card_SortFiles(slot);
