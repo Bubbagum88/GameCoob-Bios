@@ -98,7 +98,7 @@ void* Nas_WaveDmaCallBack(u32 device_addr, u32 size, s32 arg2, u8* waveload_idx,
     u32 transfer;
     s32 bufferPos;
     u32 i;
-    u32* REF_waveloadDevAddr = &waveloadDevAddr;
+    STACK_PAD_VAR(1);
 
     if (arg2 != 0 || *waveload_idx >= AG.waveload_count) {
         for (i = AG.waveload_count; i < AG.num_waveloads; i++) {
@@ -137,7 +137,7 @@ void* Nas_WaveDmaCallBack(u32 device_addr, u32 size, s32 arg2, u8* waveload_idx,
     } else {
     search_short_lived:
         waveload = AG.waveload_list + *waveload_idx;
-        for (i = 0; i <= AG.waveload_count; waveload = AG.waveload_list + i++) {
+        for (i = 0; i <= AG.waveload_count; i++) {
             bufferPos = device_addr - waveload->device_addr;
             if (0 <= bufferPos && (u32)bufferPos <= waveload->size - size) {
                 // We already have WAVELOAD for this memory range.
@@ -155,7 +155,7 @@ void* Nas_WaveDmaCallBack(u32 device_addr, u32 size, s32 arg2, u8* waveload_idx,
                 waveload->time_to_live = 2;
                 return waveload->ram_addr + (device_addr - waveload->device_addr);
             }
-            waveload++;
+            waveload = AG.waveload_list + i;
         }
     }
 
