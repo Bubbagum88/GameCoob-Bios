@@ -634,17 +634,18 @@ static s32 __SetChannel(note* n, s32 same_sample) {
 }
 
 static s32 __Command_Seq(note* n) {
-    macro* m = &n->macro_player;
+    macro* m;
     sub* subtrack = n->sub_track;
     group* grp = subtrack->group;
     u8 cmdArgU8;
-    u16 cmdArgU16;
     u16 velocity;
+    u16 cmdArgU16;
     u8 cmd;
     sweep* port_sweep;
     u8* REF_cmd = &cmd;
 
     while (TRUE) {
+        m = &n->macro_player;
         cmd = Nas_ReadByteData(m);
 
         if (cmd <= NOTE_CMD_MUTE) {

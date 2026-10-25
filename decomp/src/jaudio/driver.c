@@ -829,6 +829,7 @@ extern Acmd* Nas_DriveRsp(s16* aiBuf, s32 aiBufLen, Acmd* cmd, s32 updateIndex) 
 }
 
 extern Acmd* Nas_SynthMain(s32 chan_id, commonch* common, driverch* driver, s16* samples, s32 samples_per_update, Acmd* cmd, s32 update_idx) {
+    u8 pad[12];
     s32 size;
     void* reverbAddrSrc;
     smzwavetable* sample;
@@ -860,12 +861,12 @@ extern Acmd* Nas_SynthMain(s32 chan_id, commonch* common, driverch* driver, s16*
     s32 numFramesToDecode;
     u8* samplesToLoadAddr;
     s32 numParts;
-    s32 curPart;
     s32 sampleDataChunkAlignPad;
     s32 haasEffectDelaySide;
     s32 sampleDataChunkSize;
     s32 skipInitialSamples;
     s32 zeroOffset;
+    s32 curPart;
     s32 sampleAddrOffset;
     s32 combFilterDmem;
     channel* chan;
@@ -876,8 +877,6 @@ extern Acmd* Nas_SynthMain(s32 chan_id, commonch* common, driverch* driver, s16*
     s32 numSamplesToLoadFirstPart;
     u16 sampleDmemBeforeResampling;
     u16 something_unused_from_sm64;
-    u32 stack_chan_id;
-    u32 stack_update_idx;
     u8* tmpSamplesToLoadAddr;
     s32 bookOffset = common->book_ofs;
     s32 finished = common->finished;
@@ -925,7 +924,7 @@ extern Acmd* Nas_SynthMain(s32 chan_id, commonch* common, driverch* driver, s16*
         // Determine number of samples to load based on samples_per_update and relative frequency
         frequencyFixedPoint = common->frequency_fixed_point;
         numSamplesToLoadFixedPoint = (frequencyFixedPoint * samples_per_update * SAMPLE_SIZE) + driver->sample_pos_fractional_part;
-        numSamplesToLoad = (u16)(numSamplesToLoadFixedPoint >> 16);
+        numSamplesToLoad = numSamplesToLoadFixedPoint >> 16;
 
         if (numSamplesToLoad == 0) {
             skipBytes = false;
@@ -962,8 +961,6 @@ extern Acmd* Nas_SynthMain(s32 chan_id, commonch* common, driverch* driver, s16*
                 sampleEndPos = loopInfo->loop_end;
             }
 
-            stack_chan_id = chan_id;
-            stack_update_idx = update_idx;
             sampleAddr = sample->sample;
             numSamplesToLoadFirstPart = 0;
 
@@ -1270,7 +1267,7 @@ extern Acmd* Nas_SynthMain(s32 chan_id, commonch* common, driverch* driver, s16*
                         }
                         finished = true;
                         chan->common_ch.finished = true;
-                        __Nas_WaveTerminateProcess(stack_update_idx, stack_chan_id);
+                        __Nas_WaveTerminateProcess(update_idx, chan_id);
                         break; // break out of the for-loop
                     } else if (loopToPoint) {
                         driver->at_loop_point = true;
@@ -1345,13 +1342,7 @@ extern Acmd* Nas_SynthMain(s32 chan_id, commonch* common, driverch* driver, s16*
             Nas_DistFilter(cmd++, gain, DMEM_TEMP, 0, size + SAMPLES_PER_FRAME * SAMPLE_SIZE);
         }
 
-        // Not in MM
-        if (!STOP_VELOCONV) {
-            // Load the velocity convolution table into DMEM_0x800
-            s32 vel_conv_idx = driver->vel_conv_table_idx;
-            aLoadBuffer2(cmd++, (u32)VELOCONV_TABLE[vel_conv_idx], 0x800, sizeof(VELOCONV_TABLE[vel_conv_idx]));
-            aUnkCmd3(cmd++, DMEM_TEMP, 0x800, samples_per_update);
-        }
+        // IPL: no velocity-conversion pass (AC added it)
 
         // Apply the filter to the mono-signal
         filter = common->filter;
@@ -1482,11 +1473,11 @@ extern Acmd* Nas_Synth_Envelope(Acmd* cmd, commonch* common, driverch* driver, s
     f32 defaultPanVolume;
     STACK_PAD_VAR(4);
 
-    curVolLeft = (u16)driver->current_volume_left;
     targetReverbVol = common->target_reverb_volume;
+    curVolLeft = (u16)driver->current_volume_left;
     curVolRight = (u16)driver->current_volume_right;
-    targetVolRight = common->target_volume_right << 4;
     targetVolLeft = common->target_volume_left << 4;
+    targetVolRight = common->target_volume_right << 4;
 
     if (AG.sound_mode == SOUND_OUTPUT_DOLBY_SURROUND) {
         u8 idx = common->surround_effect_idx;
