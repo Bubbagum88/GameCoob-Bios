@@ -50,20 +50,18 @@ void Fx_SetShapes(void* f) {
 /* 0x813298B0: place the cubes of shape n at time t (0..1). */
 void Fx_EvalShape(s32 n, FxCube* out, u32* count, f32 t) {
     FxShapeCube* c;
-    FxShape* s;
     f32 step;
     u32 i;
     u32 k;
-    Vec v;
     f32 seg;
     f32 u;
     f32 hi;
+    Vec v;
     f32 lo;
 
     *count = sFxShapes[n].count;
-    s = &sFxShapes[n];
-    c = (FxShapeCube*)((u8*)sFxShapes + (n * 8 + s->cubes));
-    step = 1.0f / (s32)(s->nKeys - 1);
+    step = 1.0f / (s32)(sFxShapes[n].nKeys - 1);
+    c = (FxShapeCube*)((u8*)&sFxShapes[n] + sFxShapes[n].cubes);
     if (t < 0.0f) {
         t = 0.0f;
     }
@@ -71,12 +69,12 @@ void Fx_EvalShape(s32 n, FxCube* out, u32* count, f32 t) {
         t = 1.0f;
     }
     for (i = 0; i < *count; i++) {
-        u16* keys = (u16*)((u8*)c + c->keys);
+        u16* keys = (u16*)((u8*)&c[i] + c[i].keys);
         FxKey* k0;
         FxKey* k1;
 
-        hi = 0.6f + 0.4f * (1.0f - c->end / 255.0f);
-        lo = 0.4f * (1.0f - c->start / 255.0f);
+        hi = 0.6f + 0.4f * (1.0f - c[i].end / 255.0f);
+        lo = 0.4f * (1.0f - c[i].start / 255.0f);
         u = (t - lo) / (hi - lo);
         seg = u / step;
         k = seg;
@@ -92,13 +90,11 @@ void Fx_EvalShape(s32 n, FxCube* out, u32* count, f32 t) {
         k1 = &sFxKeys[keys[k + 1]];
         k0 = &sFxKeys[keys[k]];
         VecHermite(&k0->pos, &k0->out, &k1->pos, &k1->in, &v, u, k * step, (k + 1) * step);
-        out->pos.x = v.x;
-        out->pos.y = v.y;
-        out->pos.z = v.z;
-        out->rot[0] = out->rot[1] = out->rot[2] = 0;
-        out->scale.x = out->scale.y = out->scale.z = Menu_Get()->fxCubeScale;
-        c++;
-        out++;
+        out[i].pos.x = v.x;
+        out[i].pos.y = v.y;
+        out[i].pos.z = v.z;
+        out[i].rot[0] = out[i].rot[1] = out[i].rot[2] = 0;
+        out[i].scale.x = out[i].scale.y = out[i].scale.z = Menu_Get()->fxCubeScale;
     }
 }
 
