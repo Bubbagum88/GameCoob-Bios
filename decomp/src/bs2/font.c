@@ -214,7 +214,7 @@ u16 Font_DrawLines(FontBox *box, u8 *str, u16 *lineW, s32 height, s32 maxChars, 
     s32 lines = 0;
     s32 chars = 0;
     u16 x = 0;
-    s32 w = box->w;
+    s32 w = box->w & 0xFFFF;
     u16 code;
     u16 x0;
     u16 y;
@@ -356,14 +356,16 @@ s32 Font_Measure(FontBox *box, u8 *str, u16 *lineW, s32 *linesOut, BOOL wrap, BO
                  s32 maxChars, s32 maxLines) {
     u16 size = box->size;
     s32 height = sFont.ascent * size * 16 / sFont.cellHeight + sFont.descent * size * 16 / sFont.cellHeight;
+    s32 cs;
     s32 line = 0;
     u16 curW = 0;
-    s32 w = box->w;
+    s32 w = box->w & 0xFFFF;
     u16 code;
     u16 last = 0;
     s32 chars = 0;
     u16 nw;
     BOOL over;
+    u16 pad;
 
     while ((code = *str++) != 0) {
         if (Lang_GetCode() == 2 && ((code >= 0x80 && code <= 0x9F) || (code >= 0xE0 && code <= 0xFF))) {
@@ -385,9 +387,9 @@ s32 Font_Measure(FontBox *box, u8 *str, u16 *lineW, s32 *linesOut, BOOL wrap, BO
             }
         } else {
             last = code;
-            nw = box->charSpace * 16 + box->size * (sWidth[Font_Index(code)] * 16) / sFont.cellWidth + curW;
-            if (box->charSpace > 0) {
-                if (nw - box->charSpace * 16 > w) {
+            nw = (cs = box->charSpace) * 16 + box->size * (sWidth[Font_Index(code)] * 16) / sFont.cellWidth + curW;
+            if (cs > 0) {
+                if (nw - cs * 16 > w) {
                     over = TRUE;
                 } else {
                     goto fits;
@@ -415,8 +417,8 @@ s32 Font_Measure(FontBox *box, u8 *str, u16 *lineW, s32 *linesOut, BOOL wrap, BO
                     break;
                 }
             }
-            chars++;
             curW = box->charSpace * 16 + box->size * (sWidth[Font_Index(code)] * 16) / sFont.cellWidth + curW;
+            chars++;
         }
         last = code;
         if (maxChars != 0 && chars >= maxChars) {
@@ -517,6 +519,10 @@ void Font_StepPulse(void) {
     }
 }
 
+static inline u32 Font_GlowColor(u32 c, u8 alpha) {
+    return (c & 0xFFFFFF00) | (u8)((c & 0xFF) * alpha / 255) / 6;
+}
+
 /* 0x813090A4: glow under the text: 5x5 faint copies, then the text */
 void fn_813090A4(FontBox *box, u8 *str) {
     FontBox tmp = *box;
@@ -527,10 +533,10 @@ void fn_813090A4(FontBox *box, u8 *str) {
     s32 i;
     s32 j;
     u16 x;
-    u16 y;
+    s32 y;
 
     sColorTop = (sShadowTop & 0xFFFFFF00) | (u8)((sShadowTop & 0xFF) * alpha / 255) / 6;
-    sColorBottom = (sShadowBottom & 0xFFFFFF00) | (u8)((sShadowBottom & 0xFF) * alpha / 255) / 6;
+    sColorBottom = Font_GlowColor(sShadowBottom, alpha);
     x = tmp.x;
     y = tmp.y;
     for (i = 0; i < 5; i++) {
