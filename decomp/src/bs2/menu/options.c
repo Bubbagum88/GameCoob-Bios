@@ -1,5 +1,5 @@
-// Partly matching: Option_Init, Option_Update and Option_DrawText differ only in
-// register numbering.
+// Partly matching: only Option_DrawText differs (two instructions swapped in
+// the language-name loop).
 //
 // "Options" submenu (PAL 1.0 BS2, 0x81327EE4..0x81328CA4): sound mode,
 // screen position and language.
@@ -45,13 +45,29 @@ void Option_LoadLangRes(void) {
     sOptLang = Lang_Get();
 }
 
+static inline void Opt_ReadLangY(void) {
+    GlhHeader* glh = sOptGlh;
+    u32 tag;
+    GlhAnchor* anchor;
+    s32 i;
+    s32 j;
+    GlhAnchor* base;
+
+    base = (GlhAnchor*)((u8*)glh + glh->anchorOfs);
+    for (i = 0; i < 6; i++) {
+        tag = 'lan1' + i;
+        for (anchor = base, j = 0; j < glh->anchorCount; anchor++, j++) {
+            if (anchor->tag == tag) {
+                sOptLangY[i] = (s16)(anchor->y >> 4);
+            }
+        }
+    }
+}
+
 /* 0x81327F08 */
 void Option_Init(BOOL first) {
     s32 i;
-    GlhAnchor* anchor;
-    u32 tag;
-    s32 j;
-    GlhAnchor* base;
+    s32 k;
     OSSram* sram;
 
     if (first) {
@@ -59,23 +75,15 @@ void Option_Init(BOOL first) {
         for (i = 0; i < 6; i++) {
             sOptSth[i] = ResGet(Res_OptionStrings(i));
         }
-        base = (GlhAnchor*)((u8*)sOptGlh + sOptGlh->anchorOfs);
-        for (i = 0; i < 6; i++) {
-            tag = 'lan1' + i;
-            for (anchor = base, j = 0; j < sOptGlh->anchorCount; anchor++, j++) {
-                if (anchor->tag == tag) {
-                    sOptLangY[i] = (s16)(anchor->y >> 4);
-                }
-            }
-        }
+        Opt_ReadLangY();
     }
     sOptPrevSub = OPT_MENU;
     sOptSub = OPT_MENU;
     sOptRow = OPTROW_SOUND;
     sOptSound = OSGetSoundMode();
-    for (i = 0; i < 6; i++) {
-        Fader_Init(&sOptLangName[i]);
-        Fader_Init(&sOptLangText[i]);
+    for (k = 0; k < 6; k++) {
+        Fader_Init(&sOptLangName[k]);
+        Fader_Init(&sOptLangText[k]);
     }
     sram = __OSLockSram();
     sOptOffset = sram->displayOffsetH;
@@ -260,10 +268,19 @@ s32 Option_UpdateLang(void) {
 }
 
 /* 0x81328648: state MENU_OPTION. Returns the next menu state. */
+static inline void Opt_StepFaders(void) {
+    s32 i;
+    for (i = 0; i < 6; i++) {
+        u8 mode = i == sOptLang ? FADE_IN : FADE_HALF;
+        Fader_Step(&sOptLangName[i], mode);
+        mode = i == sOptLang ? FADE_IN : FADE_OUT;
+        Fader_Step(&sOptLangText[i], mode);
+    }
+}
+
 s32 Option_Update(void) {
     s32 next = MENU_OPTION;
     Scene* scene = Scene_Get();
-    s32 i;
 
     sOptPrevSub = sOptSub;
     if (!SCENE_FATAL_ERROR(scene)) {
@@ -286,12 +303,7 @@ s32 Option_Update(void) {
         FxOption_Update(sOptPrevSub, sOptRow, sOptOffset, sOptSound);
         Fx_Update();
     }
-    for (i = 0; i < 6; i++) {
-        u8 mode = i == sOptLang ? FADE_IN : FADE_HALF;
-        Fader_Step(&sOptLangName[i], mode);
-        mode = i == sOptLang ? FADE_IN : FADE_OUT;
-        Fader_Step(&sOptLangText[i], mode);
-    }
+    Opt_StepFaders();
 
     /* pulse of the selection highlight, 50..120 */
     sOptPulse += sOptPulseStep;
@@ -326,6 +338,7 @@ s16 Option_GetLang(void) {
    language list. */
 void Option_DrawText(u8 alpha) {
     OptionParams* p = Option_GetParams();
+    s16 ofs;
     GXColor white = { 255, 255, 255, 255 };
     GXColor green;
     s16 a;
@@ -341,7 +354,8 @@ void Option_DrawText(u8 alpha) {
         Fader_GetAlpha(&sOptLangText[i], &a, NULL);
         white.a = green.a = (u8)(alpha * a / 255);
         Glh_DrawText(0, sOptSth[i], sOptGlh, &white); /* "Choose settings" */
-        Glh_DrawStringOfs(1, sOptSth[i], sOptGlh, &green, 0, (s16)(16.0f * p->itemOfs[0]));
+        ofs = (s16)(16.0f * p->itemOfs[0]);
+        Glh_DrawStringOfs(1, sOptSth[i], sOptGlh, &green, 0, ofs);
         Glh_DrawStringOfs(2, sOptSth[i], sOptGlh, &green, 0, (s16)(16.0f * p->itemOfs[1]));
         Glh_DrawStringOfs(3, sOptSth[i], sOptGlh, &green, 0, (s16)(16.0f * p->itemOfs[2]));
     }
