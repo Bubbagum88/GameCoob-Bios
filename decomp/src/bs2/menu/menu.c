@@ -1118,17 +1118,21 @@ static inline void Menu_DrawFillBar(u32 tag, void *glh, GXColor *c, u8 fill) {
    frame and a fill bar that rises with the card's used space. */
 static void Menu_DrawSlot(u8 slot, void *glh, u8 alpha) {
     GXColor c = { 255, 255, 255, 255 };
+    s16 *glow = gSlotGlow;
     u32 tag;
+    u32 bar;
+    s32 fill;
 
     c.a = alpha;
     GX_Setup2DTex();
     Glh_DrawPane('texa' + slot, glh, &c);
 
-    c.a = (u8)(alpha * gSlotGlow[slot] / 255);
+    c.a = (u8)(alpha * glow[slot] / 255);
     tag = slot << 8;                                /* 'mca?' / 'mcb?' */
     Glh_DrawFrame('mca1' + tag, gCardFaceGlh, &c);
-    Menu_DrawFillBar('mca2' + tag, gCardFaceGlh, &c,
-                     (u8)(gSlotFill[slot] * (gSlotGlow[slot] - 60) / 195));
+    bar = 'mca2' + tag;
+    fill = gSlotFill[slot] * (gSlotGlow[slot] - 60) / 195;
+    Menu_DrawFillBar(bar, gCardFaceGlh, &c, (u8)fill);
 }
 
 /* bottom face: Memory Card frame, title and the two slot bars */

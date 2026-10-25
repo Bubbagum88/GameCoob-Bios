@@ -486,9 +486,22 @@ void CardThread_SetEnabled(s8 cmd, BOOL enabled) {
 }
 
 /* 0x8131CC48: a command failed. Forget the card unless it is only full. */
-s32 CardThread_Fail(u8 slot, s32 cmd, s32 result) {
+/* inline copy of CardThread_MarkConflicts: only CardThread_Fail inlines it */
+static inline void CardThread_MarkConflictsIn(void) {
+    int slot;
     int file;
-    int i;
+
+    for (slot = 0; slot < 2; slot++) {
+        for (file = 0; file < CARD_MAX_FILES; file++) {
+            sCardFiles[slot][file].opened = 0;
+            if (sCardMounted[slot] && sCardMounted[slot ^ 1] && CardThread_FindInOther(slot, file) < 0) {
+                sCardFiles[slot][file].opened = 1;
+            }
+        }
+    }
+}
+
+s32 CardThread_Fail(u8 slot, s32 cmd, s32 result) {
 
     if (result != CARD_RESULT_EXIST && result != CARD_RESULT_SIZE && result != CARD_RESULT_NOENT &&
         result != CARD_RESULT_INSSPACE) {
@@ -498,15 +511,11 @@ s32 CardThread_Fail(u8 slot, s32 cmd, s32 result) {
             sCardMounted[slot] = FALSE;
         }
     }
-    for (i = 0; i < 2; i++) {
-        for (file = 0; file < CARD_MAX_FILES; file++) {
-            sCardFiles[i][file].opened = 0;
-            if (sCardMounted[i] && sCardMounted[i ^ 1] && CardThread_FindInOther(i, file) < 0) {
-                sCardFiles[i][file].opened = 1;
-            }
-        }
+    CardThread_MarkConflictsIn();
+    {
+        u32 msg = ((slot << 16) & 0x10000) | ((result << 8) & 0xFF00) | (cmd & 0xFF);
+        OSSendMessage(&sCardReplyQueue, (OSMessage)msg, OS_MESSAGE_BLOCK);
     }
-    OSSendMessage(&sCardReplyQueue, (OSMessage)(((result << 8) & 0xFF00) | ((slot << 16) & 0x10000) | (cmd & 0xFF)), OS_MESSAGE_BLOCK);
     return 0;
 }
 

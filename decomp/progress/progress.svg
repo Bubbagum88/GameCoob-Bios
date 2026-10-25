@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="960" height="584" font-family="Verdana,DejaVu Sans,sans-serif">
 <rect width="100%" height="100%" fill="#0d1117"/>
 <rect x="0" y="0" width="960" height="44" fill="#161b22"/>
-<rect x="0" y="40" width="747.4" height="4" fill="#2ea043"/>
-<text x="12" y="27" font-size="16" fill="#e6edf3">BS2 PAL 1.0: 77.85% code, 45.32% data, 1898/2041 functions</text>
+<rect x="0" y="40" width="765.9" height="4" fill="#2ea043"/>
+<text x="12" y="27" font-size="16" fill="#e6edf3">BS2 PAL 1.0: 79.78% code, 45.32% data, 1920/2041 functions</text>
 <g><title>BS2 menu</title>
 <rect x="0.0" y="44.0" width="297.2" height="540.0" fill="#21262d" stroke="#0d1117"/>
 <text x="4.0" y="56.0" font-size="11" fill="#e6edf3">BS2 menu</text>
@@ -11,15 +11,15 @@
 <rect x="2.0" y="60.0" width="154.8" height="186.4" fill="#34a042" stroke="#0d1117" stroke-width="1"/>
 <text x="5.0" y="72.0" font-size="10" fill="#0d1117">menu_fx</text>
 </g>
-<g><title>bs2/menu/memcard: 26548 bytes, 54.3% matched, 98.4% fuzzy, 37/55 functions</title>
-<rect x="156.8" y="60.0" width="138.4" height="186.4" fill="#799d34" stroke="#0d1117" stroke-width="1"/>
+<g><title>bs2/menu/memcard: 26548 bytes, 55.9% matched, 98.5% fuzzy, 38/55 functions</title>
+<rect x="156.8" y="60.0" width="138.4" height="186.4" fill="#769d34" stroke="#0d1117" stroke-width="1"/>
 <text x="159.8" y="72.0" font-size="10" fill="#0d1117">memcard</text>
 </g>
-<g><title>bs2/menu/menu: 18380 bytes, 63.1% matched, 98.6% fuzzy, 23/30 functions</title>
+<g><title>bs2/menu/menu: 18380 bytes, 63.1% matched, 98.7% fuzzy, 23/30 functions</title>
 <rect x="2.0" y="246.4" width="131.9" height="135.4" fill="#6a9d37" stroke="#0d1117" stroke-width="1"/>
 <text x="5.0" y="258.4" font-size="10" fill="#0d1117">menu</text>
 </g>
-<g><title>bs2/menu/memcard_card: 11856 bytes, 52.5% matched, 95.8% fuzzy, 35/42 functions</title>
+<g><title>bs2/menu/memcard_card: 11856 bytes, 52.5% matched, 96.0% fuzzy, 35/42 functions</title>
 <rect x="133.9" y="246.4" width="85.1" height="135.4" fill="#7c9d33" stroke="#0d1117" stroke-width="1"/>
 <text x="136.9" y="258.4" font-size="10" fill="#0d1117">memcard_card</text>
 </g>
@@ -251,19 +251,19 @@
 <rect x="556.1" y="44.0" width="279.4" height="250.0" fill="#21262d" stroke="#0d1117"/>
 <text x="560.1" y="56.0" font-size="11" fill="#e6edf3">bs2</text>
 </g>
-<g><title>bs2/scene_intro: 9404 bytes, 26.2% matched, 95.0% fuzzy, 13/27 functions</title>
-<rect x="558.1" y="60.0" width="87.9" height="99.7" fill="#a79b2b" stroke="#0d1117" stroke-width="1"/>
+<g><title>bs2/scene_intro: 9404 bytes, 71.0% matched, 98.4% fuzzy, 21/27 functions</title>
+<rect x="558.1" y="60.0" width="87.9" height="99.7" fill="#5e9e39" stroke="#0d1117" stroke-width="1"/>
 <text x="561.1" y="72.0" font-size="10" fill="#0d1117">scene_intro</text>
 </g>
-<g><title>bs2/cube: 6512 bytes, 24.6% matched, 94.9% fuzzy, 11/19 functions</title>
-<rect x="558.1" y="159.7" width="87.9" height="69.0" fill="#aa9b2a" stroke="#0d1117" stroke-width="1"/>
+<g><title>bs2/cube: 6512 bytes, 43.9% matched, 99.8% fuzzy, 14/19 functions</title>
+<rect x="558.1" y="159.7" width="87.9" height="69.0" fill="#8a9c30" stroke="#0d1117" stroke-width="1"/>
 <text x="561.1" y="171.7" font-size="10" fill="#0d1117">cube</text>
 </g>
 <g><title>bs2/gMRdraw: 5964 bytes, 100.0% matched, 100.0% fuzzy, 16/16 functions</title>
 <rect x="558.1" y="228.7" width="87.9" height="63.2" fill="#2ea043" stroke="#0d1117" stroke-width="1"/>
 <text x="561.1" y="240.7" font-size="10" fill="#0d1117">gMRdraw</text>
 </g>
-<g><title>bs2/font: 5736 bytes, 48.7% matched, 95.9% fuzzy, 16/20 functions</title>
+<g><title>bs2/font: 5736 bytes, 48.7% matched, 96.3% fuzzy, 16/20 functions</title>
 <rect x="646.1" y="60.0" width="68.1" height="78.5" fill="#829c32" stroke="#0d1117" stroke-width="1"/>
 <text x="649.1" y="72.0" font-size="10" fill="#0d1117">font</text>
 </g>
@@ -271,8 +271,8 @@
 <rect x="714.2" y="60.0" width="63.7" height="78.5" fill="#2ea043" stroke="#0d1117" stroke-width="1"/>
 <text x="717.2" y="72.0" font-size="10" fill="#0d1117">gInit</text>
 </g>
-<g><title>bs2/glh: 4684 bytes, 52.1% matched, 97.5% fuzzy, 12/19 functions</title>
-<rect x="777.9" y="60.0" width="55.6" height="78.5" fill="#7d9d33" stroke="#0d1117" stroke-width="1"/>
+<g><title>bs2/glh: 4684 bytes, 80.1% matched, 99.1% fuzzy, 17/19 functions</title>
+<rect x="777.9" y="60.0" width="55.6" height="78.5" fill="#4f9f3c" stroke="#0d1117" stroke-width="1"/>
 <text x="780.9" y="72.0" font-size="10" fill="#0d1117">glh</text>
 </g>
 <g><title>bs2/gMRtexture: 4632 bytes, 14.8% matched, 99.6% fuzzy, 4/7 functions</title>
@@ -289,15 +289,15 @@
 <g><title>bs2/BS2Mach: 2488 bytes, 100.0% matched, 100.0% fuzzy, 12/12 functions</title>
 <rect x="707.9" y="138.5" width="43.1" height="53.8" fill="#2ea043" stroke="#0d1117" stroke-width="1"/>
 </g>
-<g><title>bs2/backdrop: 2400 bytes, 23.3% matched, 97.8% fuzzy, 2/5 functions</title>
-<rect x="751.0" y="138.5" width="41.5" height="53.8" fill="#ac9b2a" stroke="#0d1117" stroke-width="1"/>
+<g><title>bs2/backdrop: 2400 bytes, 68.7% matched, 97.8% fuzzy, 4/5 functions</title>
+<rect x="751.0" y="138.5" width="41.5" height="53.8" fill="#619e39" stroke="#0d1117" stroke-width="1"/>
 </g>
 <g><title>bs2/lang: 2372 bytes, 90.1% matched, 99.8% fuzzy, 32/33 functions</title>
 <rect x="792.5" y="138.5" width="41.1" height="53.8" fill="#3e9f40" stroke="#0d1117" stroke-width="1"/>
 <text x="795.5" y="150.5" font-size="10" fill="#0d1117">lang</text>
 </g>
-<g><title>bs2/scene_spinout: 2108 bytes, 0.6% matched, 96.2% fuzzy, 1/4 functions</title>
-<rect x="707.9" y="192.3" width="38.4" height="51.2" fill="#d19922" stroke="#0d1117" stroke-width="1"/>
+<g><title>bs2/scene_spinout: 2108 bytes, 36.8% matched, 96.4% fuzzy, 2/4 functions</title>
+<rect x="707.9" y="192.3" width="38.4" height="51.2" fill="#969c2e" stroke="#0d1117" stroke-width="1"/>
 </g>
 <g><title>bs2/gMRanim: 1996 bytes, 33.9% matched, 99.8% fuzzy, 3/5 functions</title>
 <rect x="707.9" y="243.5" width="38.4" height="48.5" fill="#9a9b2d" stroke="#0d1117" stroke-width="1"/>
@@ -306,8 +306,8 @@
 <rect x="746.3" y="192.3" width="46.1" height="38.4" fill="#2ea043" stroke="#0d1117" stroke-width="1"/>
 <text x="749.3" y="204.3" font-size="10" fill="#0d1117">pad</text>
 </g>
-<g><title>bs2/cube_draw: 1696 bytes, 6.1% matched, 99.6% fuzzy, 2/5 functions</title>
-<rect x="792.4" y="192.3" width="41.2" height="38.4" fill="#c89924" stroke="#0d1117" stroke-width="1"/>
+<g><title>bs2/cube_draw: 1696 bytes, 49.8% matched, 99.7% fuzzy, 4/5 functions</title>
+<rect x="792.4" y="192.3" width="41.2" height="38.4" fill="#809c32" stroke="#0d1117" stroke-width="1"/>
 </g>
 <g><title>bs2/scene: 1176 bytes, 100.0% matched, 100.0% fuzzy, 8/8 functions</title>
 <rect x="746.3" y="230.7" width="34.1" height="32.1" fill="#2ea043" stroke="#0d1117" stroke-width="1"/>
@@ -318,7 +318,7 @@
 <g><title>bs2/camera: 1044 bytes, 73.9% matched, 99.1% fuzzy, 4/5 functions</title>
 <rect x="780.4" y="230.7" width="32.2" height="30.2" fill="#599e3a" stroke="#0d1117" stroke-width="1"/>
 </g>
-<g><title>bs2/fader: 680 bytes, 61.8% matched, 98.4% fuzzy, 4/5 functions</title>
+<g><title>bs2/fader: 680 bytes, 61.8% matched, 98.5% fuzzy, 4/5 functions</title>
 <rect x="812.6" y="230.7" width="21.0" height="30.2" fill="#6d9d36" stroke="#0d1117" stroke-width="1"/>
 </g>
 <g><title>bs2/bs2main: 576 bytes, 100.0% matched, 100.0% fuzzy, 4/4 functions</title>

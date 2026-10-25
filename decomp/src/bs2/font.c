@@ -569,18 +569,31 @@ void Glh_MeasureString(FontBox *box, u8 *str, u16 *w, u16 *h) {
 
 /* 0x81309380 */
 void Font_DrawChar(u16 x, u16 y, s32 size, s32 index) {
-    s32 left = x;
-    s32 right = left + size * 16;
-    s32 sheet = index / sCharsInSheet;
-    s32 n = index % sCharsInSheet;
-    s32 tx = n % sFont.sheetColumn * sFont.cellWidth;
-    s32 ty = n / sFont.sheetColumn * sFont.cellHeight;
-    s32 top = y - sFont.ascent * size * 16 / sFont.cellHeight;
-    s32 s0 = (tx << 14) / sFont.sheetWidth;
-    s32 t0 = (ty << 14) / sFont.sheetHeight;
-    s32 s1 = ((tx + sFont.cellWidth) << 14) / sFont.sheetWidth;
-    s32 t1 = ((ty + sFont.cellHeight) << 14) / sFont.sheetHeight;
-    s32 bottom = y + sFont.descent * size * 16 / sFont.cellHeight;
+    s32 sheet;
+    s32 n;
+    s32 tx;
+    s32 ty;
+    s32 top;
+    s32 s0;
+    s32 t0;
+    s32 s1;
+    s32 t1;
+    s32 bottom;
+    s32 left;
+    s32 right;
+
+    sheet = index / sCharsInSheet;
+    n = index % sCharsInSheet;
+    tx = n % sFont.sheetColumn * sFont.cellWidth;
+    ty = n / sFont.sheetColumn * sFont.cellHeight;
+    top = y - sFont.ascent * size * 16 / sFont.cellHeight;
+    s0 = (tx << 14) / sFont.sheetWidth;
+    t0 = (ty << 14) / sFont.sheetHeight;
+    s1 = ((tx + sFont.cellWidth) << 14) / sFont.sheetWidth;
+    t1 = ((ty + sFont.cellHeight) << 14) / sFont.sheetHeight;
+    bottom = y + sFont.descent * size * 16 / sFont.cellHeight;
+    left = x;
+    right = left + size * 16;
 
     if (sheet != sLoadedSheet) {
         GXInitTexObj(&sFontTex, sSheet + sFont.sheetSize * sheet, sFont.sheetWidth, sFont.sheetHeight,

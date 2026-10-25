@@ -59,6 +59,7 @@ u8 Fader_DrawString(Fader *f, void *sth, void *glh, GXColor *c) {
     s16 alpha;
     s32 slide;
     u8 a;
+    u8 pad[4];
 
     Fader_GetAlpha(f, &alpha, &slide);
     a = c->a;

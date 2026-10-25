@@ -1098,7 +1098,7 @@ void CardUi_PollSlot(u8 slot) {
     }
     CardUi_PollOpResult();
     if (slots[slot].state != CARD_SLOT_READY) {
-        fn_81320920(slot);
+        fn_81320920(slot & 0xFF);
     }
     s = &slots[sCardSlot];
     st = &s->state;
@@ -1717,8 +1717,8 @@ static inline GXColor CardDraw_White(u8 a) {
 void CardDraw_Icon(u8 slot, s16 pos, u8 frame, u8 alpha) {
     CardIconInfo(*icons)[CARD_MAX_FILES] = CardThread_GetIcons();
     GXColor color = CardDraw_White(alpha);
-    u32 file;
     u32 sel;
+    u32 file;
 
     sel = sCardSort[sCardSlot][sCardCol[sCardSlot] + (sCardRow[sCardSlot] + sCardTop[sCardSlot]) * 4].file;
     file = sCardSort[slot][pos + sCardTop[slot] * 4].file;

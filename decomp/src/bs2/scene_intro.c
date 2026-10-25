@@ -56,7 +56,6 @@ void fn_813095A0(GXColor *in, GXColor *out);                /* 0x813095A0 */
 s32 Res_DialogLayout(void);                                 /* 0x8130B8AC */
 s32 Res_DialogStrings(void);                                /* 0x8130B920 */
 void Sound_UpdateSpin(s32 id, f32 level);                   /* 0x8135A8E0 */
-void GXSetFog_(s32 type, GXColor color);                    /* 0x8137759C */
 
 static void *sDialogGlh;             /* 0x814AD3C8 */
 static void *sDialogSth;             /* 0x814AD3CC */
@@ -78,11 +77,14 @@ static J3DAnmColor sTextBrk;         /* 0x814AFD08 res 0x6A */
    spin eases back to rest over 50 frames. */
 static void Scene_UpdateSpin(BOOL force) {
     Scene *s = Scene_Get();
-    s16 easeFrom = s->easeFrom;
-    f32 easeSpeed = s->easeSpeed;
-    s16 prev = s->spin;
+    s16 prev;
+    s16 easeFrom;
+    f32 easeSpeed;
     f32 level;
 
+    easeFrom = s->easeFrom;
+    easeSpeed = s->easeSpeed;
+    prev = s->spin;
     if (force) {
         s->spinAccel += s->spinAccelStep;
         s->spinSpeed += s->spinAccel;
@@ -133,9 +135,11 @@ static void Scene_UpdateSpin(BOOL force) {
 static void Scene_DecayShake(void) {
     Scene *s = Scene_Get();
     s16 phase = s->shakePhase;
-    f32 land = s->landImpulse * s->landDecay;
-    f32 drop = s->dropImpulse * s->dropDecay;
+    f32 land = s->landImpulse;
+    f32 drop = s->dropImpulse;
 
+    land *= s->landDecay;
+    drop *= s->dropDecay;
     if (land < 10.0f) {
         land = 0.0f;
     }
@@ -155,11 +159,12 @@ static void Scene_UpdateWobble(void) {
     Scene *s = Scene_Get();
     s16 phase = s->wobblePhase;
     f32 amp = s->wobbleAmp;
+    f32 unused;
 
     if (s->spinAccel > 0.0f) {
         amp = 36.0f + amp;
     } else {
-        amp = amp * 0.945f;
+        amp *= 0.945f;
     }
     if (amp < 1.0f) {
         amp = 0.0f;
@@ -183,30 +188,30 @@ static inline void Scene_CalcShakeMtx(Mtx m) {
     f32 drop = s->dropImpulse;
     f32 ty;
 
-    ty = s->dropLift * drop * SinS(phase);
-    ty = s->landLift * land * SinS(phase) + ty;
+    ty = s->landLift * land * SinS(phase) + s->dropLift * drop * SinS(phase);
     MtxRotTrans(-1.0f * drop * SinS(phase), 0, land * SinS(phase), m, 0.0f, ty, 0.0f);
 }
 
 /* 0x8130C694: RotY(spin) * Shake * Wobble * Iso * T(15, 15, 15) */
 static void Scene_CalcWorldMtx(Mtx m) {
     Scene *s = Scene_Get();
-    s16 phase = s->wobblePhase;
-    f32 k = s->spinTilt * s->spinSpeed / s->spinThreshold;
-    f32 amp = s->wobbleAmp;
-    Mtx shake;
+    s16 phase;
+    f32 k;
     Mtx t;
     f32 rest;
+    Mtx shake;
+    f32 amp;
 
+    phase = s->wobblePhase;
+    amp = s->wobbleAmp;
+    k = s->spinTilt * s->spinSpeed / s->spinThreshold;
     PSMTXIdentity(t);
-    t[0][3] = t[1][3] = t[2][3] = 15.0f;
+    t[2][3] = t[1][3] = t[0][3] = 15.0f;
     MtxRotTrans(s->isoX, s->isoY, s->isoZ, m, 0.0f, 0.0f, 0.0f);
     PSMTXConcat(m, t, t);
-    rest = 1.0f - k;
-    k = 1000.0f * k;
-    MtxRotTrans(k + rest * (amp * SinS(phase * 0x5A)),
-                k + rest * (amp * SinS(phase * 0x3C)),
-                k + rest * (amp * SinS(phase * 0x46)), m, 0.0f, 0.0f, 0.0f);
+    MtxRotTrans(1000.0f * k + (1.0f - k) * (amp * SinS(phase * 0x5A)),
+                1000.0f * k + (1.0f - k) * (amp * SinS(phase * 0x3C)),
+                1000.0f * k + (1.0f - k) * (amp * SinS(phase * 0x46)), m, 0.0f, 0.0f, 0.0f);
     PSMTXConcat(m, t, m);
     Scene_CalcShakeMtx(shake);
     PSMTXConcat(shake, m, m);
@@ -225,12 +230,12 @@ static inline void Scene_SquashWorld(Scene *s) {
     MtxScaleCols(sWorldMtx, &squash);
 }
 
-static inline Vec Scene_VecSplat(f32 v) {
+static inline Vec Scene_VecSplat(Scene *s) {
     Vec r = { 0.0f, 0.0f, 0.0f };
 
-    r.x = v;
-    r.y = v;
-    r.z = v;
+    r.x = s->modelScale;
+    r.y = s->modelScale;
+    r.z = s->modelScale;
     return r;
 }
 
@@ -248,6 +253,7 @@ static inline Vec Scene_VecOuter(void) {
 
 /* 0x8130C90C */
 void Scene_DrawWorld(void) {
+    MtxPtr w = sWorldMtx;
     Scene *s = Scene_Get();
     Mtx m;
     Mtx id;
@@ -255,17 +261,17 @@ void Scene_DrawWorld(void) {
 
     Scene_CalcWorldMtx(m);
     PSMTXIdentity(id);
-    PSMTXConcat(m, id, sWorldMtx);
+    PSMTXConcat(m, id, w);
     Scene_SquashWorld(s);
-    J3D_SetModelMtx(Scene_GetBgInner(), sWorldMtx, Scene_VecSplat(s->modelScale));
+    J3D_SetModelMtx(Scene_GetBgInner(), w, Scene_VecSplat(s));
     view = Camera_GetView();
     J3D_SetViewMtx(Scene_GetBgInner(), view);
     J3D_CalcJoints(Scene_GetBgInner());
-    J3D_SetModelMtx(Scene_GetLogo(), sWorldMtx, Scene_VecOne());
+    J3D_SetModelMtx(Scene_GetLogo(), w, Scene_VecOne());
     view = Camera_GetView();
     J3D_SetViewMtx(Scene_GetLogo(), view);
     J3D_CalcJoints(Scene_GetLogo());
-    J3D_SetModelMtx(Scene_GetBgOuter(), sWorldMtx, Scene_VecOuter());
+    J3D_SetModelMtx(Scene_GetBgOuter(), w, Scene_VecOuter());
     view = Camera_GetView();
     J3D_SetViewMtx(Scene_GetBgOuter(), view);
     J3D_CalcJoints(Scene_GetBgOuter());
@@ -404,45 +410,44 @@ s32 Scene_UpdateMode0(void) {
     if (!cube->done) {
         Scene_UpdateWobble();
         Cube_Update(TRUE);
-        return SCENE_MODE0;
-    }
-
-    switch (s->m0State) {
-    case 0:
-        s->m0LogoFade--;
-        if (s->m0LogoFade < 0) {
-            s->m0LogoFade = 0;
-            s->m0State = 1;
+    } else {
+        switch (s->m0State) {
+        case 0:
+            s->m0LogoFade--;
+            if (s->m0LogoFade < 0) {
+                s->m0LogoFade = 0;
+                s->m0State = 1;
+            }
+            break;
+        case 1:
+            s->m0TextFade++;
+            if (s->m0TextFade > s->m0TextFrames) {
+                s->m0TextFade = s->m0TextFrames;
+                s->m0State = 3;
+            }
+            break;
+        case 3:
+            if (gMenuPad.buttonDown & 0x1F70) {
+                Sound_Play(SE_DECIDE);
+                s->m0State = 4;
+            }
+            break;
+        case 4:
+            s->m0TextFade--;
+            if (s->m0TextFade < 0) {
+                s->m0TextFade = 0;
+                s->m0State = 6;
+            }
+            break;
+        case 6:
+            Scene_UpdateSpin(TRUE);
+            Scene_UpdateWobble();
+            if (s->spinSpeed > s->spinThreshold) {
+                s->spin = s->spinRest;
+                return SCENE_SPINOUT;
+            }
+            break;
         }
-        break;
-    case 1:
-        s->m0TextFade++;
-        if (s->m0TextFade > s->m0TextFrames) {
-            s->m0TextFade = s->m0TextFrames;
-            s->m0State = 3;
-        }
-        break;
-    case 3:
-        if (gMenuPad.buttonDown & 0x1F70) {
-            Sound_Play(SE_DECIDE);
-            s->m0State = 4;
-        }
-        break;
-    case 4:
-        s->m0TextFade--;
-        if (s->m0TextFade < 0) {
-            s->m0TextFade = 0;
-            s->m0State = 6;
-        }
-        break;
-    case 6:
-        Scene_UpdateSpin(TRUE);
-        Scene_UpdateWobble();
-        if (s->spinSpeed > s->spinThreshold) {
-            s->spin = s->spinRest;
-            return SCENE_SPINOUT;
-        }
-        break;
     }
     return SCENE_MODE0;
 }
@@ -680,10 +685,6 @@ J3DModelInstance *Scene_GetBgOuter(void) {
 #define SCENE_SHAKE_MAX 3000
 
 /* Inner background alpha follows the impact shake. */
-static inline u8 Scene_ShakeAlpha(Scene *s, s32 shake) {
-    return s->shakeAlpha * shake / SCENE_SHAKE_MAX;
-}
-
 static inline void Scene_DrawDialogText(s32 idx, GXColor *c) {
     Glh_DrawText(idx, sDialogSth, sDialogGlh, c);
 }
@@ -694,9 +695,9 @@ void Scene_Draw2DNoDisc(void) {
     GXColor c = { 255, 255, 255, 255 };
     u8 fade0 = 255 - s->unkC4 * 150 / 30;
     u8 fade1 = 255 - s->unkCE * 150 / 30;
-    u8 fade = fade0 > fade1 ? fade1 : fade0;
+    u8 fade = (u8)(fade0 > fade1 ? fade1 : fade0);
     s32 shake;
-    s16 wobble;
+    s32 wobble;
 
     shake = s->landImpulse + s->dropImpulse;
     if (shake > SCENE_SHAKE_MAX) {
@@ -705,7 +706,7 @@ void Scene_Draw2DNoDisc(void) {
     sText.alpha = (u8)(fade * 255 / 255);
     J3D_Draw(&sText);
     fn_81304CE8();
-    sBgInner.alpha = (u8)(fade * Scene_ShakeAlpha(s, shake) / 255);
+    sBgInner.alpha = (u8)(fade * (s->shakeAlpha * shake / SCENE_SHAKE_MAX) / 255);
     if (sBgInner.alpha > 0) {
         J3D_Draw(&sBgInner);
     }
@@ -713,7 +714,7 @@ void Scene_Draw2DNoDisc(void) {
     if (wobble > SCENE_SHAKE_MAX) {
         wobble = SCENE_SHAKE_MAX;
     }
-    sBgOuter.alpha = (u8)(fade * Scene_ShakeAlpha(s, wobble) / 255);
+    sBgOuter.alpha = (u8)(fade * (s->shakeAlpha * wobble / SCENE_SHAKE_MAX) / 255);
     if (sBgOuter.alpha > 0) {
         J3D_DrawPacket(&sBgOuter, (u8 *)sBgOuter.model->packets + 0x30);
     }
@@ -749,24 +750,22 @@ static void Scene_DrawList(GlhTextBox *boxes, SthEntry *entries, u16 first, u16 
     GXColor hi = { 255, 255, 255, 255 };
     GXColor lo = { 0xF0, 0xE6, 0x00, 0xFF };
     s32 i;
-    u32 ofs = first * 8;
 
     hi.a = alpha;
     lo.a = alpha;
     box = boxes[entries[first].box];
-    box.y = (s16)(disp->textPad * 16 + (s32)h / 2) + y;
+    box.y = y + disp->textPad * 16 + h / 2;
     GX_Setup2DText();
     for (i = 0; i < count; i++) {
         fn_813095A0(&lo, &lo);
         fn_81309554(&hi, &hi);
         if (sel == i) {
-            SthEntry *e = (SthEntry *)((u8 *)entries + ofs);
+            SthEntry *e = &entries[first + i];
             fn_813090A4(&box, (char *)e + e->ofs);
         } else {
-            SthEntry *e = (SthEntry *)((u8 *)entries + ofs);
+            SthEntry *e = &entries[first + i];
             fn_81308DB8(&box, (char *)e + e->ofs);
         }
-        ofs += 8;
         box.y += box.spacing * 16;
     }
 }
@@ -779,42 +778,45 @@ static inline u16 Scene_DrawListFrame(DispSettings *disp, GlhTextBox *boxes, Sth
     u16 maxW = 0;
     u16 w = 0;
     u16 i;
-    u32 ofs = first * 8;
     GlhTextBox *box;
     GlhPane *pane;
     u16 fw;
+    u16 x;
     u16 fh;
     u16 y;
 
     for (i = 0; i < count; i++) {
-        SthEntry *e = &entries[first + i];
-        Glh_MeasureString(&boxes[((SthEntry *)((u8 *)entries + ofs))->box], (char *)e + e->ofs, &w, h);
+        SthEntry *e = &entries[i + first];
+        char *str = (char *)e + e->ofs;
+        Glh_MeasureString(&boxes[entries[first + i].box], str, &w, h);
         if (maxW < w) {
             maxW = w;
         }
-        ofs += 8;
     }
     box = &boxes[entries[first].box];
-    pane = &panes[box->pane];
     fw = maxW + (disp->textPad << 5);
-    fh = *h + box->spacing * 80 + (disp->textPad << 5);
+    fh = *h;
+    fh += box->spacing * 80;
+    fh += disp->textPad << 5;
+    pane = &panes[box->pane];
+    x = pane->x - fw / 2;
     y = pane->y - fh / 2;
-    Glh_DrawPaneRect(boxes[entries[first].box].pane, sDialogGlh, c, (u16)(pane->x - fw / 2), y, fw, fh);
+    Glh_DrawPaneRect(boxes[entries[first].box].pane, sDialogGlh, c, x, y, fw, fh);
     return y;
 }
 
 static void Scene_DrawLanguageList(Scene *s) {
     DispSettings *disp = Disp_GetSettings();
     u16 h = 0;
-    SthEntry *entries = (SthEntry *)((u8 *)sDialogSth + 8);
     GlhTextBox *boxes = (GlhTextBox *)((u8 *)sDialogGlh + ((u32 *)sDialogGlh)[2]);
+    SthEntry *entries = (SthEntry *)((u8 *)sDialogSth + 8);
     GlhPane *panes = (GlhPane *)((u8 *)sDialogGlh + ((u32 *)sDialogGlh)[3]);
     GXColor c = { 255, 255, 255, 255 };
     u16 y;
+    u16 first = 12;
 
     c.a = s->langFade;
-    y = Scene_DrawListFrame(disp, boxes, entries, panes, 12, 6, &h, &c);
-    Scene_DrawList(boxes, entries, 12, 6, y, h, s->lang, s->langFade);
+    Scene_DrawList(boxes, entries, 12, 6, Scene_DrawListFrame(disp, boxes, entries, panes, first, 6, &h, &c), h, s->lang, s->langFade);
 }
 
 static inline void Scene_DrawLanguageScreen(Scene *s, GXColor *c) {
@@ -835,7 +837,7 @@ void Scene_Draw2DMode0(void) {
     Scene *s = Scene_Get();
     GXColor c = { 255, 255, 255, 255 };
     s32 shake;
-    s16 wobble;
+    s32 wobble;
 
     if (s->langSelect || s->langFade > 0) {
         Scene_DrawLanguageScreen(s, &c);
@@ -848,7 +850,7 @@ void Scene_Draw2DMode0(void) {
     if (shake > SCENE_SHAKE_MAX) {
         shake = SCENE_SHAKE_MAX;
     }
-    sBgInner.alpha = Scene_ShakeAlpha(s, shake);
+    sBgInner.alpha = (u8)(s->shakeAlpha * shake / SCENE_SHAKE_MAX);
     fn_81304CE8();
     if (sBgInner.alpha > 0) {
         J3D_Draw(&sBgInner);
@@ -857,7 +859,7 @@ void Scene_Draw2DMode0(void) {
     if (wobble > SCENE_SHAKE_MAX) {
         wobble = SCENE_SHAKE_MAX;
     }
-    sBgOuter.alpha = Scene_ShakeAlpha(s, wobble);
+    sBgOuter.alpha = (u8)(s->shakeAlpha * wobble / SCENE_SHAKE_MAX);
     if (sBgOuter.alpha > 0) {
         J3D_DrawPacket(&sBgOuter, (u8 *)sBgOuter.model->packets + 0x30);
     }
@@ -883,22 +885,36 @@ void Scene_Draw2DMode0(void) {
 }
 
 /* 0x8130DF64: string `idx` with a yes/no choice under it, in a frame. */
+/* Widest of `count` strings from entry `first` into *outW; their height goes to *h. */
+static inline void Scene_MeasureList(GlhTextBox *boxes, SthEntry *entries, u16 first, u16 count, u16 *outW, u16 *h) {
+    u16 maxW = 0;
+    u16 w = 0;
+    u16 i;
+
+    for (i = 0; i < count; i++) {
+        char *str = (char *)&entries[i + first] + entries[first + i].ofs;
+        Glh_MeasureString(&boxes[entries[first + i].box], str, &w, h);
+        if (maxW < w) {
+            maxW = w;
+        }
+    }
+    *outW = maxW;
+}
+
 static void Scene_DrawAsk(Scene *s, u16 idx, s16 sel, u8 alpha) {
     DispSettings *disp = Disp_GetSettings();
-    u16 maxW = 0;
+    u16 maxW;
     u16 textW = 0;
     u16 textH = 0;
     u16 listH = 0;
-    SthEntry *entries = (SthEntry *)((u8 *)sDialogSth + 8);
     GlhTextBox *boxes = (GlhTextBox *)((u8 *)sDialogGlh + ((u32 *)sDialogGlh)[2]);
+    SthEntry *entries = (SthEntry *)((u8 *)sDialogSth + 8);
     GXColor c = { 255, 255, 255, 255 };
     SthEntry *e;
-    SthEntry *opt;
     GlhTextBox *box;
-    u16 w;
-    u16 i;
     u16 frameH;
     u16 totalH;
+    u16 x;
     u16 y;
 
     c.a = alpha;
@@ -906,29 +922,38 @@ static void Scene_DrawAsk(Scene *s, u16 idx, s16 sel, u8 alpha) {
     GX_Setup2DText();
     e = &entries[idx];
     Glh_MeasureString(&boxes[e->box], (char *)e + e->ofs, &textW, &textH);
-    w = 0;
-    for (i = 0, opt = entries; i < 2; i++, opt++) {
-        Glh_MeasureString(&boxes[opt[1].box], (char *)&entries[i + 1] + opt[1].ofs, &w, &listH);
-        if (maxW < w) {
-            maxW = w;
-        }
-    }
+    Scene_MeasureList(boxes, entries, 1, 2, &maxW, &listH);
+    frameH = listH + boxes[entries[1].box].spacing * 16;
     textH += disp->textPad << 5;
-    frameH = listH + boxes[entries[1].box].spacing * 16 + (disp->textPad << 5);
-    totalH = textH + (frameH + s->askGap * 16);
-    Glh_DrawStringOfs(idx, sDialogSth, sDialogGlh, &c, 0, (u16)(-totalH / 2 + textH / 2));
+    frameH += disp->textPad << 5;
+    e = &entries[idx];
+    totalH = textH + frameH + s->askGap * 16;
+    y = -totalH / 2 + textH / 2;
+    Glh_DrawStringOfs(idx, sDialogSth, sDialogGlh, &c, 0, y);
     box = &boxes[e->box];
+    x = box->x - (maxW / 2 + disp->textPad * 16);
     y = totalH / 2 + box->y - frameH;
-    Glh_DrawPaneRect(box->pane, sDialogGlh, &c, (u16)(box->x - (maxW / 2 + disp->textPad * 16)), y,
-                     maxW + (disp->textPad << 5), frameH);
+    Glh_DrawPaneRect(box->pane, sDialogGlh, &c, x, y, maxW + (disp->textPad << 5), frameH);
     Scene_DrawList(boxes, entries, 1, 2, y, listH, sel, alpha);
+}
+
+static inline void Scene_SetAmbDark(void) {
+    GXColor c[1] = { { 0x28, 0x28, 0x28, 0xFF } };
+
+    GXSetChanAmbColor(GX_COLOR0A0, c[0]);
+}
+
+static inline void Scene_SetAmbFull(void) {
+    GXColor c[1] = { { 0xFF, 0xFF, 0xFF, 0xFF } };
+
+    GXSetChanAmbColor(GX_COLOR0A0, c[0]);
 }
 
 /* 0x8130E17C */
 void Scene_Draw2DDisc(void) {
     Scene *s = Scene_Get();
     GXColor c = { 255, 255, 255, 255 };
-    s16 wobble;
+    s32 wobble;
 
     if (s->langSelect || s->langFade > 0) {
         Scene_DrawLanguageScreen(s, &c);
@@ -939,7 +964,7 @@ void Scene_Draw2DDisc(void) {
     if (wobble > SCENE_SHAKE_MAX) {
         wobble = SCENE_SHAKE_MAX;
     }
-    sBgOuter.alpha = Scene_ShakeAlpha(s, wobble);
+    sBgOuter.alpha = (u8)(s->shakeAlpha * wobble / SCENE_SHAKE_MAX);
     if (sBgOuter.alpha > 0) {
         J3D_DrawPacket(&sBgOuter, (u8 *)sBgOuter.model->packets + 0x30);
     }
@@ -953,7 +978,7 @@ void Scene_Draw2DDisc(void) {
     if (wobble > SCENE_SHAKE_MAX) {
         wobble = SCENE_SHAKE_MAX;
     }
-    sBgOuter.alpha = Scene_ShakeAlpha(s, wobble);
+    sBgOuter.alpha = (u8)(s->shakeAlpha * wobble / SCENE_SHAKE_MAX);
     if (sBgOuter.alpha > 0) {
         J3D_DrawPacket(&sBgOuter, (u8 *)sBgOuter.model->packets + 0x78);
     }
@@ -964,6 +989,10 @@ void Scene_Draw2DDisc(void) {
         GX_Setup2DText();
         Scene_DrawDialogText(4, &c);
     }
+}
+
+static inline u8 Scene_ShakeAlpha(Scene *s, s32 shake) {
+    return s->shakeAlpha * shake / SCENE_SHAKE_MAX;
 }
 
 /* 0x8130E3C8 */
@@ -993,16 +1022,16 @@ void Scene_Draw2DSpinOut(void) {
         sBigCube.alpha = s->bgAlpha;
     }
     if (sBigCube.alpha > 0) {
-        GXColor fog = { 0x28, 0x28, 0x28, 0xFF };
-        GXColor nofog = { 0xFF, 0xFF, 0xFF, 0xFF };
-        GXSetFog_(4, fog);
+        Scene_SetAmbDark();
         J3D_Draw(&sBigCube);
-        GXSetFog_(4, nofog);
+        Scene_SetAmbFull();
     }
     end = s->outTurnFrames + s->outSettleFrames + s->outCoastFrames;
     start = end - s->outFaceFrames;
     if (s->outFrame >= start && s->outFrame <= end) {
-        Menu_DrawSpinOutFace(Scene_GetSpinOutMtx(), (s16)((s->outFrame - start) * 255 / (end - start)));
+        s16 alpha = (s->outFrame - start) * 255 / (end - start);
+
+        Menu_DrawSpinOutFace(Scene_GetSpinOutMtx(), alpha);
     } else if (s->outFrame > end) {
         Menu_DrawSpinOutFace(Scene_GetSpinOutMtx(), 255);
     }
@@ -1018,22 +1047,18 @@ void Scene_Draw2DMenu(void) {
     alpha = menu->bgMinAlpha + (255 - menu->bgMinAlpha) * (0x7FFF - menu->zoom) / 0x7FFF;
     sBigCube.alpha = alpha;
     if (sBigCube.alpha > 0) {
-        GXColor fog = { 0x28, 0x28, 0x28, 0xFF };
-        GXColor nofog = { 0xFF, 0xFF, 0xFF, 0xFF };
-        GXSetFog_(4, fog);
+        Scene_SetAmbDark();
         J3D_DrawPacket(&sBigCube, (u8 *)sBigCube.model->packets + 0x78);
-        GXSetFog_(4, nofog);
+        Scene_SetAmbFull();
     }
     CardIcon_Draw();
     GameIcon_Draw();
     OptionIcon_Draw();
     ClockIcon_Draw();
     if (sBigCube.alpha > 0) {
-        GXColor fog = { 0x28, 0x28, 0x28, 0xFF };
-        GXColor nofog = { 0xFF, 0xFF, 0xFF, 0xFF };
-        GXSetFog_(4, fog);
+        Scene_SetAmbDark();
         J3D_DrawPacket(&sBigCube, (u8 *)sBigCube.model->packets + 0x168);
-        GXSetFog_(4, nofog);
+        Scene_SetAmbFull();
     }
     Menu_Draw2D(alpha);
 }
