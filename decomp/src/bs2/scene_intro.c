@@ -749,7 +749,6 @@ static void Scene_DrawList(GlhTextBox *boxes, SthEntry *entries, u16 first, u16 
     GXColor hi = { 255, 255, 255, 255 };
     GXColor lo = { 0xF0, 0xE6, 0x00, 0xFF };
     s32 i;
-    u32 ofs = first * 8;
 
     hi.a = alpha;
     lo.a = alpha;
@@ -760,13 +759,12 @@ static void Scene_DrawList(GlhTextBox *boxes, SthEntry *entries, u16 first, u16 
         fn_813095A0(&lo, &lo);
         fn_81309554(&hi, &hi);
         if (sel == i) {
-            SthEntry *e = (SthEntry *)((u8 *)entries + ofs);
+            SthEntry *e = &entries[first + i];
             fn_813090A4(&box, (char *)e + e->ofs);
         } else {
-            SthEntry *e = (SthEntry *)((u8 *)entries + ofs);
+            SthEntry *e = &entries[first + i];
             fn_81308DB8(&box, (char *)e + e->ofs);
         }
-        ofs += 8;
         box.y += box.spacing * 16;
     }
 }
@@ -779,42 +777,45 @@ static inline u16 Scene_DrawListFrame(DispSettings *disp, GlhTextBox *boxes, Sth
     u16 maxW = 0;
     u16 w = 0;
     u16 i;
-    u32 ofs = first * 8;
     GlhTextBox *box;
     GlhPane *pane;
     u16 fw;
+    u16 x;
     u16 fh;
     u16 y;
 
     for (i = 0; i < count; i++) {
-        SthEntry *e = &entries[first + i];
-        Glh_MeasureString(&boxes[((SthEntry *)((u8 *)entries + ofs))->box], (char *)e + e->ofs, &w, h);
+        SthEntry *e = &entries[i + first];
+        char *str = (char *)e + e->ofs;
+        Glh_MeasureString(&boxes[entries[first + i].box], str, &w, h);
         if (maxW < w) {
             maxW = w;
         }
-        ofs += 8;
     }
     box = &boxes[entries[first].box];
-    pane = &panes[box->pane];
     fw = maxW + (disp->textPad << 5);
-    fh = *h + box->spacing * 80 + (disp->textPad << 5);
+    fh = box->spacing * 80;
+    fh += *h;
+    fh += disp->textPad << 5;
+    pane = &panes[box->pane];
+    x = pane->x - fw / 2;
     y = pane->y - fh / 2;
-    Glh_DrawPaneRect(boxes[entries[first].box].pane, sDialogGlh, c, (u16)(pane->x - fw / 2), y, fw, fh);
+    Glh_DrawPaneRect(boxes[entries[first].box].pane, sDialogGlh, c, x, y, fw, fh);
     return y;
 }
 
 static void Scene_DrawLanguageList(Scene *s) {
     DispSettings *disp = Disp_GetSettings();
     u16 h = 0;
-    SthEntry *entries = (SthEntry *)((u8 *)sDialogSth + 8);
     GlhTextBox *boxes = (GlhTextBox *)((u8 *)sDialogGlh + ((u32 *)sDialogGlh)[2]);
+    SthEntry *entries = (SthEntry *)((u8 *)sDialogSth + 8);
     GlhPane *panes = (GlhPane *)((u8 *)sDialogGlh + ((u32 *)sDialogGlh)[3]);
     GXColor c = { 255, 255, 255, 255 };
     u16 y;
+    u16 first = 12;
 
     c.a = s->langFade;
-    y = Scene_DrawListFrame(disp, boxes, entries, panes, 12, 6, &h, &c);
-    Scene_DrawList(boxes, entries, 12, 6, y, h, s->lang, s->langFade);
+    Scene_DrawList(boxes, entries, 12, 6, Scene_DrawListFrame(disp, boxes, entries, panes, first, 6, &h, &c), h, s->lang, s->langFade);
 }
 
 static inline void Scene_DrawLanguageScreen(Scene *s, GXColor *c) {
@@ -893,7 +894,6 @@ static void Scene_DrawAsk(Scene *s, u16 idx, s16 sel, u8 alpha) {
     GlhTextBox *boxes = (GlhTextBox *)((u8 *)sDialogGlh + ((u32 *)sDialogGlh)[2]);
     GXColor c = { 255, 255, 255, 255 };
     SthEntry *e;
-    SthEntry *opt;
     GlhTextBox *box;
     u16 w;
     u16 i;
@@ -907,14 +907,16 @@ static void Scene_DrawAsk(Scene *s, u16 idx, s16 sel, u8 alpha) {
     e = &entries[idx];
     Glh_MeasureString(&boxes[e->box], (char *)e + e->ofs, &textW, &textH);
     w = 0;
-    for (i = 0, opt = entries; i < 2; i++, opt++) {
-        Glh_MeasureString(&boxes[opt[1].box], (char *)&entries[i + 1] + opt[1].ofs, &w, &listH);
+    for (i = 0; i < 2; i++) {
+        char *str = (char *)&entries[i + 1] + entries[1 + i].ofs;
+        Glh_MeasureString(&boxes[entries[1 + i].box], str, &w, &listH);
         if (maxW < w) {
             maxW = w;
         }
     }
+    frameH = listH + boxes[entries[1].box].spacing * 16;
     textH += disp->textPad << 5;
-    frameH = listH + boxes[entries[1].box].spacing * 16 + (disp->textPad << 5);
+    frameH += disp->textPad << 5;
     totalH = textH + (frameH + s->askGap * 16);
     Glh_DrawStringOfs(idx, sDialogSth, sDialogGlh, &c, 0, (u16)(-totalH / 2 + textH / 2));
     box = &boxes[e->box];
