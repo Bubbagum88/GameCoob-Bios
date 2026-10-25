@@ -1461,8 +1461,10 @@ void fn_8132EC54(void) {
         s = 0.6f;
         break;
     }
+    /* c is set again after the call: that keeps sFxCube in r31 (single addi). */
     c = sFxCube;
-    fn_8132C830(&o, sFxCube, NULL, sFxCount);
+    fn_8132C830(&o, c, NULL, sFxCount);
+    c = sFxCube;
     oz = o.z;
     oy = o.y;
     ox = o.x;
