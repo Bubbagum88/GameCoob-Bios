@@ -404,10 +404,17 @@ void OptionIcon_UpdateFace(void) {
     }
 }
 
-static inline Vec OptionIcon_Scale(void) {
-    Vec v = { 0.67f, 0.67f, 0.67f };
-
+/* Passing the scale through VecRef gives the IPL's stack layout for the
+ * by-value Vec argument (rodata copy, then the argument copy above it). */
+static inline Vec* VecRef(Vec* v) {
+    (void)v;
     return v;
+}
+
+static inline void OptionIcon_SetMtx(J3DModelInstance* inst, Mtx m) {
+    Vec scale = { 0.67f, 0.67f, 0.67f };
+
+    J3D_SetModelMtx(inst, m, *VecRef(&scale));
 }
 
 /* 0x81325960 */
@@ -423,14 +430,14 @@ void OptionIcon_CalcMtx(void) {
     for (i = 0; i < OPT_RING; i++) {
         MtxRotTrans(sOptRingCube[i].rotX, sOptRingCube[i].rotY, 0, t, sOptRingCube[i].dx, sOptRingCube[i].dy, 0.0f);
         PSMTXConcat(base, t, m);
-        J3D_SetModelMtx(&sOptRing[i], m, OptionIcon_Scale());
+        OptionIcon_SetMtx(&sOptRing[i], m);
         J3D_SetViewMtx(&sOptRing[i], Camera_GetView());
         J3D_CalcJoints(&sOptRing[i]);
     }
     for (i = 0; i < OPT_SHAPE; i++) {
         PSMTXTrans(t, sOptShapeCube[i].dx, sOptShapeCube[i].dy, 0.0f);
         PSMTXConcat(base, t, m);
-        J3D_SetModelMtx(&sOptShape[i], m, OptionIcon_Scale());
+        OptionIcon_SetMtx(&sOptShape[i], m);
         J3D_SetViewMtx(&sOptShape[i], Camera_GetView());
         J3D_CalcJoints(&sOptShape[i]);
     }
