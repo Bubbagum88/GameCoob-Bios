@@ -241,6 +241,7 @@ static void Cube_CalcRollMtx(Mtx m) {
 /* 0x8130F7F0: turn to the step direction, move to the grid cell, and onto
    the current face. */
 static void Cube_CalcGridMtx(Mtx m) {
+    CubeState *c;
     Mtx face;
     Mtx t;
     s16 yaw = 0;
@@ -264,7 +265,8 @@ static void Cube_CalcGridMtx(Mtx m) {
     PSMTXConcat(t, m, m);
     MtxRotTrans(0, yaw, 0, t, -(s32)sCube->size / 2, 0.0f, -sCube->size / 2);
     PSMTXConcat(t, m, m);
-    PSMTXTrans(t, -(sCube->x - 16) * sCube->size, 0.0f, -(sCube->y - 16) * sCube->size);
+    c = sCube;
+    PSMTXTrans(t, -(sCube->x - 16) * sCube->size, 0.0f, -(c->y - 16) * c->size);
     PSMTXConcat(t, m, m);
     if (sCube->face == 1) {
         MtxRotTrans(0x4000, 0, 0x4000, face, 0.0f, 0.0f, 0.0f);
@@ -368,6 +370,13 @@ static void Cube_CalcRiseMtx(Mtx m) {
     PSMTXConcat(t, m, m);
 }
 
+/* Passing the Vec through this pointer helper gives the original's stack
+   layout for the by-value copy (same trick as scene_intro.c). */
+static inline Vec *Cube_VecRef(Vec *v) {
+    (void)v;
+    return v;
+}
+
 static inline void Cube_DrawPath(void) {
     Scene *s = Scene_Get();
     Mtx t;
@@ -408,10 +417,8 @@ static inline void Cube_SetModel(Scene *s) {
     MtxPtr view;
     Vec r = { 0.0f, 0.0f, 0.0f };
 
-    r.x = s->modelScale;
-    r.y = s->modelScale;
-    r.z = s->modelScale;
-    J3D_SetModelMtx(Cube_GetModel(), sCubeMtx, r);
+    r.z = r.y = r.x = s->modelScale;
+    J3D_SetModelMtx(Cube_GetModel(), sCubeMtx, *Cube_VecRef(&r));
     view = Camera_GetView();
     J3D_SetViewMtx(Cube_GetModel(), view);
     J3D_CalcJoints(Cube_GetModel());
@@ -423,7 +430,6 @@ static void Cube_DrawRise(void) {
     s32 n = sCube->riseFrames;
     s32 r = n - sCube->riseFrame;
     Mtx t;
-    MtxPtr view;
     f32 h;
     f32 y;
 
@@ -456,12 +462,23 @@ static void Cube_DrawRise(void) {
 
 /* Phases 0 and 1: fall, then roll along the path. */
 
-/* 0x81310060 */
-void Cube_Draw(void) {
+static inline void Cube_DrawText(void) {
     Mtx m;
     MtxPtr view;
     f32 frame;
 
+    /* The "GAMECUBE" wordmark joint animation (60 frames) runs off the
+       text clock that starts with the drop. */
+    frame = Cube_TextFrame();
+    PSMTXIdentity(m);
+    J3D_SetModelMtx(Scene_GetLogoText(), m, Cube_VecOne());
+    view = Camera_GetView();
+    J3D_SetViewMtx(Scene_GetLogoText(), view);
+    J3D_AnimateJoints(Scene_GetLogoText(), frame);
+}
+
+/* 0x81310060 */
+void Cube_Draw(void) {
     switch (sPhase) {
     case CUBE_PHASE_FALL:
         Cube_DrawPath();
@@ -479,15 +496,7 @@ void Cube_Draw(void) {
         Cube_DrawRise();
         break;
     }
-
-    /* The "GAMECUBE" wordmark joint animation (60 frames) runs off the
-       text clock that starts with the drop. */
-    frame = Cube_TextFrame();
-    PSMTXIdentity(m);
-    J3D_SetModelMtx(Scene_GetLogoText(), m, Cube_VecOne());
-    view = Camera_GetView();
-    J3D_SetViewMtx(Scene_GetLogoText(), view);
-    J3D_AnimateJoints(Scene_GetLogoText(), frame);
+    Cube_DrawText();
 }
 
 /* 0x81310494: the boot jingle, with the Z easter eggs. */
@@ -517,9 +526,19 @@ static void Cube_UpdateJingle(void) {
 }
 
 /* 0x81310584: one logic frame. */
+static inline BOOL Cube_TickText(void) {
+    BOOL done = FALSE;
+
+    sCube->textFrame++;
+    if (sCube->textFrame >= sCube->textFrames + sCube->textDelay) {
+        sCube->textFrame = sCube->textFrames + sCube->textDelay;
+        done = TRUE;
+    }
+    return done;
+}
+
 s32 Cube_Update(BOOL playJingle) {
     Scene *s;
-    BOOL textDone;
     s32 next;
 
     sPhase = sNextPhase;
@@ -543,12 +562,7 @@ s32 Cube_Update(BOOL playJingle) {
                 sCube->dir = sCubePath[sCube->step].dir;
             }
         }
-        if (sCube->dir == CUBE_DIR_RISE) {
-            next = CUBE_PHASE_RISE;
-        } else {
-            sCube->stepFrame++;
-            next = CUBE_PHASE_PATH;
-        }
+        next = sCube->dir == CUBE_DIR_RISE ? CUBE_PHASE_RISE : (sCube->stepFrame++, CUBE_PHASE_PATH);
         sNextPhase = next;
         break;
     case CUBE_PHASE_RISE:
@@ -588,14 +602,8 @@ s32 Cube_Update(BOOL playJingle) {
             sCube->logoFrame = sCube->logoFrames;
             sCube->done = 1;
         }
-        textDone = FALSE;
         s->logoAlpha = sCube->logoFrame * 255 / sCube->logoFrames;
-        sCube->textFrame++;
-        if (sCube->textFrame >= sCube->textFrames + sCube->textDelay) {
-            sCube->textFrame = sCube->textFrames + sCube->textDelay;
-            textDone = TRUE;
-        }
-        if (!textDone) {
+        if (!Cube_TickText()) {
             sCube->done = 0;
         }
         if (s->dropImpulse != 0.0f) {

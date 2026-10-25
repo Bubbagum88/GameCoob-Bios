@@ -617,7 +617,7 @@ config.libs = [
             Object(NonMatching, "bs2/scene_intro.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
             Object(NonMatching, "bs2/scene_spinout.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
             Object(NonMatching, "bs2/cube.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
-            Object(NonMatching, "bs2/cube_draw.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
+            Object(Matching, "bs2/cube_draw.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
             Object(NonMatching, "bs2/menu/menu.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
             Object(Matching, "bs2/menu/game_params.c"),
             Object(Matching, "bs2/menu/game.c"),
