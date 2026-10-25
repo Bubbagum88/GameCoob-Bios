@@ -21,12 +21,11 @@ static void Cube_DrawTile(s32 x, s32 y, s32 face, u8 alpha);
 /* 0x813108B8 */
 static void Cube_DrawTiles(u8 alpha) {
     CubeState *c = Cube_Get();
+    s32 f, x, y;
     CubeTile (*grid)[CUBE_GRID][CUBE_GRID] = (CubeTile (*)[CUBE_GRID][CUBE_GRID])Cube_GetGrid();
+    s32 a;
     Mtx nrm;
     Mtx m;
-    s32 f, x, y;
-    s32 a;
-    CubeTile *t;
 
     MtxRotTrans(0, 0, 0, m, CUBE_CENTER, CUBE_CENTER, CUBE_CENTER);
     PSMTXConcat(Scene_GetWorldMtx(), m, m);
@@ -38,15 +37,14 @@ static void Cube_DrawTiles(u8 alpha) {
     for (f = 0; f < CUBE_FACES; f++) {
         for (x = 0; x < CUBE_GRID; x++) {
             for (y = 0; y < CUBE_GRID; y++) {
-                t = &grid[f][x][y];
-                if (t->group == 0) {
+                if (grid[f][x][y].group == 0) {
                     continue;
                 }
                 a = 255;
-                if (t->state == 1) {
+                if (grid[f][x][y].state == 1) {
                     a = c->stepFrame * 255 / c->sideFrames;
                 }
-                if (t->state == 2) {
+                if (grid[f][x][y].state == 2) {
                     a = (c->sideFrames - c->stepFrame) * 255 / c->sideFrames;
                 }
                 if (a > 255) {
@@ -85,6 +83,7 @@ static void Cube_DrawTile(s32 x, s32 y, s32 face, u8 alpha) {
     s32 px;
     s32 full;
     s32 py;
+    u8 unused[8];
     GXColor color;
 
     full = Cube_Get()->size * 16;
@@ -108,10 +107,9 @@ static void Cube_DrawTile(s32 x, s32 y, s32 face, u8 alpha) {
 /* 0x81310E24: the trail tiles, then the small cube, faded by `alpha`. */
 void Cube_DrawBig(u8 alpha) {
     CubeState *c = Cube_Get();
-    MtxPtr cubeMtx = Cube_GetMtx();
     Mtx m;
 
-    PSMTXConcat(Camera_GetView(), cubeMtx, m);
+    PSMTXConcat(Camera_GetView(), Cube_GetMtx(), m);
     GX_Setup2D(1, 0, 0);
     GXSetVtxAttrFmt(1, 13, 1, 3, 13);
     GXSetCullMode(0);
