@@ -383,6 +383,9 @@ jaudio/system.c:
 
 jaudio/sub_sys.c:
 	.text       start:0x81345900 end:0x81346B20 align:32
+	.data       start:0x813F13A0 end:0x813F1430
+	.sbss       start:0x814AD760 end:0x814AD778
+	.sdata2     start:0x814AE260 end:0x814AE278
 
 jaudio/os.c:
 	.text       start:0x81346B20 end:0x81346D00 align:32

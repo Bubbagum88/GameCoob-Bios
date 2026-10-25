@@ -73,6 +73,7 @@ extern void RspStart2(u32* task, s32 tasks, s32 mode) {
 #pragma scheduling 7400
 extern s32 RspStart(u32* pTaskCmds, s32 allTasks) {
     static BOOL init = TRUE;
+    volatile s32 nTasks = allTasks;
     s32 i;
     u32 cmdLo;
     u32 cmdHi;
@@ -93,7 +94,7 @@ extern s32 RspStart(u32* pTaskCmds, s32 allTasks) {
         init = FALSE;
     }
 
-    for (i = 0; i < allTasks; i++) {
+    for (i = 0; i < nTasks; i++) {
         cmdLo = pTaskCmds[1];
         cmdHi = pTaskCmds[0];
         pTaskCmds += 2;
@@ -140,24 +141,20 @@ extern s32 RspStart(u32* pTaskCmds, s32 allTasks) {
                     if (is2bit) {
                         for (k = 0; k < 4; k++) {
                             u8 b = *src++;
-                            s16 s;
-                            s = (AD2[(b >> 6) & 3] << scale) + ((h1 * c1 + h2 * c0) >> 11);
-                            h2 = h1; h1 = s; *dst++ = s;
-                            s = (AD2[(b >> 4) & 3] << scale) + ((h1 * c1 + h2 * c0) >> 11);
-                            h2 = h1; h1 = s; *dst++ = s;
-                            s = (AD2[(b >> 2) & 3] << scale) + ((h1 * c1 + h2 * c0) >> 11);
-                            h2 = h1; h1 = s; *dst++ = s;
-                            s = (AD2[(b >> 0) & 3] << scale) + ((h1 * c1 + h2 * c0) >> 11);
-                            h2 = h1; h1 = s; *dst++ = s;
+                            s32 s;
+                            s = (AD2[(b >> 6) & 3] << scale) + ((h1 * c1 + h2 * c0) >> 11); h2 = h1; h1 = (s16)s; *dst++ = h1;
+                            s = (AD2[(b >> 4) & 3] << scale) + ((h1 * c1 + h2 * c0) >> 11); h2 = h1; h1 = (s16)s; *dst++ = h1;
+                            s = (AD2[(b >> 2) & 3] << scale) + ((h1 * c1 + h2 * c0) >> 11); h2 = h1; h1 = (s16)s; *dst++ = h1;
+                            s = (AD2[(b >> 0) & 3] << scale) + ((h1 * c1 + h2 * c0) >> 11); h2 = h1; h1 = (s16)s; *dst++ = h1;
                         }
                     } else {
                         for (k = 0; k < 8; k++) {
                             u8 b = *src++;
-                            s16 s;
-                            s = (AD4[(b >> 4) & 0xF] << scale) + ((h1 * c1 + h2 * c0) >> 11);
-                            h2 = h1; h1 = s; *dst++ = s;
-                            s = (AD4[(b >> 0) & 0xF] << scale) + ((h1 * c1 + h2 * c0) >> 11);
-                            h2 = h1; h1 = s; *dst++ = s;
+                            s32 s;
+                            s16 hi = AD4[(b >> 4) & 0xF];
+                            s16 lo = AD4[(b >> 0) & 0xF];
+                            s = (hi << scale) + ((h1 * c1 + h2 * c0) >> 11); h2 = h1; h1 = (s16)s; *dst++ = h1;
+                            s = (lo << scale) + ((h1 * c1 + h2 * c0) >> 11); h2 = h1; h1 = (s16)s; *dst++ = h1;
                         }
                     }
                 }
@@ -172,7 +169,9 @@ extern s32 RspStart(u32* pTaskCmds, s32 allTasks) {
                 break;
 
             case A_CMD_RESAMPLE: { // A_RESAMPLE
+                u8 padB[40];
                 s16 spC[8];
+                u8 padA[4];
                 s16* var_r4;
                 s32 j;
                 s16* var_r6;
@@ -247,7 +246,7 @@ extern s32 RspStart(u32* pTaskCmds, s32 allTasks) {
 
             case A_CMD_SETBUFF: // A_SETBUFF
                 DMEMIn = cmdHi & 0xFFFF;
-                DMEMOut = (cmdLo >> 16) & 0xFFFF;
+                DMEMOut = (u16)(cmdLo >> 16);
                 DMEMCount = cmdLo & 0xFFFF;
                 break;
 
@@ -390,8 +389,8 @@ extern s32 RspStart(u32* pTaskCmds, s32 allTasks) {
                 u8 temp = cmdHi >> 16;
                 envParam1_1 = cmdHi & 0xFFFF;
                 envParam1_2 = cmdLo >> 16;
-                envParam1_3 = cmdLo & 0xFFFF;
                 envParam1_0 = temp << 8;
+                envParam1_3 = cmdLo & 0xFFFF;
                 break;
             }
 
@@ -517,7 +516,7 @@ extern s32 RspStart(u32* pTaskCmds, s32 allTasks) {
                 return i + 1;
         }
     }
-    return allTasks;
+    return nTasks;
 }
 
 static void Jac_Resample16(

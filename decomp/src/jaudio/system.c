@@ -1794,6 +1794,7 @@ static void __WaveTouch(wtstr* wavetouch_str, u32 ram_addr, WaveMedia* wave_medi
 
 s32 Nas_BankOfsToAddr(s32 bank_id, u8* ctrl_p, WaveMedia* wave_media, s32 async) {
     Bgloadreq* preload;
+    u32 wave_size;
     Bgloadreq* top_preload;
     smzwavetable* wavetable;
     s32 size = 0;
@@ -1849,8 +1850,8 @@ s32 Nas_BankOfsToAddr(s32 bank_id, u8* ctrl_p, WaveMedia* wave_media, s32 async)
             case TRUE: {
                 u8 medium = wavetable->medium;
                 if ((u8)wavetable->medium == wave_media->wave0_media) {
-                    // the size & 0xFFFFFF is necessary... but only once...
-                    wave_ram_p = (u8*)Nas_Alloc_Single(wavetable->size & 0xFFFFFF, wave_media->wave0_bank_id, wavetable->sample,
+                    wave_size = wavetable->size;
+                    wave_ram_p = (u8*)Nas_Alloc_Single(wave_size & 0xFFFFFF, wave_media->wave0_bank_id, wavetable->sample,
                         (u8)wavetable->medium, CACHE_TEMPORARY);
                 } else if ((u8)wavetable->medium == wave_media->wave1_media) {
                     wave_ram_p = (u8*)Nas_Alloc_Single(wavetable->size, wave_media->wave1_bank_id, wavetable->sample,

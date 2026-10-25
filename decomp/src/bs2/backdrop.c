@@ -67,7 +67,7 @@ void Backdrop_SetupGX(u32 lights) {
 }
 
 /* One spot light pointing down -z (view space) from pos, which is moved to view space. */
-static inline void Backdrop_LoadSpot(Mtx mv, Vec *pos, f32 cutoff, f32 bright, u8 alpha, GXLightID id) {
+static inline void Backdrop_LoadSpot(Mtx mv, Vec *pos, f32 bright, f32 cutoff, u8 alpha, GXLightID id) {
     MenuWork *menu = Menu_Get();
     Vec dir = { 0.0f, 0.0f, -1.0f };
     GXLightObj light;
@@ -86,12 +86,12 @@ static inline void Backdrop_LoadSpot(Mtx mv, Vec *pos, f32 cutoff, f32 bright, u
     GXLoadLightObjImm(&light, id);
 }
 
-static inline Vec Backdrop_Vec(f32 x, f32 y, f32 z) {
+static inline Vec Backdrop_Vec(Vec *p) {
     Vec v = { 0.0f, 0.0f, 0.0f };
 
-    v.x = x;
-    v.y = y;
-    v.z = z;
+    v.x = p->x;
+    v.y = p->y;
+    v.z = p->z;
     return v;
 }
 
@@ -99,14 +99,14 @@ static inline Vec Backdrop_Vec(f32 x, f32 y, f32 z) {
    lit by GX_LIGHT3 at menu->lightPos plus the extra lights in mask */
 void Backdrop_DrawLit(Mtx mv, u8 alpha, u32 lights, u8 spotAlpha) {
     MenuWork *menu = Menu_Get();
-    Vec pos = Backdrop_Vec(menu->lightPos.x, menu->lightPos.y, menu->lightPos.z);
+    Vec pos = Backdrop_Vec(&menu->lightPos);
     GXColor mat = { 255, 255, 255, 255 };
     GXColor amb = { 0, 0, 0, 0 };
-    void *tex = ResGet(89);
     s32 x;
     s32 y;
+    void *tex = ResGet(89);
 
-    Backdrop_LoadSpot(mv, &pos, menu->lightCutoff, menu->lightAttnK, spotAlpha, GX_LIGHT3);
+    Backdrop_LoadSpot(mv, &pos, menu->lightAttnK, menu->lightCutoff, spotAlpha, GX_LIGHT3);
     J3D_LoadTexture(0, tex);
     Backdrop_SetupGX(lights | GX_LIGHT3);
     mat.a = alpha;
@@ -118,20 +118,20 @@ void Backdrop_DrawLit(Mtx mv, u8 alpha, u32 lights, u8 spotAlpha) {
             GXPosition3s16(x * 16, y * 16, 0);
             GXNormal3s16(0, 0, 16);
             GXTexCoord2s16(0, 0);
-            GXPosition3s16((x + 32) * 16, y * 16, 0);
+            GXPosition3s16((x * 16 + 512), y * 16, 0);
             GXNormal3s16(0, 0, 16);
             GXTexCoord2s16(32, 0);
-            GXPosition3s16((x + 32) * 16, (y + 32) * 16, 0);
+            GXPosition3s16((x * 16 + 512), (y * 16 + 512), 0);
             GXNormal3s16(0, 0, 16);
             GXTexCoord2s16(32, 32);
-            GXPosition3s16(x * 16, (y + 32) * 16, 0);
+            GXPosition3s16(x * 16, (y * 16 + 512), 0);
             GXNormal3s16(0, 0, 16);
             GXTexCoord2s16(0, 32);
             GXEnd();
         }
     }
     GXSetChanAmbColor(GX_COLOR0A0, mat);
-    GXSetChanCtrl(GX_COLOR0A0, GX_ENABLE, GX_SRC_REG, GX_SRC_REG, GX_LIGHT_NULL, GX_DF_CLAMP, GX_AF_SPEC);
+    GXSetChanCtrl(GX_COLOR0A0, GX_ENABLE, GX_SRC_REG, GX_SRC_REG, GX_LIGHT_NULL, GX_DF_CLAMP, GX_AF_SPOT);
 }
 
 /* 0x8130B244 */
@@ -144,11 +144,11 @@ void Backdrop_DrawSpots(Mtx mv, u8 alpha, Vec *pos1, Vec *pos2, u8 alpha1, u8 al
     u32 lights = 0;
 
     if (alpha1 != 0) {
-        Backdrop_LoadSpot(mv, pos1, 28.0f, 0.525f, alpha1, GX_LIGHT4);
+        Backdrop_LoadSpot(mv, pos1, 0.525f, 28.0f, alpha1, GX_LIGHT4);
         lights |= GX_LIGHT4;
     }
     if (alpha2 != 0) {
-        Backdrop_LoadSpot(mv, pos2, 28.0f, 0.525f, alpha2, GX_LIGHT5);
+        Backdrop_LoadSpot(mv, pos2, 0.525f, 28.0f, alpha2, GX_LIGHT5);
         lights |= GX_LIGHT5;
     }
     Backdrop_DrawLit(mv, alpha, lights, spotAlpha);

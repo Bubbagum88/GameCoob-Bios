@@ -32,12 +32,15 @@ static u8 ext_mixmode                = MixMode_Mono;
  */
 void Jac_HeapSetup(void* heap, s32 size)
 {
+	u8* base;
+
 	if (heap) {
 		u8* end = (u8*)heap + size;
+		base = (u8*)heap;
 		// "memory is assigned from the main side, initialising the audio heap"
 		OSReport("\n\201\364Jac/AI/Heap:: \203\201\203C\203\223\202\251\202\347\203\201\203\202\203\212\202\360\216w\222\350\202\263\202\352\202\334\202\265\202\275\202\314\202\305\n");
 		OSReport("                  \203I\201[\203f\203B\203I\203q\201[\203v\202\360\217\211\212\372\211\273\202\265\202\334\202\267\n");
-		Nas_HeapInit(&audio_hp, (u8*)heap, size);
+		Nas_HeapInit(&audio_hp, base, size);
 		// "addresses %x to %x are usable"
 		OSReport("\201\364Jac/AI/Heap:: \203A\203h\203\214\203X\201@%x \202\251\202\347 %x \202\334\202\305\216g\227p\211\302\224\\\202\305\202\267\n", heap, end - 1);
 		audio_hp_exist = TRUE;

@@ -25,13 +25,13 @@ static OptCube sOptShapeCube[OPT_SHAPE];
 /* the picture drawn by the shape cubes, 9 columns x 8 rows */
 static s8 sOptShapeBits[8 * 9] = {
     0, 0, 0, 0, 1, 1, 0, 0, 0,
-    0, 0, 0, 0, 0, 1, 1, 1, 0,
-    0, 0, 0, 0, 0, 0, 1, 1, 1,
-    1, 0, 0, 0, 0, 0, 0, 1, 0,
-    1, 1, 1, 0, 0, 0, 0, 0, 1,
-    0, 0, 0, 1, 1, 0, 1, 0, 1,
-    1, 1, 0, 0, 1, 1, 0, 0, 1,
-    0, 1, 1, 1, 0, 0, 1, 0, 0,
+    0, 0, 0, 0, 1, 1, 1, 0, 0,
+    0, 0, 0, 0, 1, 1, 1, 1, 0,
+    0, 0, 0, 0, 1, 0, 1, 1, 1,
+    0, 0, 0, 0, 1, 0, 0, 1, 1,
+    0, 1, 1, 1, 1, 0, 1, 1, 0,
+    1, 1, 1, 1, 1, 0, 1, 0, 0,
+    0, 1, 1, 1, 0, 0, 0, 0, 0,
 };
 
 static s16 sOptFrame;
@@ -155,10 +155,6 @@ static void OptionIcon_ShowHome(void) {
     }
 }
 
-/* 0x81324264 */
-static void OptionIcon_Nop1(void) {
-}
-
 /* the four corners fly out from the centre to the corners of the square */
 static inline void OptionIcon_FlyOut(s16 t) {
     u8 corner[4] = { 0, 7, 22, 15 };
@@ -253,10 +249,6 @@ static inline void OptionIcon_Swap(void) {
     }
 }
 
-/* 0x81324C20 */
-static void OptionIcon_Nop2(void) {
-}
-
 /* 0x81324C24: open a vertical slit from the centre that shows the shape. */
 static void OptionIcon_WipeToShape(s16 t, s16 dur) {
     s16 i;
@@ -341,12 +333,29 @@ static void OptionIcon_WipeToRing(s16 t, s16 dur) {
 }
 
 /* 0x8132554C */
-void OptionIcon_UpdateFace(void) {
-    OptionParams* p;
+/* squeeze the square horizontally into a line */
+static inline void OptionIcon_SqueezeRing(s16 t) {
     s16 i;
+    u8 unused[4];
     s16 r;
     f32 x;
-    u8 unused[4];
+
+    (void)&unused; /* dead, but it takes the stack slot below FlyOut's corner[] */
+    r = Hermite(t, 0.0f, 80.0f, 0.0f, 40.0f, 0.0f, 0.0f);
+    for (i = 0; i < OPT_RING; i++) {
+        x = sOptRingCube[i].x;
+        if (x > 0.0f && x > r) {
+            sOptRingCube[i].dx = r;
+        } else if (x < 0.0f && x < -r) {
+            sOptRingCube[i].dx = -r;
+        } else {
+            sOptRingCube[i].dx = x;
+        }
+    }
+}
+
+void OptionIcon_UpdateFace(void) {
+    OptionParams* p;
 
     p = Option_GetParams();
     if (sOptFrame == 0) {
@@ -375,18 +384,7 @@ void OptionIcon_UpdateFace(void) {
     } else if (sOptFrame < 225) {
         OptionIcon_FlipRing(sOptFrame - 70);
     } else if (sOptFrame < 265) {
-        /* squeeze the square horizontally into a line */
-        r = Hermite((s16)(sOptFrame - 225), 0.0f, 80.0f, 0.0f, 40.0f, 0.0f, 0.0f);
-        for (i = 0; i < OPT_RING; i++) {
-            x = sOptRingCube[i].x;
-            if (x > 0.0f && x > r) {
-                sOptRingCube[i].dx = r;
-            } else if (x < 0.0f && x < -r) {
-                sOptRingCube[i].dx = -r;
-            } else {
-                sOptRingCube[i].dx = x;
-            }
-        }
+        OptionIcon_SqueezeRing(sOptFrame - 225);
     } else if (sOptFrame < 305) {
         OptionIcon_WipeToShape(sOptFrame - 265, 40);
     } else if (sOptFrame < 397) {
@@ -411,7 +409,14 @@ static inline Vec* VecRef(Vec* v) {
     return v;
 }
 
-static inline void OptionIcon_SetMtx(J3DModelInstance* inst, Mtx m) {
+/* ring and shape each get their own copy of the 0.67 literal in .rodata */
+static inline void OptionIcon_SetRingMtx(J3DModelInstance* inst, Mtx m) {
+    Vec scale = { 0.67f, 0.67f, 0.67f };
+
+    J3D_SetModelMtx(inst, m, *VecRef(&scale));
+}
+
+static inline void OptionIcon_SetShapeMtx(J3DModelInstance* inst, Mtx m) {
     Vec scale = { 0.67f, 0.67f, 0.67f };
 
     J3D_SetModelMtx(inst, m, *VecRef(&scale));
@@ -430,14 +435,14 @@ void OptionIcon_CalcMtx(void) {
     for (i = 0; i < OPT_RING; i++) {
         MtxRotTrans(sOptRingCube[i].rotX, sOptRingCube[i].rotY, 0, t, sOptRingCube[i].dx, sOptRingCube[i].dy, 0.0f);
         PSMTXConcat(base, t, m);
-        OptionIcon_SetMtx(&sOptRing[i], m);
+        OptionIcon_SetRingMtx(&sOptRing[i], m);
         J3D_SetViewMtx(&sOptRing[i], Camera_GetView());
         J3D_CalcJoints(&sOptRing[i]);
     }
     for (i = 0; i < OPT_SHAPE; i++) {
         PSMTXTrans(t, sOptShapeCube[i].dx, sOptShapeCube[i].dy, 0.0f);
         PSMTXConcat(base, t, m);
-        OptionIcon_SetMtx(&sOptShape[i], m);
+        OptionIcon_SetShapeMtx(&sOptShape[i], m);
         J3D_SetViewMtx(&sOptShape[i], Camera_GetView());
         J3D_CalcJoints(&sOptShape[i]);
     }
