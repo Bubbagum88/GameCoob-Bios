@@ -281,8 +281,8 @@ void CardThread_Poll(void) {
             }
         } else if (!present && gCardSlots[1].state > 2) {
             sCardCmdSlot = 1;
-            sCardCmd = CARD_CMD_UNMOUNT;
             m = CARD_MSG(CARD_CMD_UNMOUNT, 0, 1, 0);
+            sCardCmd = CARD_CMD_UNMOUNT;
             sCardResult = CARD_UI_OK;
             if (OSSendMessage(CardThread_CmdQueue(), (OSMessage)m, OS_MESSAGE_NOBLOCK)) {
                 gCardSlots[1].dirty = FALSE;
