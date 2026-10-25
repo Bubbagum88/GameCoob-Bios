@@ -103,6 +103,8 @@ void GameIcon_UpdateFace(void) {
     }
 }
 
+/* Passing the scale through VecRef gives the IPL's stack layout for the
+ * by-value Vec argument (rodata copy, then the argument copy above it). */
 static inline Vec* VecRef(Vec* v) { (void)v; return v; }
 
 static inline void GameIcon_SetMtx(J3DModelInstance* inst, Mtx m, GameParams* p) {

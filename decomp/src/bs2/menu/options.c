@@ -1,6 +1,3 @@
-// Partly matching: only Option_DrawText differs (two instructions swapped in
-// the language-name loop).
-//
 // "Options" submenu (PAL 1.0 BS2, 0x81327EE4..0x81328CA4): sound mode,
 // screen position and language.
 //
@@ -361,9 +358,9 @@ void Option_DrawText(u8 alpha) {
     }
 
     GX_Setup2DTex();
-    tag = 'lan1';
     for (i = 0; i < 6; i++) {
         Fader_GetAlpha(&sOptLangName[i], &b, NULL);
+        tag = 'lan1';
         white.a = (u8)(alpha * b / 255);
         Glh_DrawPaneOfs(tag + i, sOptGlh, &white, 0, (s32)(16.0f * p->langOfs));
     }
