@@ -97,7 +97,7 @@ static s16 sCardFmtSel[2];
 static s16 sCardYesNo;
 static void* sCardGlh;
 static void* sCardSth;
-static TexHeader* sCardBarTex;
+static TexHeader* sCardBarTexture;
 static u16 sCardNameX[3];
 static u16 sCardNameY[3];
 static u32 sCardMsgWait;
@@ -111,7 +111,7 @@ static s16 sCardArrowMax;
 CardParams gCardParamsBuf;
 static s16 sCardAnchorX[2][16];
 static s16 sCardAnchorY[2][16];
-static s16 sCardIconFrame[2][CARD_MAX_FILES];
+static s16 sCardFileFrame[2][CARD_MAX_FILES];
 static CardSortEntry sCardSort[2][CARD_MAX_FILES];
 static Fader sCardMsg[0x2F];
 static Fader sCardFadeA[2];
@@ -164,7 +164,7 @@ void CardDraw_SetScissor(s32 x, s32 y, s32 w, s32 h, s32 t, GXColor* c);
 static inline void Card_ClearFrames(u8 slot) {
     int j;
     for (j = 0; j < CARD_MAX_FILES; j++) {
-        sCardIconFrame[slot][j] = 0;
+        sCardFileFrame[slot][j] = 0;
     }
 }
 
@@ -282,7 +282,7 @@ void Card_Init(BOOL first) {
         sCardGlh = ResGet(Res_CardLayout());
         sCardSth = ResGet(Res_CardStrings());
         CardParams_SetColors(sCardGlh);
-        sCardBarTex = ResGet(Res_CardBarTex());
+        sCardBarTexture = ResGet(Res_CardBarTex());
     }
     fn_8131EEC4(first, sCardAnchorX, sCardAnchorY);
     Card_ClearFrames(0);
@@ -1271,7 +1271,7 @@ void CardUi_UpdateIconAnim(void) {
             file = sCardSort[slot][j + sCardTop[slot] * 4].file;
             if (files[slot][file].used) {
                 icon = &icons[slot][file];
-                frame = &sCardIconFrame[slot][file];
+                frame = &sCardFileFrame[slot][file];
                 step = &icons[slot][file].step;
                 dur = &icons[slot][file].duration;
                 *frame += *step;
@@ -1592,14 +1592,14 @@ void CardDraw_SetupTev(void) {
 /* 0x81319414: one digit cell of the 11-cell number strip. */
 void CardDraw_LoadIconTex(s32 x, s32 y, s32 digit) {
     f32 u = digit / 11.0f;
-    s16 w = sCardBarTex->width * 16 / 11;
-    s16 h = sCardBarTex->height * 16;
+    s16 w = sCardBarTexture->width * 16 / 11;
+    s16 h = sCardBarTexture->height * 16;
     s16 unused[4];
 
     CardDraw_SetupTev();
     x -= w / 2;
     y -= h / 2;
-    J3D_LoadTexture(0, sCardBarTex);
+    J3D_LoadTexture(0, sCardBarTexture);
     GXBegin(GX_QUADS, GX_VTXFMT1, 4);
     GXPosition3s16(x, y, 0);
     GXTexCoord2f32(u, 0.0f);
@@ -1614,7 +1614,7 @@ void CardDraw_LoadIconTex(s32 x, s32 y, s32 digit) {
 
 /* 0x81319568: a number of up to four digits, centred on x. */
 void CardDraw_LoadTexture(s32 x, s32 y, s32 n) {
-    s32 w = sCardBarTex->width * 16 / 11;
+    s32 w = sCardBarTexture->width * 16 / 11;
 
     if (n < 10) {
         CardDraw_LoadIconTex(x, y, n % 10);
@@ -1700,7 +1700,7 @@ BOOL CardDraw_IconFrameCount(s32 slot, s32 file) {
     do {
         t += ((icons[slot][file].speeds >> (n * 2)) & 3) * 4;
         n++;
-    } while (sCardIconFrame[slot][file] > t && n <= 8);
+    } while (sCardFileFrame[slot][file] > t && n <= 8);
     return CardDraw_SetIconFrame(slot, file, (u8)(n - 1));
 }
 
@@ -1799,7 +1799,7 @@ static inline u8 Card_IconFrame(u8 slot, s16 pos) {
     do {
         t += ((icons[slot][file].speeds >> (n * 2)) & 3) * 4;
         n++;
-    } while (sCardIconFrame[slot][file] > t && n <= 8);
+    } while (sCardFileFrame[slot][file] > t && n <= 8);
     return n - 1;
 }
 
