@@ -19,7 +19,7 @@
 <rect x="2.0" y="246.4" width="131.9" height="135.4" fill="#6a9d37" stroke="#0d1117" stroke-width="1"/>
 <text x="5.0" y="258.4" font-size="10" fill="#0d1117">menu</text>
 </g>
-<g><title>bs2/menu/memcard_card: 11856 bytes, 52.5% matched, 95.8% fuzzy, 35/42 functions</title>
+<g><title>bs2/menu/memcard_card: 11856 bytes, 52.5% matched, 96.0% fuzzy, 35/42 functions</title>
 <rect x="133.9" y="246.4" width="85.1" height="135.4" fill="#7c9d33" stroke="#0d1117" stroke-width="1"/>
 <text x="136.9" y="258.4" font-size="10" fill="#0d1117">memcard_card</text>
 </g>
