@@ -684,10 +684,6 @@ J3DModelInstance *Scene_GetBgOuter(void) {
 #define SCENE_SHAKE_MAX 3000
 
 /* Inner background alpha follows the impact shake. */
-static inline u8 Scene_ShakeAlpha(Scene *s, s32 shake) {
-    return s->shakeAlpha * shake / SCENE_SHAKE_MAX;
-}
-
 static inline void Scene_DrawDialogText(s32 idx, GXColor *c) {
     Glh_DrawText(idx, sDialogSth, sDialogGlh, c);
 }
@@ -698,9 +694,9 @@ void Scene_Draw2DNoDisc(void) {
     GXColor c = { 255, 255, 255, 255 };
     u8 fade0 = 255 - s->unkC4 * 150 / 30;
     u8 fade1 = 255 - s->unkCE * 150 / 30;
-    u8 fade = fade0 > fade1 ? fade1 : fade0;
+    u8 fade = (u8)(fade0 > fade1 ? fade1 : fade0);
     s32 shake;
-    s16 wobble;
+    s32 wobble;
 
     shake = s->landImpulse + s->dropImpulse;
     if (shake > SCENE_SHAKE_MAX) {
@@ -709,7 +705,7 @@ void Scene_Draw2DNoDisc(void) {
     sText.alpha = (u8)(fade * 255 / 255);
     J3D_Draw(&sText);
     fn_81304CE8();
-    sBgInner.alpha = (u8)(fade * Scene_ShakeAlpha(s, shake) / 255);
+    sBgInner.alpha = (u8)(fade * (s->shakeAlpha * shake / SCENE_SHAKE_MAX) / 255);
     if (sBgInner.alpha > 0) {
         J3D_Draw(&sBgInner);
     }
@@ -717,7 +713,7 @@ void Scene_Draw2DNoDisc(void) {
     if (wobble > SCENE_SHAKE_MAX) {
         wobble = SCENE_SHAKE_MAX;
     }
-    sBgOuter.alpha = (u8)(fade * Scene_ShakeAlpha(s, wobble) / 255);
+    sBgOuter.alpha = (u8)(fade * (s->shakeAlpha * wobble / SCENE_SHAKE_MAX) / 255);
     if (sBgOuter.alpha > 0) {
         J3D_DrawPacket(&sBgOuter, (u8 *)sBgOuter.model->packets + 0x30);
     }
@@ -840,7 +836,7 @@ void Scene_Draw2DMode0(void) {
     Scene *s = Scene_Get();
     GXColor c = { 255, 255, 255, 255 };
     s32 shake;
-    s16 wobble;
+    s32 wobble;
 
     if (s->langSelect || s->langFade > 0) {
         Scene_DrawLanguageScreen(s, &c);
@@ -853,7 +849,7 @@ void Scene_Draw2DMode0(void) {
     if (shake > SCENE_SHAKE_MAX) {
         shake = SCENE_SHAKE_MAX;
     }
-    sBgInner.alpha = Scene_ShakeAlpha(s, shake);
+    sBgInner.alpha = (u8)(s->shakeAlpha * shake / SCENE_SHAKE_MAX);
     fn_81304CE8();
     if (sBgInner.alpha > 0) {
         J3D_Draw(&sBgInner);
@@ -862,7 +858,7 @@ void Scene_Draw2DMode0(void) {
     if (wobble > SCENE_SHAKE_MAX) {
         wobble = SCENE_SHAKE_MAX;
     }
-    sBgOuter.alpha = Scene_ShakeAlpha(s, wobble);
+    sBgOuter.alpha = (u8)(s->shakeAlpha * wobble / SCENE_SHAKE_MAX);
     if (sBgOuter.alpha > 0) {
         J3D_DrawPacket(&sBgOuter, (u8 *)sBgOuter.model->packets + 0x30);
     }
@@ -953,7 +949,7 @@ static inline void Scene_SetAmbFull(void) {
 void Scene_Draw2DDisc(void) {
     Scene *s = Scene_Get();
     GXColor c = { 255, 255, 255, 255 };
-    s16 wobble;
+    s32 wobble;
 
     if (s->langSelect || s->langFade > 0) {
         Scene_DrawLanguageScreen(s, &c);
@@ -964,7 +960,7 @@ void Scene_Draw2DDisc(void) {
     if (wobble > SCENE_SHAKE_MAX) {
         wobble = SCENE_SHAKE_MAX;
     }
-    sBgOuter.alpha = Scene_ShakeAlpha(s, wobble);
+    sBgOuter.alpha = (u8)(s->shakeAlpha * wobble / SCENE_SHAKE_MAX);
     if (sBgOuter.alpha > 0) {
         J3D_DrawPacket(&sBgOuter, (u8 *)sBgOuter.model->packets + 0x30);
     }
@@ -978,7 +974,7 @@ void Scene_Draw2DDisc(void) {
     if (wobble > SCENE_SHAKE_MAX) {
         wobble = SCENE_SHAKE_MAX;
     }
-    sBgOuter.alpha = Scene_ShakeAlpha(s, wobble);
+    sBgOuter.alpha = (u8)(s->shakeAlpha * wobble / SCENE_SHAKE_MAX);
     if (sBgOuter.alpha > 0) {
         J3D_DrawPacket(&sBgOuter, (u8 *)sBgOuter.model->packets + 0x78);
     }
@@ -989,6 +985,10 @@ void Scene_Draw2DDisc(void) {
         GX_Setup2DText();
         Scene_DrawDialogText(4, &c);
     }
+}
+
+static inline u8 Scene_ShakeAlpha(Scene *s, s32 shake) {
+    return s->shakeAlpha * shake / SCENE_SHAKE_MAX;
 }
 
 /* 0x8130E3C8 */
