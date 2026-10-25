@@ -907,8 +907,8 @@ static void Scene_DrawAsk(Scene *s, u16 idx, s16 sel, u8 alpha) {
     u16 textW = 0;
     u16 textH = 0;
     u16 listH = 0;
-    SthEntry *entries = (SthEntry *)((u8 *)sDialogSth + 8);
     GlhTextBox *boxes = (GlhTextBox *)((u8 *)sDialogGlh + ((u32 *)sDialogGlh)[2]);
+    SthEntry *entries = (SthEntry *)((u8 *)sDialogSth + 8);
     GXColor c = { 255, 255, 255, 255 };
     SthEntry *e;
     GlhTextBox *box;
@@ -926,8 +926,10 @@ static void Scene_DrawAsk(Scene *s, u16 idx, s16 sel, u8 alpha) {
     frameH = listH + boxes[entries[1].box].spacing * 16;
     textH += disp->textPad << 5;
     frameH += disp->textPad << 5;
+    e = &entries[idx];
     totalH = textH + frameH + s->askGap * 16;
-    Glh_DrawStringOfs(idx, sDialogSth, sDialogGlh, &c, 0, (u16)(-totalH / 2 + textH / 2));
+    y = -totalH / 2 + textH / 2;
+    Glh_DrawStringOfs(idx, sDialogSth, sDialogGlh, &c, 0, y);
     box = &boxes[e->box];
     x = box->x - (maxW / 2 + disp->textPad * 16);
     y = totalH / 2 + box->y - frameH;
