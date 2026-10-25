@@ -18,7 +18,7 @@ everything they need from an `ipl.bin` you dump from your own console.
 
 ## Decomp progress
 
-[![code](decomp/progress/badge-code.svg)](decomp/README.md) [![functions](decomp/progress/badge-functions.svg)](decomp/README.md)
+[![total](decomp/progress/badge-total.svg)](decomp/README.md) [![code](decomp/progress/badge-code.svg)](decomp/README.md) [![functions](decomp/progress/badge-functions.svg)](decomp/README.md)
 
 [![BS2 decomp progress](decomp/progress/progress.svg)](decomp/README.md)
 

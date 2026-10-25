@@ -1,0 +1,72 @@
+# Rebuilds the decomp after every merge to main and commits the redrawn
+# progress art (decomp/progress/) so the README numbers stay current.
+#
+# The build needs the owner's own IPL dump, which is never in this repository.
+# CI downloads it from a private location given by two repository secrets:
+#   IPL_BIN_URL    direct download URL of ipl.bin (PAL 1.0), e.g.
+#                  https://api.github.com/repos/<owner>/<private-repo>/contents/ipl.bin
+#   IPL_BIN_TOKEN  optional bearer token for that URL (a fine-grained PAT with
+#                  read access to the private repo)
+# Without IPL_BIN_URL the job only prints a notice. The dump stays on the
+# runner: it is checked against its md5 and never uploaded or committed.
+name: Decomp progress
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "decomp/**"
+      - "!decomp/progress/**"
+  workflow_dispatch:
+
+concurrency:
+  group: decomp-progress
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  progress:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: decomp
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch IPL dump
+        id: ipl
+        env:
+          IPL_BIN_URL: ${{ secrets.IPL_BIN_URL }}
+          IPL_BIN_TOKEN: ${{ secrets.IPL_BIN_TOKEN }}
+        run: |
+          if [ -z "$IPL_BIN_URL" ]; then
+            echo "::notice::IPL_BIN_URL secret not set; progress art not updated"
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          auth=()
+          if [ -n "$IPL_BIN_TOKEN" ]; then auth=(-H "Authorization: Bearer $IPL_BIN_TOKEN"); fi
+          curl -fsSL "${auth[@]}" -H "Accept: application/vnd.github.raw" -o orig/PAL10/ipl.bin "$IPL_BIN_URL"
+          echo "0cdda509e2da83c85bfe423dd87346cc  orig/PAL10/ipl.bin" | md5sum -c --quiet
+          echo "ok=true" >> "$GITHUB_OUTPUT"
+      - name: Build and redraw progress
+        if: steps.ipl.outputs.ok == 'true'
+        run: |
+          sudo apt-get install -y -qq ninja-build
+          python3 configure.py
+          ninja -k 0 || echo "::warning::some build steps failed; progress uses what built"
+          python3 configure.py progress
+      - name: Commit progress art
+        if: steps.ipl.outputs.ok == 'true'
+        run: |
+          git add progress
+          if git diff --cached --quiet; then
+            echo "progress unchanged"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -q -m "decomp: update progress art"
+          git pull -q --rebase origin main
+          git push origin HEAD:main
