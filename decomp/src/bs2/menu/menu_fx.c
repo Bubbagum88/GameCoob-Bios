@@ -76,7 +76,7 @@ void fn_8132DEFC(void);
 void fn_8132EC54(void);
 void fn_8132F010(void);
 void fn_8132FFF0(void);
-void fn_81330374(FxCube* c, u32* n, f32 t);
+u32 fn_81330374(FxCube* c, u32* n, f32 t);
 void fn_813306C8(s32 row);
 void fn_813306FC(s32 from, s32 to);
 void fn_813307B4(void);
@@ -1675,8 +1675,9 @@ void fn_81330128(FxCube* c, u32* n, f32 t) {
     }
 }
 
-/* 0x81330374: fade-out shape: a short squash, then the fly-away. */
-void fn_81330374(FxCube* c, u32* n, f32 t) {
+/* 0x81330374: fade-out shape: a short squash, then the fly-away. Returns the
+   squash loop's count; the only caller ignores it. */
+u32 fn_81330374(FxCube* c, u32* n, f32 t) {
     Vec o;
     f32 s;
     u32 i;
@@ -1692,6 +1693,7 @@ void fn_81330374(FxCube* c, u32* n, f32 t) {
             c[i].scale.y *= s;
             c[i].scale.z *= s;
         }
+        return i;
     } else {
         fn_81330128(c, n, t - 0.1f);
     }
