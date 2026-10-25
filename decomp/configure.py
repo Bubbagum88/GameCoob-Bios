@@ -624,7 +624,7 @@ config.libs = [
             Object(Matching, "bs2/menu/option_params.c"),
             Object(Matching, "bs2/menu/clock_params.c"),
             Object(Matching, "bs2/menu/calendar.c"),
-            Object(NonMatching, "bs2/menu/menu_icon_card.c"),
+            Object(Matching, "bs2/menu/menu_icon_card.c"),
             Object(NonMatching, "bs2/menu/memcard.c", extra_cflags=["-inline noauto"]),
             Object(NonMatching, "bs2/menu/memcard_card.c", extra_cflags=["-inline noauto"]),
             Object(NonMatching, "bs2/menu/memcard_draw.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
