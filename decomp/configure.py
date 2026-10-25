@@ -650,7 +650,7 @@ config.libs = [
         "objects": [
             Object(Matching, "jaudio/dummyprobe.c"),
             Object(NonMatching, "jaudio/rspsim.c", extra_cflags=["-i include/neos", "-D_LANGUAGE_C"]),  # from AC jaudio_NES
-            Object(NonMatching, "jaudio/aictrl.c"),
+            Object(Matching, "jaudio/aictrl.c"),
             Object(Matching, "jaudio/sample.c"),
             Object(Matching, "jaudio/dummyrom.c"),
             Object(Matching, "jaudio/audiothread.c"),
@@ -663,7 +663,7 @@ config.libs = [
             Object(NonMatching, "jaudio/driver.c", extra_cflags=["-i include/neos", "-D_LANGUAGE_C"]),  # NEOS (N64 audio on CPU), from AC jaudio_NES
             Object(NonMatching, "jaudio/memory.c", extra_cflags=["-i include/neos", "-D_LANGUAGE_C"]),
             Object(NonMatching, "jaudio/system.c", extra_cflags=["-i include/neos", "-D_LANGUAGE_C"]),
-            Object(NonMatching, "jaudio/sub_sys.c", extra_cflags=["-i include/neos", "-D_LANGUAGE_C"]),
+            Object(Matching, "jaudio/sub_sys.c", extra_cflags=["-i include/neos", "-D_LANGUAGE_C"]),
             Object(Matching, "jaudio/os.c", extra_cflags=["-i include/neos", "-D_LANGUAGE_C"]),
             Object(Matching, "jaudio/astest.c", extra_cflags=["-i include/neos", "-D_LANGUAGE_C"]),
             Object(NonMatching, "jaudio/channel.c", extra_cflags=["-i include/neos", "-D_LANGUAGE_C"]),
@@ -695,7 +695,7 @@ config.libs = [
             Object(Matching, "jaudio/jamosc.c"),
             Object(Matching, "jaudio/oneshot.c"),
             Object(Matching, "jaudio/ipl_8135A8E0.c"),  # Sound_* and boot helpers, built like JAudio (32-byte aligned)
-            Object(NonMatching, "jaudio/ipl_8135B360.c"),  # sound archive lookups, same flags
+            Object(Matching, "jaudio/ipl_8135B360.c"),  # sound archive lookups, same flags
         ],
     },
 ]
