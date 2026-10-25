@@ -185,6 +185,14 @@ void Glh_DrawPaneRect(u16 pane, void *glh, GXColor *c, s32 x, s32 y, s32 w, s32 
     Glh_DrawSlices(&frames[pane], x, y, w, h, x + w, y + h);
 }
 
+static inline void Glh_DrawTextBg(u16 pane, void *glh, GXColor *c, s32 dx, s32 dy, s32 w, s32 h) {
+    GlhFrame *f = GLH_FRAMES(glh);
+    s32 x = dx + (f[pane].x - w / 2);
+    s32 y = dy + (f[pane].y - h / 2);
+
+    Glh_DrawPaneRect(pane, glh, c, x, y, w, h);
+}
+
 /* 0x81309C3C: every frame with this tag at its own size */
 void Glh_DrawFrame(u32 tag, void *glh, GXColor *c) {
     GlhFrame *f = GLH_FRAMES(glh);
@@ -192,8 +200,7 @@ void Glh_DrawFrame(u32 tag, void *glh, GXColor *c) {
 
     for (i = 0; i < ((Glh *)glh)->nFrames; f++, i++) {
         if (tag == f->tag) {
-            Glh_DrawPaneRect(i, glh, c, GLH_FRAMES(glh)[i].x - f->innerW / 2,
-                             GLH_FRAMES(glh)[i].y - f->innerH / 2, f->innerW, f->innerH);
+            Glh_DrawTextBg(i, glh, c, 0, 0, f->innerW, f->innerH);
         }
     }
 }
@@ -321,11 +328,12 @@ void Glh_DrawPicture(u16 idx, void *glh, GXColor *c, TexHeader *tex, s16 dx, s16
 
 /* 0x8130A158 */
 void Glh_DrawAll(void *glh, GXColor *c) {
+    GlhPic *pics = GLH_PICS(glh);
     GlhPic *p;
     u16 i;
 
-    for (i = 0, p = &GLH_PICS(glh)[i]; i < ((Glh *)glh)->nPics; p++, i++) {
-        Glh_DrawPicture(i, glh, c, TXH_TEX(p->tex), 0, 0);
+    for (i = 0, p = &pics[i]; i < ((Glh *)glh)->nPics; p++, i++) {
+        Glh_DrawPicture(i, glh, c, TXH_TEX(pics[i].tex), 0, 0);
     }
 }
 
@@ -345,6 +353,7 @@ void Glh_DrawPane(u32 tag, void *glh, GXColor *c) {
 void Glh_DrawPaneOfs(u32 tag, void *glh, GXColor *c, s16 dx, s16 dy) {
     GlhPic *p = GLH_PICS(glh);
     u16 i;
+    u8 pad[8];
 
     for (i = 0; i < ((Glh *)glh)->nPics; p++, i++) {
         if (tag == p->tag) {
@@ -357,6 +366,7 @@ void Glh_DrawPaneOfs(u32 tag, void *glh, GXColor *c, s16 dx, s16 dy) {
 void Glh_DrawPaneTex(u32 tag, void *glh, GXColor *c, void *tex) {
     GlhPic *p = GLH_PICS(glh);
     u16 i;
+    u8 pad[8];
 
     for (i = 0; i < ((Glh *)glh)->nPics; p++, i++) {
         if (tag == p->tag) {
@@ -376,12 +386,7 @@ void Glh_DrawString(u16 idx, void *sth, void *glh, GXColor *c, GXColor *glow, s3
     if (((Sth *)sth)->magic == STH_MAGIC) {
         Glh_MeasureString(&texts[entries[idx].pane], (u8 *)&entries[idx] + entries[idx].ofs, &w, &h);
         if (texts[entries[idx].pane].bgPane != 0xFFFF) {
-            GlhFrame *f = GLH_FRAMES(glh);
-
-            Glh_DrawPaneRect(texts[entries[idx].pane].bgPane, glh, c,
-                             dx + (f[texts[entries[idx].pane].bgPane].x - (w + disp->textPad * 32) / 2),
-                             dy + (f[texts[entries[idx].pane].bgPane].y - (h + disp->textPad * 32) / 2),
-                             w + disp->textPad * 32, h + disp->textPad * 32);
+            Glh_DrawTextBg(texts[entries[idx].pane].bgPane, glh, c, dx, dy, w + disp->textPad * 32, h + disp->textPad * 32);
         }
         texts[entries[idx].pane].x += dx;
         texts[entries[idx].pane].y += dy;
@@ -421,13 +426,8 @@ void Glh_DrawBannerText(u16 idx, void *glh, GXColor *c, const void *str, s32 max
     u16 h;
 
     if (texts[idx].bgPane != 0xFFFF) {
-        GlhFrame *f;
-
         Glh_MeasureString(&texts[idx], NULL, &w, &h);
-        f = GLH_FRAMES(glh);
-        Glh_DrawPaneRect(texts[idx].bgPane, glh, c, f[texts[idx].bgPane].x - (w + disp->textPad * 32) / 2,
-                         f[texts[idx].bgPane].y - (h + disp->textPad * 32) / 2, w + disp->textPad * 32,
-                         h + disp->textPad * 32);
+        Glh_DrawTextBg(texts[idx].bgPane, glh, c, 0, 0, w + disp->textPad * 32, h + disp->textPad * 32);
     }
     GX_Setup2DText();
     Font_SetColorU32(color, color);

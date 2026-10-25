@@ -180,8 +180,8 @@ static inline void GXSetTexCoordGen(GXTexCoordID dst, GXTexGenType func, GXTexGe
 /* 0x813061EC: load all GX state of a material */
 void fn_813061EC(u16 index) {
     GMRMaterial* mat = &lbl_814AD324->materials[index];
-    u8 skipMtx[10];
     GXColor kc;
+    u8 skipMtx[10];
     int i;
 
     for (i = 0; i < 10; i++) {
