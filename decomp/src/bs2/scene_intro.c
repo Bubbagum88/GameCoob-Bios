@@ -794,8 +794,8 @@ static inline u16 Scene_DrawListFrame(DispSettings *disp, GlhTextBox *boxes, Sth
     }
     box = &boxes[entries[first].box];
     fw = maxW + (disp->textPad << 5);
-    fh = box->spacing * 80;
-    fh += *h;
+    fh = *h;
+    fh += box->spacing * 80;
     fh += disp->textPad << 5;
     pane = &panes[box->pane];
     x = pane->x - fw / 2;
