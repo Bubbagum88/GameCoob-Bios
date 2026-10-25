@@ -863,95 +863,92 @@ static ArcHeader* __Get_ArcHeader(s32 table_type) {
 #define BANK_ENTRY(ctrl, idx) (((u32*)((u32)ctrl)) + idx)
 
 static void Nas_BankOfsToAddr_Inner(s32 bank_id, u8* ctrl_p, WaveMedia* wave_media) {
+    u32 base;
+    u32 inst_ofs;
+    perctable* percvt;
+    s32 i;
+    s32 n_perc_inst;
+    s32 n_voice_inst;
+    u32 ofs;
+    voicetable* inst;
+    percvoicetable* sfx;
+    s32 j;
+    s32 k;
+    s32 n_sfx_inst;
+    u32* REF_base = &base;
+    STACK_PAD_VAR(7);
     u8** REF_ctrl_p = &ctrl_p;
     s32* REF_bank_id = &bank_id;
-    u32 ofs;
-    u32 inst_ofs;
-    voicetable* inst;
-    perctable* percvt;
-    percvoicetable* sfx;
-    s32 i;
-    s32 n_perc_inst, n_voice_inst, n_sfx_inst;
-    n_voice_inst = AG.voice_info[bank_id].num_instruments;
+    u32* REF_inst_ofs = &inst_ofs;
+    perctable** REF_percvt = &percvt;
+    s32* REF_i = &i;
+    s32* REF_n_perc_inst = &n_perc_inst;
+    s32* REF_n_voice_inst = &n_voice_inst;
+    base = (u32)ctrl_p;
     n_perc_inst = AG.voice_info[bank_id].num_drums;
+    n_voice_inst = AG.voice_info[bank_id].num_instruments;
     n_sfx_inst = AG.voice_info[bank_id].num_sfx;
-    // u32* data_p = (u32*)ctrl_p;
-    WaveMedia** REF_wave_media = &wave_media;
 
     ofs = *BANK_ENTRY(ctrl_p, 0);
     if (ofs != 0 && n_perc_inst != 0) {
-        *BANK_ENTRY(ctrl_p, 0) = OFS2RAM(ctrl_p, ofs);
+        *BANK_ENTRY(ctrl_p, 0) = ofs + base;
 
         for (i = 0; i < n_perc_inst; i++) {
             inst_ofs = (u32)((perctable**)*BANK_ENTRY(ctrl_p, 0))[i];
             if (inst_ofs == 0) {
-                continue; // empty percussion/drum entry
+                continue;
             }
 
-            inst_ofs += (u32)ctrl_p; // OFS2RAM(ctrl_p, ofs);
+            inst_ofs += base;
+            ((perctable**)*BANK_ENTRY(ctrl_p, 0))[i] = (perctable*)inst_ofs;
             percvt = (perctable*)inst_ofs;
-            ((perctable**)*BANK_ENTRY(ctrl_p, 0))[i] = percvt;
 
-            // Percussion may already have been relocated since percussion
-            // can appear in list multiple times
             if (percvt->is_relocated) {
                 continue;
             }
 
-            __WaveTouch(&percvt->tuned_sample, (u32)ctrl_p, wave_media);
-            inst_ofs = (u32)percvt->envelope;
-            percvt->envelope = (envdat*)OFS2RAM(ctrl_p, inst_ofs);
+            __WaveTouch(&percvt->tuned_sample, base, wave_media);
+            percvt->envelope = (envdat*)((u32)percvt->envelope + base);
             percvt->is_relocated = TRUE;
         }
     }
 
-    // Sound effects
     ofs = *BANK_ENTRY(ctrl_p, 1);
     if (ofs != 0 && n_sfx_inst != 0) {
-        *BANK_ENTRY(ctrl_p, 1) = OFS2RAM(ctrl_p, ofs);
+        *BANK_ENTRY(ctrl_p, 1) = ofs + base;
 
-        for (i = 0; i < n_sfx_inst; i++) {
-            inst_ofs = (u32)(((percvoicetable*)*BANK_ENTRY(ctrl_p, 1)) + i);
-            sfx = (percvoicetable*)inst_ofs;
-
-            // check for null sfx or null sample wave table pointer
+        for (j = 0; j < n_sfx_inst; j++) {
+            sfx = ((percvoicetable*)*BANK_ENTRY(ctrl_p, 1)) + j;
             if (sfx == NULL || sfx->tuned_sample.wavetable == NULL) {
                 continue;
             }
 
-            __WaveTouch(&sfx->tuned_sample, (u32)ctrl_p, wave_media);
+            __WaveTouch(&sfx->tuned_sample, base, wave_media);
         }
     }
 
-    // Instruments
     if (n_voice_inst > 126) {
-        n_voice_inst = 126; // max 126 instruments
+        n_voice_inst = 126;
     }
 
-    for (i = 2; i <= 2 + n_voice_inst - 1; i++) {
-        ofs = *BANK_ENTRY(ctrl_p, i);
+    for (k = 2; k <= 2 + n_voice_inst - 1; k++) {
+        ofs = *BANK_ENTRY(ctrl_p, k);
         if (ofs != 0) {
-            *BANK_ENTRY(ctrl_p, i) = OFS2RAM(ctrl_p, ofs);
-            inst = (voicetable*)*BANK_ENTRY(ctrl_p, i);
+            *BANK_ENTRY(ctrl_p, k) = ofs + base;
+            inst = (voicetable*)*BANK_ENTRY(ctrl_p, k);
 
-            // instrument may appear multiple times in the list
             if (!inst->is_relocated) {
-                // Optional low pitch sample
                 if (inst->normal_range_low != 0) {
-                    __WaveTouch(&inst->low_pitch_tuned_sample, (u32)ctrl_p, wave_media);
+                    __WaveTouch(&inst->low_pitch_tuned_sample, base, wave_media);
                 }
 
-                // Standard sample, required by all instruments
-                __WaveTouch(&inst->normal_pitch_tuned_sample, (u32)ctrl_p, wave_media);
+                __WaveTouch(&inst->normal_pitch_tuned_sample, base, wave_media);
 
-                // Optional high pitch sample
                 if (inst->normal_range_high != 0x7F) {
-                    __WaveTouch(&inst->high_pitch_tuned_sample, (u32)ctrl_p, wave_media);
+                    __WaveTouch(&inst->high_pitch_tuned_sample, base, wave_media);
                 }
 
-                inst_ofs = (u32)inst->envelope;
-                inst->envelope = (envdat*)OFS2RAM(ctrl_p, inst_ofs);
-
+                inst->envelope = (envdat*)((u32)inst->envelope + base);
                 inst->is_relocated = TRUE;
             }
         }

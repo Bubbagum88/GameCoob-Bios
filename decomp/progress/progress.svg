@@ -87,7 +87,7 @@
 <rect x="297.2" y="44.0" width="258.9" height="540.0" fill="#21262d" stroke="#0d1117"/>
 <text x="301.2" y="56.0" font-size="11" fill="#e6edf3">jaudio</text>
 </g>
-<g><title>jaudio/system: 15184 bytes, 65.0% matched, 98.3% fuzzy, 61/68 functions</title>
+<g><title>jaudio/system: 15184 bytes, 65.0% matched, 99.2% fuzzy, 61/68 functions</title>
 <rect x="299.2" y="60.0" width="130.8" height="112.6" fill="#679e37" stroke="#0d1117" stroke-width="1"/>
 <text x="302.2" y="72.0" font-size="10" fill="#0d1117">system</text>
 </g>
