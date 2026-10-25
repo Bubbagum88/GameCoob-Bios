@@ -208,16 +208,37 @@ static void Font_ExpandSheet(u8 *src, u8 *dst) {
 
 s32 Font_Index(s32 code);
 
+static inline void Font_PutChar(u16 x, u16 y, s32 size, s32 code) {
+    Font_DrawChar(x, y, size, Font_Index((u16)code));
+}
+
+static inline u16 Font_LineX(FontBox *box, u16 *lineW, s32 line) {
+    u16 x0;
+
+    switch (box->halign & 0x7F) {
+    case 0:
+        x0 = box->x - lineW[line] / 2;
+        break;
+    case 2:
+        x0 = box->x - box->w / 2;
+        break;
+    case 1:
+        x0 = box->x + box->w / 2 - lineW[line];
+        break;
+    }
+    return x0;
+}
+
 /* 0x81308538: draw the lines of a box measured by Font_Measure */
 u16 Font_DrawLines(FontBox *box, u8 *str, u16 *lineW, s32 height, s32 maxChars, s32 maxLines, BOOL wrap,
                    BOOL stopAtWrap) {
     s32 lines = 0;
     s32 chars = 0;
     u16 x = 0;
-    s32 w = box->w;
+    s32 w = box->w & 0xFFFF;
     u16 code;
     u16 x0;
-    u16 y;
+    s32 y;
     u16 nx;
     BOOL over;
 
@@ -232,17 +253,7 @@ u16 Font_DrawLines(FontBox *box, u8 *str, u16 *lineW, s32 height, s32 maxChars, 
         y = box->y + box->h / 2 - height;
         break;
     }
-    switch (box->halign & 0x7F) {
-    case 0:
-        x0 = box->x - lineW[0] / 2;
-        break;
-    case 2:
-        x0 = box->x - w / 2;
-        break;
-    case 1:
-        x0 = box->x + w / 2 - lineW[0];
-        break;
-    }
+    x0 = Font_LineX(box, lineW, 0);
     y += sFont.ascent * box->size * 16 / sFont.cellHeight;
 
     while ((code = *str++) != 0) {
@@ -256,17 +267,7 @@ u16 Font_DrawLines(FontBox *box, u8 *str, u16 *lineW, s32 height, s32 maxChars, 
         if (code == '\n') {
             if (wrap) {
                 lines++;
-                switch (box->halign & 0x7F) {
-                case 0:
-                    x0 = box->x - lineW[lines] / 2;
-                    break;
-                case 2:
-                    x0 = box->x - box->w / 2;
-                    break;
-                case 1:
-                    x0 = box->x + box->w / 2 - lineW[lines];
-                    break;
-                }
+                x0 = Font_LineX(box, lineW, lines);
                 y += box->lineSpace * 16;
                 x = 0;
                 if (maxLines != 0 && lines >= maxLines) {
@@ -290,17 +291,7 @@ u16 Font_DrawLines(FontBox *box, u8 *str, u16 *lineW, s32 height, s32 maxChars, 
             if (over) {
                 if (wrap) {
                     lines++;
-                    switch (box->halign & 0x7F) {
-                    case 0:
-                        x0 = box->x - lineW[lines] / 2;
-                        break;
-                    case 2:
-                        x0 = box->x - box->w / 2;
-                        break;
-                    case 1:
-                        x0 = box->x + box->w / 2 - lineW[lines];
-                        break;
-                    }
+                    x0 = Font_LineX(box, lineW, lines);
                     x = 0;
                     y += box->lineSpace * 16;
                     if (*str == '\n') {
@@ -314,7 +305,7 @@ u16 Font_DrawLines(FontBox *box, u8 *str, u16 *lineW, s32 height, s32 maxChars, 
                     break;
                 }
             }
-            Font_DrawChar(x0 + x, y, box->size, Font_Index(code));
+            Font_PutChar(x0 + x, y, box->size, code);
             chars++;
             x += box->charSpace * 16 + box->size * (sWidth[Font_Index(code)] * 16) / sFont.cellWidth;
         }
@@ -356,14 +347,16 @@ s32 Font_Measure(FontBox *box, u8 *str, u16 *lineW, s32 *linesOut, BOOL wrap, BO
                  s32 maxChars, s32 maxLines) {
     u16 size = box->size;
     s32 height = sFont.ascent * size * 16 / sFont.cellHeight + sFont.descent * size * 16 / sFont.cellHeight;
+    s32 cs;
     s32 line = 0;
     u16 curW = 0;
-    s32 w = box->w;
+    s32 w = box->w & 0xFFFF;
     u16 code;
     u16 last = 0;
     s32 chars = 0;
     u16 nw;
     BOOL over;
+    u16 pad;
 
     while ((code = *str++) != 0) {
         if (Lang_GetCode() == 2 && ((code >= 0x80 && code <= 0x9F) || (code >= 0xE0 && code <= 0xFF))) {
@@ -386,8 +379,9 @@ s32 Font_Measure(FontBox *box, u8 *str, u16 *lineW, s32 *linesOut, BOOL wrap, BO
         } else {
             last = code;
             nw = box->charSpace * 16 + box->size * (sWidth[Font_Index(code)] * 16) / sFont.cellWidth + curW;
-            if (box->charSpace > 0) {
-                if (nw - box->charSpace * 16 > w) {
+            cs = box->charSpace;
+            if (cs > 0) {
+                if (nw - cs * 16 > w) {
                     over = TRUE;
                 } else {
                     goto fits;
@@ -415,8 +409,8 @@ s32 Font_Measure(FontBox *box, u8 *str, u16 *lineW, s32 *linesOut, BOOL wrap, BO
                     break;
                 }
             }
-            chars++;
             curW = box->charSpace * 16 + box->size * (sWidth[Font_Index(code)] * 16) / sFont.cellWidth + curW;
+            chars++;
         }
         last = code;
         if (maxChars != 0 && chars >= maxChars) {
@@ -517,6 +511,10 @@ void Font_StepPulse(void) {
     }
 }
 
+static inline u32 Font_GlowColor(u32 c, u8 alpha) {
+    return (c & 0xFFFFFF00) | (u8)((c & 0xFF) * alpha / 255) / 6;
+}
+
 /* 0x813090A4: glow under the text: 5x5 faint copies, then the text */
 void fn_813090A4(FontBox *box, u8 *str) {
     FontBox tmp = *box;
@@ -527,10 +525,10 @@ void fn_813090A4(FontBox *box, u8 *str) {
     s32 i;
     s32 j;
     u16 x;
-    u16 y;
+    s32 y;
 
     sColorTop = (sShadowTop & 0xFFFFFF00) | (u8)((sShadowTop & 0xFF) * alpha / 255) / 6;
-    sColorBottom = (sShadowBottom & 0xFFFFFF00) | (u8)((sShadowBottom & 0xFF) * alpha / 255) / 6;
+    sColorBottom = Font_GlowColor(sShadowBottom, alpha);
     x = tmp.x;
     y = tmp.y;
     for (i = 0; i < 5; i++) {
@@ -569,18 +567,18 @@ void Glh_MeasureString(FontBox *box, u8 *str, u16 *w, u16 *h) {
 
 /* 0x81309380 */
 void Font_DrawChar(u16 x, u16 y, s32 size, s32 index) {
+    s32 left;
     s32 sheet;
-    s32 n;
-    s32 tx;
-    s32 ty;
+    s32 right;
     s32 top;
+    s32 bottom;
     s32 s0;
     s32 t0;
     s32 s1;
     s32 t1;
-    s32 bottom;
-    s32 left;
-    s32 right;
+    s32 n;
+    s32 tx;
+    s32 ty;
 
     sheet = index / sCharsInSheet;
     n = index % sCharsInSheet;
