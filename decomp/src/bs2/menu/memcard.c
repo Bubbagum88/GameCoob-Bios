@@ -2253,7 +2253,7 @@ u32 CardDraw_LoadFileIcon(void) {
     }
     icon = &icons[sCardSlot][file];
     image = (u8*)icon + (u32)icons[sCardSlot][file].banner;
-    if (icon->hasBanner == 0) {
+    if (icons[sCardSlot][file].hasBanner == 0) {
         return FALSE;
     }
     tex.mipmap = 0;
