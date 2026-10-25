@@ -1473,11 +1473,11 @@ extern Acmd* Nas_Synth_Envelope(Acmd* cmd, commonch* common, driverch* driver, s
     f32 defaultPanVolume;
     STACK_PAD_VAR(4);
 
-    curVolLeft = (u16)driver->current_volume_left;
     targetReverbVol = common->target_reverb_volume;
+    curVolLeft = (u16)driver->current_volume_left;
     curVolRight = (u16)driver->current_volume_right;
-    targetVolRight = common->target_volume_right << 4;
     targetVolLeft = common->target_volume_left << 4;
+    targetVolRight = common->target_volume_right << 4;
 
     if (AG.sound_mode == SOUND_OUTPUT_DOLBY_SURROUND) {
         u8 idx = common->surround_effect_idx;
