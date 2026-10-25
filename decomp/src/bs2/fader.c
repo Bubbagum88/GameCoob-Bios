@@ -56,13 +56,13 @@ void Fader_GetAlpha(Fader *f, s16 *alpha, s32 *slide) {
 
 /* 0x8130A9E8: draw string f->id faded; returns the alpha used */
 u8 Fader_DrawString(Fader *f, void *sth, void *glh, GXColor *c) {
-    s16 alpha;
     s32 slide;
     u8 a;
+    s16 alpha;
     u8 pad[4];
 
-    Fader_GetAlpha(f, &alpha, &slide);
     a = c->a;
+    Fader_GetAlpha(f, &alpha, &slide);
     c->a = a * alpha / 255;
     if (c->a != 0) {
         Glh_DrawString(f->id, sth, glh, c, 0, 0, slide);
