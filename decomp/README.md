@@ -8,7 +8,10 @@ Each box is one source file, sized by its code bytes: green is matched
 byte for byte, yellow to green is partly matched, grey is still assembly.
 `python configure.py progress` (also the last ninja step) redraws these from
 objdiff's report; `progress/history.csv` keeps one line per day
-([chart](progress/history.svg)).
+([chart](progress/history.svg)). After every merge to main the
+`Decomp progress` workflow rebuilds and commits these, so PRs need not;
+it fetches the dump from the `IPL_BIN_URL` secret (see
+`.github/workflows/decomp-progress.yml`).
 
 A matching decompilation of the GameCube boot ROM's BS2 program: the intro
 (cube, scene director), the main menu (cube menu, Game Play, Memory Card,
