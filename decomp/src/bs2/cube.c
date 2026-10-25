@@ -338,16 +338,17 @@ static f32 Cube_TextFrame(void) {
 /* 0x8130FBC4: grow to 1.5x while making riseTurns quarter turns. */
 static void Cube_CalcRiseMtx(Mtx m) {
     Mtx t;
-    f32 scale;
     s32 max;
     s32 angle;
     f32 y;
     f32 lo;
+    f32 scale;
     u8 unused[36];
     CubeState *c;
 
     scale = 1.0f + 0.5f * (s32)sCube->riseFrame / (s32)sCube->riseFrames;
-    if (scale > 1.5f) {
+    y = scale;
+    if (y > 1.5f) {
         scale = 1.5f;
     }
     max = sCube->riseTurns << 14;
