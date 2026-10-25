@@ -378,7 +378,8 @@ s32 Font_Measure(FontBox *box, u8 *str, u16 *lineW, s32 *linesOut, BOOL wrap, BO
             }
         } else {
             last = code;
-            nw = (cs = box->charSpace) * 16 + box->size * (sWidth[Font_Index(code)] * 16) / sFont.cellWidth + curW;
+            nw = box->charSpace * 16 + box->size * (sWidth[Font_Index(code)] * 16) / sFont.cellWidth + curW;
+            cs = box->charSpace;
             if (cs > 0) {
                 if (nw - cs * 16 > w) {
                     over = TRUE;
@@ -566,18 +567,18 @@ void Glh_MeasureString(FontBox *box, u8 *str, u16 *w, u16 *h) {
 
 /* 0x81309380 */
 void Font_DrawChar(u16 x, u16 y, s32 size, s32 index) {
+    s32 left;
     s32 sheet;
-    s32 n;
-    s32 tx;
-    s32 ty;
+    s32 right;
     s32 top;
+    s32 bottom;
     s32 s0;
     s32 t0;
     s32 s1;
     s32 t1;
-    s32 bottom;
-    s32 left;
-    s32 right;
+    s32 n;
+    s32 tx;
+    s32 ty;
 
     sheet = index / sCharsInSheet;
     n = index % sCharsInSheet;
