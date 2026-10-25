@@ -1236,9 +1236,10 @@ SwMember* __Nas_Alloc_Single_Auto_Inner(s32 size) {
     for (i = 0; i < heap->num_entries; i++) {
         s8 inUse = heap->entries[i].in_use;
         if (inUse) {
-            u8* p = heap->entries[i].allocated_addr + heap->entries[i].size - 1;
-            if ((p >= oldCurrent || heap->entries[i].allocated_addr >= oldCurrent) &&
-                (p < nowCurrent || heap->entries[i].allocated_addr < nowCurrent)) {
+            u8* start = heap->entries[i].allocated_addr;
+            u8* p = start + heap->entries[i].size - 1;
+            if ((p >= oldCurrent || start >= oldCurrent) &&
+                (p < nowCurrent || start < nowCurrent)) {
                 __KillSwMember(&heap->entries[i]);
                 heap->entries[i].in_use = 0;
                 if (s == -1) {
@@ -1247,16 +1248,17 @@ SwMember* __Nas_Alloc_Single_Auto_Inner(s32 size) {
             }
         }
     }
+    int n = heap->num_entries;
     if (s == -1) {
-        for (i = 0; i < heap->num_entries; i++) {
+        for (i = 0; i < n; i++) {
             s8 inUse = heap->entries[i].in_use;
             if (inUse == 0) {
                 break;
             }
         }
         s = i;
-        if (s == heap->num_entries) {
-            if (heap->num_entries == ARRAY_COUNT(heap->entries)) {
+        if (s == n) {
+            if (n == ARRAY_COUNT(heap->entries)) {
                 return NULL;
             }
             heap->num_entries++;
@@ -1452,13 +1454,18 @@ void EntryWave(s32 id) {
 void __ExchangeWave(s32 a, s32 b) {
     s32* REF_b = &b;
     s32 i;
-    Wavelookuptable wavetable;
-    voiceinfo* voiceinfo;
+    STACK_PAD_VAR(1);
     s32 bVar1;
     s32 bVar2;
-    ArcHeader* wave_header = AG.wave_header;
+    Wavelookuptable wavetable;
+    voiceinfo* voiceinfo;
     s16 numEntries = AG.bank_header->numEntries;
+    ArcHeader* wave_header = AG.wave_header;
     Wavelookuptable* pWaveTable = &wavetable;
+    s32* REF_i = &i;
+    s32* REF_bVar1 = &bVar1;
+    s32* REF_bVar2 = &bVar2;
+    STACK_PAD_VAR(4);
     u8* alloc = (u8*)Nas_SzCacheCheck(2, 2, b);
     pWaveTable->sample = alloc;
     if (pWaveTable->sample) {
@@ -1467,8 +1474,9 @@ void __ExchangeWave(s32 a, s32 b) {
         pWaveTable->_04 = (u8*)wave_header[b].entries[0].addr;
         switch (a) {
             case 1: {
-                pWaveTable->_04 = alloc;
-                pWaveTable->sample = (u8*)wave_header[b].entries[0].addr;
+                u8* tmp = pWaveTable->_04;
+                pWaveTable->_04 = pWaveTable->sample;
+                pWaveTable->sample = tmp;
             } break;
             case 0:
             default:
