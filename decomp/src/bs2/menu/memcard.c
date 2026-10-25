@@ -1839,10 +1839,26 @@ static inline u16 CardDraw_ChoiceWidth(u16 idx, u16* h, u16* lineH) {
 }
 
 /* 0x8131A13C: a message with a two-choice menu under it (0x27 copy, 0x29 move). */
+static inline u16 CardDraw_MeasureOpts(void* sth, void* glh, u16 idx, u16* lh) {
+    SthEntry* entries = ((Sth*)sth)->entry;
+    GlhText* texts = GLH_TEXTS(glh);
+    u16 max = 0;
+    u16 sw = 0;
+    u16 i;
+
+    for (i = 0; i < 2; i++) {
+        Glh_MeasureString(&texts[entries[idx].pane], (u8*)&entries[i + 5] + entries[i + 5].ofs, &sw, lh);
+        if (max < sw) {
+            max = sw;
+        }
+    }
+    return max;
+}
+
 void CardDraw_OpMenu(u16 msg, u8 slot, u8 alpha) {
     DispSettings* disp = Disp_GetSettings();
     CardParams* p = Card_GetParams();
-    u16 maxW = 0;
+    u16 maxW;
     u16 w = 0;
     u16 h = 0;
     u16 lh = 0;
@@ -1883,21 +1899,12 @@ void CardDraw_OpMenu(u16 msg, u8 slot, u8 alpha) {
     Glh_MeasureString(&texts[e->pane], (u8*)e + e->ofs, &w, &h);
     entries2 = ((Sth*)sCardSth)->entry;
     texts2 = GLH_TEXTS(sCardGlh);
-    {
-        u16 sw = 0;
-        s16 unused[4];
-
-        for (i = 0; i < 2; i++) {
-            Glh_MeasureString(&texts2[entries2[(u16)idx].pane], (u8*)&entries2[i + 5] + entries2[i + 5].ofs, &sw, &lh);
-            if (maxW < sw) {
-                maxW = sw;
-            }
-        }
-    }
+    maxW = CardDraw_MeasureOpts(sCardSth, sCardGlh, idx, &lh);
+    boxH = lh + texts2[entries2[(u16)idx].pane].lineSpace * 16;
     h += disp->textPad * 32;
-    boxH = lh + texts2[entries2[(u16)idx].pane].lineSpace * 16 + disp->textPad * 32;
+    boxH += disp->textPad * 32;
     total = h + (boxH + Card_GetParams()->cols * 16);
-    Glh_DrawStringOfs(idx, sCardSth, sCardGlh, &c, 0, -total / 2 + h / 2);
+    Glh_DrawStringOfs(idx, sCardSth, sCardGlh, &c, 0, (s16)(-total / 2 + h / 2));
     if (f->frame > sCardMsg[idx].length / 2) {
         glow.a = c.a = alpha * (f->frame - sCardMsg[idx].length / 2) * 2 / sCardMsg[idx].length;
     } else {
