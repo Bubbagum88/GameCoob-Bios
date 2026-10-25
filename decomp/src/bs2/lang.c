@@ -218,11 +218,11 @@ void ResInit(void) {
     u8 *buf;
     s32 size;
     u8 *p;
+    s32 unused[2];
 
     i = 0;
     sRes = lbl_81381820;
-    ofs = (s32 *)sRes;
-    count = *ofs;
+    count = *(ofs = (s32 *)sRes);
     for (; i < count; i++) {
         p = (u8 *)sRes + ofs[1];
         if (p[0] == 'Y' && p[1] == 'a' && p[2] == 'y') {
