@@ -608,11 +608,13 @@ static s32 Nap_SilenceCheck_Inner(s32 flags) {
     for (i = 0; i < AG.num_channels; i++) {
         channel* channel = &AG.channels[i];
         playbackch* playback_chan = &channel->playback_ch;
-        if (channel->common_ch.enabled) {
-            commonch* common_chan = &channel->common_ch;
+        commonch* common_chan = &channel->common_ch;
+        if (common_chan->enabled) {
             if (playback_chan->adsr_envp.state.flags.status != ADSR_STATUS_DISABLED) {
                 if (flags >= AUDIO_NOTE_SAMPLE_NOTES) {
                     wtstr* tuned_sample = common_chan->tuned_sample;
+                    //! FAKE:
+                    if (channelCount && channelCount) {}
                     if ((tuned_sample == nullptr) || common_chan->is_synth_wave) {
                         continue;
                     }
