@@ -78,11 +78,14 @@ static J3DAnmColor sTextBrk;         /* 0x814AFD08 res 0x6A */
    spin eases back to rest over 50 frames. */
 static void Scene_UpdateSpin(BOOL force) {
     Scene *s = Scene_Get();
-    s16 easeFrom = s->easeFrom;
-    f32 easeSpeed = s->easeSpeed;
-    s16 prev = s->spin;
+    s16 prev;
+    s16 easeFrom;
+    f32 easeSpeed;
     f32 level;
 
+    easeFrom = s->easeFrom;
+    easeSpeed = s->easeSpeed;
+    prev = s->spin;
     if (force) {
         s->spinAccel += s->spinAccelStep;
         s->spinSpeed += s->spinAccel;
@@ -133,9 +136,11 @@ static void Scene_UpdateSpin(BOOL force) {
 static void Scene_DecayShake(void) {
     Scene *s = Scene_Get();
     s16 phase = s->shakePhase;
-    f32 land = s->landImpulse * s->landDecay;
-    f32 drop = s->dropImpulse * s->dropDecay;
+    f32 land = s->landImpulse;
+    f32 drop = s->dropImpulse;
 
+    land *= s->landDecay;
+    drop *= s->dropDecay;
     if (land < 10.0f) {
         land = 0.0f;
     }
@@ -155,11 +160,12 @@ static void Scene_UpdateWobble(void) {
     Scene *s = Scene_Get();
     s16 phase = s->wobblePhase;
     f32 amp = s->wobbleAmp;
+    f32 unused;
 
     if (s->spinAccel > 0.0f) {
         amp = 36.0f + amp;
     } else {
-        amp = amp * 0.945f;
+        amp *= 0.945f;
     }
     if (amp < 1.0f) {
         amp = 0.0f;
@@ -183,30 +189,30 @@ static inline void Scene_CalcShakeMtx(Mtx m) {
     f32 drop = s->dropImpulse;
     f32 ty;
 
-    ty = s->dropLift * drop * SinS(phase);
-    ty = s->landLift * land * SinS(phase) + ty;
+    ty = s->landLift * land * SinS(phase) + s->dropLift * drop * SinS(phase);
     MtxRotTrans(-1.0f * drop * SinS(phase), 0, land * SinS(phase), m, 0.0f, ty, 0.0f);
 }
 
 /* 0x8130C694: RotY(spin) * Shake * Wobble * Iso * T(15, 15, 15) */
 static void Scene_CalcWorldMtx(Mtx m) {
     Scene *s = Scene_Get();
-    s16 phase = s->wobblePhase;
-    f32 k = s->spinTilt * s->spinSpeed / s->spinThreshold;
-    f32 amp = s->wobbleAmp;
-    Mtx shake;
+    s16 phase;
+    f32 k;
     Mtx t;
     f32 rest;
+    Mtx shake;
+    f32 amp;
 
+    phase = s->wobblePhase;
+    amp = s->wobbleAmp;
+    k = s->spinTilt * s->spinSpeed / s->spinThreshold;
     PSMTXIdentity(t);
-    t[0][3] = t[1][3] = t[2][3] = 15.0f;
+    t[2][3] = t[1][3] = t[0][3] = 15.0f;
     MtxRotTrans(s->isoX, s->isoY, s->isoZ, m, 0.0f, 0.0f, 0.0f);
     PSMTXConcat(m, t, t);
-    rest = 1.0f - k;
-    k = 1000.0f * k;
-    MtxRotTrans(k + rest * (amp * SinS(phase * 0x5A)),
-                k + rest * (amp * SinS(phase * 0x3C)),
-                k + rest * (amp * SinS(phase * 0x46)), m, 0.0f, 0.0f, 0.0f);
+    MtxRotTrans(1000.0f * k + (1.0f - k) * (amp * SinS(phase * 0x5A)),
+                1000.0f * k + (1.0f - k) * (amp * SinS(phase * 0x3C)),
+                1000.0f * k + (1.0f - k) * (amp * SinS(phase * 0x46)), m, 0.0f, 0.0f, 0.0f);
     PSMTXConcat(m, t, m);
     Scene_CalcShakeMtx(shake);
     PSMTXConcat(shake, m, m);
@@ -403,8 +409,7 @@ s32 Scene_UpdateMode0(void) {
     }
     if (!cube->done) {
         Scene_UpdateWobble();
-        Cube_Update(TRUE);
-        return SCENE_MODE0;
+        return Cube_Update(TRUE);
     }
 
     switch (s->m0State) {
