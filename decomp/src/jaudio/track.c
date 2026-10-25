@@ -1803,6 +1803,7 @@ note_seq:
 static void Nas_GroupSeq(group* grp) {
     group** REF_grp = &grp;
     u8 cmd;
+    u8 cmdpad;
     s32 value;
     u16 temp;
     u8 cmd_lo_bits;
@@ -2057,16 +2058,6 @@ static void Nas_GroupSeq(group* grp) {
                                     }
                                 }
                                 break;
-                        }
-                    } else if (cmd == GRP_CMD_CALLBACK) {
-                        cmd = Nas_ReadByteData(m);
-                        if (cmd <= 4) {
-                            if (AG.seq_callbacks[cmd] != nullptr) {
-                                NA_GRP_CALLBACK = (GRP_CALLBACK)AG.seq_callbacks[cmd];
-                                m->value = (*(GRP_CALLBACK)AG.seq_callbacks[cmd])(m->value, grp);
-                            }
-                        } else {
-                            break;
                         }
                     } else {
                         /* Commands 0x00 - 0xBD & 0xBF */
