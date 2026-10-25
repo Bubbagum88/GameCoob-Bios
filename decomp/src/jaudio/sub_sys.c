@@ -320,6 +320,7 @@ extern void Nap_Process1Command(AudioPort* port) {
 }
 
 extern void Nap_AudioPortProcess(u32 msg) {
+    u8 last;
     static u8 begin = 0;
     u8 end;
     AudioPort* port;
@@ -332,10 +333,11 @@ extern void Nap_AudioPortProcess(u32 msg) {
     }
 
     end = msg & 0xFF;
+    last = end;
 
     while (TRUE) {
         now = begin;
-        if (now == end) {
+        if (now == last) {
             AG.thread_cmd_queue_finished = FALSE;
             return;
         }

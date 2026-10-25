@@ -16,7 +16,8 @@ static u32 sVirtualHandle;
 /* 0x8135B360: where a file sits in the linked-in archive */
 u8* fn_8135B360(immut char* path)
 {
-	u8* base = lbl_813F7620;
+	//! FAKE: the comma keeps the base in r31 without a copy
+	u8* base = (0, lbl_813F7620);
 	char name[0x20];
 	int i;
 
