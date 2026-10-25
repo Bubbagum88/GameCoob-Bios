@@ -230,12 +230,12 @@ static inline void Scene_SquashWorld(Scene *s) {
     MtxScaleCols(sWorldMtx, &squash);
 }
 
-static inline Vec Scene_VecSplat(f32 v) {
+static inline Vec Scene_VecSplat(Scene *s) {
     Vec r = { 0.0f, 0.0f, 0.0f };
 
-    r.x = v;
-    r.y = v;
-    r.z = v;
+    r.x = s->modelScale;
+    r.y = s->modelScale;
+    r.z = s->modelScale;
     return r;
 }
 
@@ -253,6 +253,7 @@ static inline Vec Scene_VecOuter(void) {
 
 /* 0x8130C90C */
 void Scene_DrawWorld(void) {
+    MtxPtr w = sWorldMtx;
     Scene *s = Scene_Get();
     Mtx m;
     Mtx id;
@@ -260,17 +261,17 @@ void Scene_DrawWorld(void) {
 
     Scene_CalcWorldMtx(m);
     PSMTXIdentity(id);
-    PSMTXConcat(m, id, sWorldMtx);
+    PSMTXConcat(m, id, w);
     Scene_SquashWorld(s);
-    J3D_SetModelMtx(Scene_GetBgInner(), sWorldMtx, Scene_VecSplat(s->modelScale));
+    J3D_SetModelMtx(Scene_GetBgInner(), w, Scene_VecSplat(s));
     view = Camera_GetView();
     J3D_SetViewMtx(Scene_GetBgInner(), view);
     J3D_CalcJoints(Scene_GetBgInner());
-    J3D_SetModelMtx(Scene_GetLogo(), sWorldMtx, Scene_VecOne());
+    J3D_SetModelMtx(Scene_GetLogo(), w, Scene_VecOne());
     view = Camera_GetView();
     J3D_SetViewMtx(Scene_GetLogo(), view);
     J3D_CalcJoints(Scene_GetLogo());
-    J3D_SetModelMtx(Scene_GetBgOuter(), sWorldMtx, Scene_VecOuter());
+    J3D_SetModelMtx(Scene_GetBgOuter(), w, Scene_VecOuter());
     view = Camera_GetView();
     J3D_SetViewMtx(Scene_GetBgOuter(), view);
     J3D_CalcJoints(Scene_GetBgOuter());
