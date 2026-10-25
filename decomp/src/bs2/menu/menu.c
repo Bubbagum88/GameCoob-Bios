@@ -1394,12 +1394,11 @@ void Menu_DrawSubmenus(void) {
 /* 0x81314F44: guide labels, drawn once per language so that a language
    change cross-fades (langGuide[] faders). */
 static void Menu_DrawGuideText(u8 alpha) {
+    GXColor c = { 255, 255, 255, 255 };
     s32 lang;
     s16 a;
 
     for (lang = 0; lang < 6; lang++) {
-        GXColor c = { 255, 255, 255, 255 };
-
         Fader_GetAlpha(&sLangGuide[lang], &a, NULL);
         c.a = (u8)(alpha * a / 255);
         Fader_DrawString(&sGuideText[0], sGuideSth[lang], gGuideGlh, &c);
