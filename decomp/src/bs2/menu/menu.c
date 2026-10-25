@@ -850,6 +850,7 @@ static inline void Menu_AnimCube(void) {
 }
 
 s32 Menu_Update(void) {
+    MenuWork *w;
     Scene *scene = Scene_Get();
     DispSettings *disp = Disp_GetSettings();
     OSSram *sram;
@@ -893,7 +894,8 @@ s32 Menu_Update(void) {
     }
 
     gMenuState = gMenuNextState;
-    gMenu->state = gMenuState;
+    w = gMenu;
+    w->state = gMenuState;
 
     switch (gMenuState) {
     case MENU_TOP:

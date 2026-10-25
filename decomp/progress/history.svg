@@ -9,11 +9,11 @@
 <circle cx="225.3" cy="67.8" r="3" fill="#58a6ff"/>
 <circle cx="414.7" cy="47.4" r="3" fill="#58a6ff"/>
 <circle cx="604.0" cy="43.3" r="3" fill="#58a6ff"/>
-<polyline fill="none" stroke="#2ea043" stroke-width="2" points="36.0,141.4 225.3,98.8 414.7,70.4 604.0,61.4"/>
+<polyline fill="none" stroke="#2ea043" stroke-width="2" points="36.0,141.4 225.3,98.8 414.7,70.4 604.0,61.1"/>
 <circle cx="36.0" cy="141.4" r="3" fill="#2ea043"/>
 <circle cx="225.3" cy="98.8" r="3" fill="#2ea043"/>
 <circle cx="414.7" cy="70.4" r="3" fill="#2ea043"/>
-<circle cx="604.0" cy="61.4" r="3" fill="#2ea043"/>
+<circle cx="604.0" cy="61.1" r="3" fill="#2ea043"/>
 <text x="490" y="20" font-size="10" fill="#2ea043">code %</text>
 <text x="550" y="20" font-size="10" fill="#58a6ff">functions %</text>
 <text x="36" y="208" font-size="10" fill="#8b949e">2026-10-21</text>
