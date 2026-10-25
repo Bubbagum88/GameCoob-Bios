@@ -137,6 +137,12 @@ void CardIcon_UpdateFly(void) {
     s16 i;
     s16 start;
     f32 dur;
+    f32 x0;
+    f32 y0;
+    f32 x1;
+    f32 t0;
+    f32 y1;
+    f32 t1;
 
     for (i = 0; i < CARDICON_CUBES; i++) {
         if (sCardIconFrame <= sCardCube[i].start) {
@@ -151,12 +157,12 @@ void CardIcon_UpdateFly(void) {
         }
         if (sCardIconFrame > sCardCube[i].start) {
             if (sCardIconFrame < sCardCube[i].end) {
-                f32 x0 = sCardCube[i].from[0];
-                f32 y0 = sCardCube[i].from[1];
-                f32 x1 = sCardCube[i].to[0];
-                f32 y1 = sCardCube[i].to[1];
-                f32 t0 = sCardCube[i].start;
-                f32 t1 = sCardCube[i].end;
+                x0 = sCardCube[i].from[0];
+                y0 = sCardCube[i].from[1];
+                x1 = sCardCube[i].to[0];
+                y1 = sCardCube[i].to[1];
+                t0 = sCardCube[i].start;
+                t1 = sCardCube[i].end;
                 dur = t1 - t0;
                 sCardCube[i].pos[0] = Hermite(sCardIconFrame, t0, x0, (x1 - x0) / dur, t1, x1, 0.0f);
                 sCardCube[i].pos[1] = Hermite(sCardIconFrame, t0, y0, (y1 - y0) / dur, t1, y1, 0.0f);
