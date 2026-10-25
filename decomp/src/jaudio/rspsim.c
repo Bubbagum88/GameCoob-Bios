@@ -2,7 +2,13 @@
 // adapted to the BS2 build (older RspStart: no A_FILTER).
 #include "jaudio_NES/rspsim.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 #include "dolphin/os/OSCache.h"
+#ifdef __cplusplus
+}
+#endif
 #include "jaudio_NES/sample.h"
 #include "jaudio_NES/rate.h"
 #include "jaudio_NES/audiocommon.h"
