@@ -208,6 +208,27 @@ static void Font_ExpandSheet(u8 *src, u8 *dst) {
 
 s32 Font_Index(s32 code);
 
+static inline void Font_PutChar(u16 x, u16 y, s32 size, s32 code) {
+    Font_DrawChar(x, y, size, Font_Index((u16)code));
+}
+
+static inline u16 Font_LineX(FontBox *box, u16 *lineW, s32 line) {
+    u16 x0;
+
+    switch (box->halign & 0x7F) {
+    case 0:
+        x0 = box->x - lineW[line] / 2;
+        break;
+    case 2:
+        x0 = box->x - box->w / 2;
+        break;
+    case 1:
+        x0 = box->x + box->w / 2 - lineW[line];
+        break;
+    }
+    return x0;
+}
+
 /* 0x81308538: draw the lines of a box measured by Font_Measure */
 u16 Font_DrawLines(FontBox *box, u8 *str, u16 *lineW, s32 height, s32 maxChars, s32 maxLines, BOOL wrap,
                    BOOL stopAtWrap) {
@@ -217,7 +238,7 @@ u16 Font_DrawLines(FontBox *box, u8 *str, u16 *lineW, s32 height, s32 maxChars, 
     s32 w = box->w & 0xFFFF;
     u16 code;
     u16 x0;
-    u16 y;
+    s32 y;
     u16 nx;
     BOOL over;
 
@@ -232,17 +253,7 @@ u16 Font_DrawLines(FontBox *box, u8 *str, u16 *lineW, s32 height, s32 maxChars, 
         y = box->y + box->h / 2 - height;
         break;
     }
-    switch (box->halign & 0x7F) {
-    case 0:
-        x0 = box->x - lineW[0] / 2;
-        break;
-    case 2:
-        x0 = box->x - w / 2;
-        break;
-    case 1:
-        x0 = box->x + w / 2 - lineW[0];
-        break;
-    }
+    x0 = Font_LineX(box, lineW, 0);
     y += sFont.ascent * box->size * 16 / sFont.cellHeight;
 
     while ((code = *str++) != 0) {
@@ -256,17 +267,7 @@ u16 Font_DrawLines(FontBox *box, u8 *str, u16 *lineW, s32 height, s32 maxChars, 
         if (code == '\n') {
             if (wrap) {
                 lines++;
-                switch (box->halign & 0x7F) {
-                case 0:
-                    x0 = box->x - lineW[lines] / 2;
-                    break;
-                case 2:
-                    x0 = box->x - box->w / 2;
-                    break;
-                case 1:
-                    x0 = box->x + box->w / 2 - lineW[lines];
-                    break;
-                }
+                x0 = Font_LineX(box, lineW, lines);
                 y += box->lineSpace * 16;
                 x = 0;
                 if (maxLines != 0 && lines >= maxLines) {
@@ -290,17 +291,7 @@ u16 Font_DrawLines(FontBox *box, u8 *str, u16 *lineW, s32 height, s32 maxChars, 
             if (over) {
                 if (wrap) {
                     lines++;
-                    switch (box->halign & 0x7F) {
-                    case 0:
-                        x0 = box->x - lineW[lines] / 2;
-                        break;
-                    case 2:
-                        x0 = box->x - box->w / 2;
-                        break;
-                    case 1:
-                        x0 = box->x + box->w / 2 - lineW[lines];
-                        break;
-                    }
+                    x0 = Font_LineX(box, lineW, lines);
                     x = 0;
                     y += box->lineSpace * 16;
                     if (*str == '\n') {
@@ -314,7 +305,7 @@ u16 Font_DrawLines(FontBox *box, u8 *str, u16 *lineW, s32 height, s32 maxChars, 
                     break;
                 }
             }
-            Font_DrawChar(x0 + x, y, box->size, Font_Index(code));
+            Font_PutChar(x0 + x, y, box->size, code);
             chars++;
             x += box->charSpace * 16 + box->size * (sWidth[Font_Index(code)] * 16) / sFont.cellWidth;
         }
