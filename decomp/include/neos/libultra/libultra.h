@@ -4,8 +4,14 @@
 #include "types.h"
 #include <stddef.h>
 typedef unsigned long uintptr_t;
+#ifdef __cplusplus
+extern "C" {
+#endif
 #include "dolphin/os/OSTime.h"
 #include "dolphin/os/OSCache.h"
+#ifdef __cplusplus
+}
+#endif
 #include "libultra/osMesg.h"
 #include "libultra/os_pi.h"
 #include "libc64/math64.h" /* TODO: sins and coss belong in libultra */

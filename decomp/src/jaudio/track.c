@@ -1803,6 +1803,7 @@ note_seq:
 static void Nas_GroupSeq(group* grp) {
     group** REF_grp = &grp;
     u8 cmd;
+    u8 cmdpad;
     s32 value;
     u16 temp;
     u8 cmd_lo_bits;
@@ -2058,16 +2059,6 @@ static void Nas_GroupSeq(group* grp) {
                                 }
                                 break;
                         }
-                    } else if (cmd == GRP_CMD_CALLBACK) {
-                        cmd = Nas_ReadByteData(m);
-                        if (cmd <= 4) {
-                            if (AG.seq_callbacks[cmd] != nullptr) {
-                                NA_GRP_CALLBACK = (GRP_CALLBACK)AG.seq_callbacks[cmd];
-                                m->value = (*(GRP_CALLBACK)AG.seq_callbacks[cmd])(m->value, grp);
-                            }
-                        } else {
-                            break;
-                        }
                     } else {
                         /* Commands 0x00 - 0xBD & 0xBF */
                         cmd_lo_bits = cmd & 0x0F;
@@ -2134,18 +2125,15 @@ static void Nas_GroupSeq(group* grp) {
 }
 
 extern void Nas_MySeqMain(u32 frames_left) {
-    group* grp;
     group* main_grp;
     u32 i;
     STACK_PAD_VAR(4);
 
     AG.sample_state_offset = (AG.audio_params.updates_per_frame - (frames_left + 1)) * AG.num_channels;
     for (i = 0; i < AG.audio_params.num_groups; i++) {
-        grp = &AG.groups[i];
-
-        if (grp->flags.enabled == TRUE) {
-            Nas_GroupSeq(grp);
-            Nas_MainCtrl(grp);
+        if (AG.groups[i].flags.enabled == TRUE) {
+            Nas_GroupSeq(&AG.groups[i]);
+            Nas_MainCtrl(&AG.groups[i]);
         }
     }
 

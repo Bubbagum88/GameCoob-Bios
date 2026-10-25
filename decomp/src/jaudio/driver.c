@@ -517,11 +517,9 @@ Acmd* Nas_LoadAuxBufferCH(Acmd* cmd, s32 samples_per_update, delay* del_p, s16 u
     cmd = __LoadAuxBuf(cmd, 0x3A0, param->start_pos - (ofs_size / SAMPLE_SIZE), 0x1A0, del_p);
     if (param->wrapped_size != 0) {
         s16 wrapped_ofs_size = ALIGN_NEXT(ofs_size + param->size, 16);
-        s32 load_size = 0x1A0 - wrapped_ofs_size;
-    delay** REF_del_p = &del_p;
 
-        if (load_size > 0) {
-            cmd = __LoadAuxBuf(cmd, 0x3A0 + wrapped_ofs_size, 0, load_size, del_p);
+        if (0x1A0 - wrapped_ofs_size > 0) {
+            cmd = __LoadAuxBuf(cmd, 0x3A0 + wrapped_ofs_size, 0, 0x1A0 - wrapped_ofs_size, del_p);
         }
     }
 
@@ -831,7 +829,6 @@ extern Acmd* Nas_DriveRsp(s16* aiBuf, s32 aiBufLen, Acmd* cmd, s32 updateIndex) 
 }
 
 extern Acmd* Nas_SynthMain(s32 chan_id, commonch* common, driverch* driver, s16* samples, s32 samples_per_update, Acmd* cmd, s32 update_idx) {
-    s32 pad1[1];
     s32 size;
     void* reverbAddrSrc;
     smzwavetable* sample;
@@ -856,10 +853,8 @@ extern Acmd* Nas_SynthMain(s32 chan_id, commonch* common, driverch* driver, s16*
     s32 sampleEndPos;
     s32 numSamplesToProcess;
     s32 dmemUncompressedAddrOffset2;
-    s32 pad2[3];
     s32 numSamplesInFirstFrame;
     s32 numTrailingSamplesToIgnore;
-    s32 pad3[3];
     s16 sampleDataDmemAddr;
     s32 frameSize;
     s32 numFramesToDecode;
@@ -891,9 +886,9 @@ extern Acmd* Nas_SynthMain(s32 chan_id, commonch* common, driverch* driver, s16*
     chan = &AG.channels[chan_id];
     DCTouchRange(chan, sizeof(channel));
     size = SAMPLE_SIZE * samples_per_update;
-    
-    // Deviation from MM: Ensure that the wavetable isn't null
-    if (common->tuned_sample != NULL) {
+
+    // IPL: no tuned_sample NULL check here (AC added one)
+    {
         flags = A_CONTINUE;
 
         // Initialize the synthesis state
@@ -1474,33 +1469,28 @@ extern Acmd* Nas_Synth_Resample(Acmd* cmd, const driverch* driver, s32 size, u16
 }
 
 extern Acmd* Nas_Synth_Envelope(Acmd* cmd, commonch* common, driverch* driver, s32 samples_per_update, u16 dmem, s32 haasEffectDelaySide, s32 flags) {
-    s32 targetReverbVol = common->target_reverb_volume;
-    s16* currentVolume = &driver->current_volume_left;
-    s16 curVolLeftTemp = *currentVolume++;
-    u16 curVolRight = *currentVolume & 0xFFFF;
-    u16 curVolLeft = curVolLeftTemp & 0xFFFF;
-    u16 targetVolLeft = common->target_volume_left << 4;
-    u16 targetVolRight = common->target_volume_right << 4;
     u32 dmemDests;
-    s32 curReverbVolAndFlags;
-    u16 curReverbVol;
-    s16 rampLeft;
+    s16 sourceReverbVol;
+    u16 targetVolLeft;
+    s32 curVolRight;
+    s32 targetReverbVol;
+    s32 curVolLeft;
     s16 rampRight;
+    s16 rampLeft;
     s16 rampReverb;
+    u16 targetVolRight;
     f32 defaultPanVolume;
-    STACK_PAD_VAR(3);
+    STACK_PAD_VAR(4);
 
-    
-    // targetReverbVol = common->target_reverb_volume;
-    // curVolLeft = driver->current_volume_left;
-    // curVolRight = driver->current_volume_right;
-
-    // targetVolLeft = common->target_volume_left << 4;
-    // targetVolRight = common->target_volume_right << 4;
+    curVolLeft = (u16)driver->current_volume_left;
+    targetReverbVol = common->target_reverb_volume;
+    curVolRight = (u16)driver->current_volume_right;
+    targetVolRight = common->target_volume_right << 4;
+    targetVolLeft = common->target_volume_left << 4;
 
     if (AG.sound_mode == SOUND_OUTPUT_DOLBY_SURROUND) {
         u8 idx = common->surround_effect_idx;
-        
+
         if (idx != 0xFF) {
             defaultPanVolume = StereoLeft[idx];
             targetVolLeft *= defaultPanVolume;
@@ -1509,21 +1499,20 @@ extern Acmd* Nas_Synth_Envelope(Acmd* cmd, commonch* common, driverch* driver, s
     }
 
     if (targetVolLeft != (u32)curVolLeft) {
-        rampLeft = (targetVolLeft - (s32)curVolLeft) / (samples_per_update >> 3);
+        rampLeft = (targetVolLeft - curVolLeft) / (samples_per_update >> 3);
     } else {
         rampLeft = 0;
     }
 
     if (targetVolRight != (u32)curVolRight) {
-        rampRight = (targetVolRight - (s32)curVolRight) / (samples_per_update >> 3);
+        rampRight = (targetVolRight - curVolRight) / (samples_per_update >> 3);
     } else {
         rampRight = 0;
     }
 
-    curReverbVolAndFlags = (s16)driver->cur_reverb_vol;
-    if (targetReverbVol != curReverbVolAndFlags) {
-        curReverbVol = curReverbVolAndFlags & 0x7F;
-        rampReverb = (((targetReverbVol & 0x7F) - (curReverbVol)) << 9) / (samples_per_update >> 3);
+    sourceReverbVol = driver->cur_reverb_vol;
+    if (targetReverbVol != sourceReverbVol) {
+        rampReverb = (((targetReverbVol & 0x7F) - (sourceReverbVol & 0x7F)) << 9) / (samples_per_update >> 3);
         driver->cur_reverb_vol = targetReverbVol;
     } else {
         rampReverb = 0;
@@ -1533,43 +1522,32 @@ extern Acmd* Nas_Synth_Envelope(Acmd* cmd, commonch* common, driverch* driver, s
     driver->current_volume_right = curVolRight + (rampRight * (samples_per_update >> 3));
 
     if (common->use_haas_effect) {
-        // curReverbVol = curReverbVolAndFlags & 0x7F;
         Nas_ClearBuffer(cmd++, DMEM_HAAS_TEMP, DMEM_1CH_SIZE);
-        Nas_SetEnvParam(cmd++, (curReverbVolAndFlags & 0x7F) * 2, rampReverb, rampLeft, rampRight);
+        Nas_SetEnvParam(cmd++, (sourceReverbVol & 0x7F) * 2, rampReverb, rampLeft, rampRight);
         Nas_SetEnvParam2(cmd++, curVolLeft, curVolRight);
 
         switch (haasEffectDelaySide) {
             case HAAS_EFFECT_DELAY_LEFT:
-                // Store the left dry channel in a temp space to be delayed to produce the haas effect
                 dmemDests = Env_Data_L1;
                 break;
 
             case HAAS_EFFECT_DELAY_RIGHT:
-                // Store the right dry channel in a temp space to be delayed to produce the haas effect
                 dmemDests = Env_Data_L2;
                 break;
 
-            default: // HAAS_EFFECT_DELAY_NONE
+            default:
                 dmemDests = Env_Data_L3;
                 break;
         }
     } else {
-        curReverbVol = (curReverbVolAndFlags << 1) & 0xFE;
-        aSetEnvParam(cmd++, (curReverbVol), rampReverb, rampLeft, rampRight);
-
-        {
-            cmd->words.w0 = _SHIFTL(A_CMD_SETENVPARAM2, 24, 8);
-            cmd->words.w1 = _SHIFTL(curVolLeft, 16, 16) | _SHIFTL(curVolRight, 0, 16);
-            cmd++;
-        }
-        // aSetEnvParam2(cmd++, curVolLeft & 0xFFFF, curVolRight & 0xFFFF);
+        aSetEnvParam(cmd++, (sourceReverbVol & 0x7F) * 2, rampReverb, rampLeft, rampRight);
+        aSetEnvParam2(cmd++, (u16)curVolLeft, (u16)curVolRight);
         dmemDests = Env_Data_L3;
     }
 
-    aEnvMixer2(cmd++, dmem, samples_per_update, (curReverbVolAndFlags & 0x80) >> 7,
+    aEnvMixer2(cmd++, dmem, samples_per_update, (sourceReverbVol & 0x80) >> 7,
               common->strong_reverb_right, common->strong_reverb_left,
               common->strong_right, common->strong_left, dmemDests, Env_DataH);
-
     return cmd;
 }
 
@@ -1603,9 +1581,9 @@ extern Acmd* Nas_Synth_Delay(Acmd* cmd, commonch* common, driverch* driver, s32 
     u16 prevHaasEffectDelaySize;
     u16 dmemDest;
     u16 pitch;
-    STACK_PAD_VAR(2);
     u16* REF_haasEffectDelaySize = &haasEffectDelaySize;
-    commonch** REF_common = &common;
+    u16* REF_prev = &prevHaasEffectDelaySize;
+    u16* REF_pitch = &pitch;
 
     switch (haasEffectDelaySide) {
         case HAAS_EFFECT_DELAY_LEFT:
@@ -1635,7 +1613,7 @@ extern Acmd* Nas_Synth_Delay(Acmd* cmd, commonch* common, driverch* driver, s32 
     if (flags != A_INIT) {
         // Slightly adjust the sample rate in order to fit a change in sample delay
         if (haasEffectDelaySize != prevHaasEffectDelaySize) {
-            pitch = pitch = (((size << 0xF) / 2) - 1) / ((size + haasEffectDelaySize - prevHaasEffectDelaySize - 2) / 2);
+            pitch = (((size << 0xF) / 2) - 1) / ((size + haasEffectDelaySize - prevHaasEffectDelaySize - 2) / 2);
             aSetBuffer(cmd++, 0, DMEM_HAAS_TEMP, DMEM_TEMP, size + haasEffectDelaySize - prevHaasEffectDelaySize);
             aResampleZoh(cmd++, pitch, 0);
         } else {

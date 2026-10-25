@@ -21,30 +21,32 @@ static void Nas_AddListHead(link* list, link* l);
 static void Nas_smzSetParam(channel* chan, drvparam* param) {
     f32 volL;
     f32 volR;
-    s32 strongL;
     s32 strongR;
+    s32 strongL;
     s32 halfPanIdx;
     f32 velocity;
     u8 pan;
     u8 panScale;
-    u8 reverbVol;
+    commonch* common;
     phase stereoPhase;
     s32 phaseEffects;
     STACK_PAD_VAR(2);
-    f32* REF_volL = &volL;
+    u8 reverbVol;
+    f32* REF_velocity = &velocity;
 
     phaseEffects = chan->playback_ch.stereo_headset_effects;
     Nas_smzSetPitch(chan, param->playback.pitch);
 
+    common = &chan->common_ch;
     velocity = param->playback.velocity;
     pan = param->playback.pan;
     reverbVol = param->playback.target_reverb_volume;
     stereoPhase = param->playback.stereo_phase;
     panScale = pan & 0x7F;
-    chan->common_ch.strong_right = FALSE;
-    chan->common_ch.strong_left = FALSE;
-    chan->common_ch.strong_reverb_right = stereoPhase.strong_reverb_right;
-    chan->common_ch.strong_reverb_left = stereoPhase.strong_reverb_left;
+    common->strong_right = FALSE;
+    common->strong_left = FALSE;
+    common->strong_reverb_right = stereoPhase.strong_reverb_right;
+    common->strong_reverb_left = stereoPhase.strong_reverb_left;
 
 
     if (phaseEffects && AG.sound_mode == SOUND_OUTPUT_HEADSET) {
@@ -53,17 +55,17 @@ static void Nas_smzSetParam(channel* chan, drvparam* param) {
             halfPanIdx = 0x3F;
         }
 
-        chan->common_ch.haas_effect_right_delay_size = CDELAYTABLE[halfPanIdx];
-        chan->common_ch.haas_effect_left_delay_size = CDELAYTABLE[0x3F - halfPanIdx];
-        chan->common_ch.use_haas_effect = TRUE;
+        common->haas_effect_right_delay_size = CDELAYTABLE[halfPanIdx];
+        common->haas_effect_left_delay_size = CDELAYTABLE[0x3F - halfPanIdx];
+        common->use_haas_effect = TRUE;
 
         volL = PhoneLeft[panScale];
         volR = PhoneLeft[0x7F - panScale];
     } else if (phaseEffects && AG.sound_mode == SOUND_OUTPUT_STEREO) {
         strongL = strongR = FALSE;
-        chan->common_ch.haas_effect_left_delay_size = 0;
-        chan->common_ch.haas_effect_right_delay_size = 0;
-        chan->common_ch.use_haas_effect = FALSE;
+        common->haas_effect_left_delay_size = 0;
+        common->haas_effect_right_delay_size = 0;
+        common->use_haas_effect = FALSE;
         volL = WideLeft[panScale];
         volR = WideLeft[0x7F - panScale];
 
@@ -73,36 +75,36 @@ static void Nas_smzSetParam(channel* chan, drvparam* param) {
             strongR = TRUE;
         }
 
-        chan->common_ch.strong_right = strongR;
-        chan->common_ch.strong_left = strongL;
+        common->strong_right = strongR;
+        common->strong_left = strongL;
 
         switch (stereoPhase.type) {
             case PHASE_TYPE_0:
                 break;
             case PHASE_TYPE_1:
-                chan->common_ch.strong_right = stereoPhase.strong_right;
-                chan->common_ch.strong_left = stereoPhase.strong_left;
+                common->strong_right = stereoPhase.strong_right;
+                common->strong_left = stereoPhase.strong_left;
                 break;
             case PHASE_TYPE_2:
-                chan->common_ch.strong_right = strongR | stereoPhase.strong_right;
-                chan->common_ch.strong_left = strongL | stereoPhase.strong_left;
+                common->strong_right = strongR | stereoPhase.strong_right;
+                common->strong_left = strongL | stereoPhase.strong_left;
                 break;
             case PHASE_TYPE_3:
-                chan->common_ch.strong_right = strongR ^ stereoPhase.strong_right;
-                chan->common_ch.strong_left = strongL ^ stereoPhase.strong_left;
+                common->strong_right = strongR ^ stereoPhase.strong_right;
+                common->strong_left = strongL ^ stereoPhase.strong_left;
                 break;
         }
     } else {
         switch (AG.sound_mode) {
             case SOUND_OUTPUT_MONO:
-                chan->common_ch.strong_reverb_right = FALSE;
-                chan->common_ch.strong_reverb_left = FALSE;
+                common->strong_reverb_right = FALSE;
+                common->strong_reverb_left = FALSE;
                 volL = 0.707f;
                 volR = 0.707f;
                 break;
             default:
-                chan->common_ch.strong_right = stereoPhase.strong_right;
-                chan->common_ch.strong_left = stereoPhase.strong_left;
+                common->strong_right = stereoPhase.strong_right;
+                common->strong_left = stereoPhase.strong_left;
                 volL = StereoLeft[panScale];
                 volR = StereoLeft[0x7F - panScale];
                 break;
@@ -117,15 +119,15 @@ static void Nas_smzSetParam(channel* chan, drvparam* param) {
         velocity = 1.0f;
     }
     
-    chan->common_ch.target_volume_left = (s32)((velocity * volL) * (0x1000 - 0.001f));
-    chan->common_ch.target_volume_right = (s32)((velocity * volR) * (0x1000 - 0.001f));
+    common->target_volume_left = (s32)((velocity * volL) * (0x1000 - 0.001f));
+    common->target_volume_right = (s32)((velocity * volR) * (0x1000 - 0.001f));
 
-    chan->common_ch.gain = param->playback.gain;
-    chan->common_ch.filter = param->playback.filter_buf;
-    chan->common_ch.comb_filter_size = param->comb_filter_size;
-    chan->common_ch.comb_filter_gain = param->comb_filter_gain;
-    chan->common_ch.target_reverb_volume = reverbVol;
-    chan->common_ch.surround_effect_idx = param->playback.surround_effect_idx;
+    common->gain = param->playback.gain;
+    common->filter = param->playback.filter_buf;
+    common->comb_filter_size = param->comb_filter_size;
+    common->comb_filter_gain = param->comb_filter_gain;
+    common->target_reverb_volume = reverbVol;
+    common->surround_effect_idx = param->playback.surround_effect_idx;
 }
 
 static void Nas_smzSetPitch(channel* chan, f32 pitch) {
@@ -364,6 +366,7 @@ extern void Nas_UpdateChannel(void) {
 
 extern wtstr* NoteToVoice(voicetable* vtbl, s32 note) {
     wtstr* voice_p;
+    wtstr* ret;
 
     if (note < vtbl->normal_range_low) {
         return &vtbl->low_pitch_tuned_sample;
@@ -373,7 +376,8 @@ extern wtstr* NoteToVoice(voicetable* vtbl, s32 note) {
         voice_p = &vtbl->high_pitch_tuned_sample;
     }
 
-    return voice_p;
+    // FAKE: the copy keeps voice_p out of r3
+    return ret = voice_p;
 }
 
 extern voicetable* ProgToVp(s32 prog, s32 inst) {
@@ -518,7 +522,9 @@ static void __Nas_Release_Channel_Main(note* n, int target) {
     playbackparams* param;
     sub* subtrack;
     s32 i;
-    int* REF_target = &target;
+    note** wanted;
+    note** cur;
+    envp* adsr;
 
     if (n == NA_NO_NOTE) {
         return;
@@ -526,19 +532,20 @@ static void __Nas_Release_Channel_Main(note* n, int target) {
 
     n->channel_attached = FALSE;
 
-    if (n->channel == NULL) {
+    if ((chan = n->channel) == NULL) {
         return;
     }
 
-    chan = n->channel;
+    wanted = &chan->playback_ch.wanted_parent_note;
     param = &chan->playback_ch.params;
 
-    if (chan->playback_ch.wanted_parent_note == n) {
-        chan->playback_ch.wanted_parent_note = NA_NO_NOTE;
+    if (*wanted == n) {
+        *wanted = NA_NO_NOTE;
     }
 
+    cur = &chan->playback_ch.current_parent_note;
     if (chan->playback_ch.current_parent_note != n) {
-        if (chan->playback_ch.current_parent_note != NA_NO_NOTE || chan->playback_ch.wanted_parent_note != NA_NO_NOTE ||
+        if (chan->playback_ch.current_parent_note != NA_NO_NOTE || *wanted != NA_NO_NOTE ||
             chan->playback_ch.previous_parent_note != n || target == ADSR_STATUS_DECAY) {
             return;
         }
@@ -548,7 +555,8 @@ static void __Nas_Release_Channel_Main(note* n, int target) {
         return;
     }
 
-    if (chan->playback_ch.adsr_envp.state.flags.status != ADSR_STATUS_DECAY) {
+    adsr = &chan->playback_ch.adsr_envp;
+    if (adsr->state.flags.status != ADSR_STATUS_DECAY) {
         param->pitch = n->note_frequency_scale;
         param->velocity = n->note_velocity;
         param->pan = n->note_pan;
@@ -601,15 +609,15 @@ static void __Nas_Release_Channel_Main(note* n, int target) {
             chan->playback_ch.priority = 1;
         }
 
-        chan->playback_ch.previous_parent_note = chan->playback_ch.current_parent_note;
-        chan->playback_ch.current_parent_note = NA_NO_NOTE;
+        chan->playback_ch.previous_parent_note = *cur;
+        *cur = NA_NO_NOTE;
         if (target == ADSR_STATUS_RELEASE) {
             chan->playback_ch.adsr_envp.fadeout_velocity = AG.audio_params.updates_per_frame_inverse;
-            chan->playback_ch.adsr_envp.state.flags.release = TRUE;
+            adsr->state.flags.release = TRUE;
             chan->playback_ch.status = 2;
         } else {
             chan->playback_ch.status = 1;
-            chan->playback_ch.adsr_envp.state.flags.decay = TRUE;
+            adsr->state.flags.decay = TRUE;
             if (n->adsr_env.decay_idx == 0) {
                 chan->playback_ch.adsr_envp.fadeout_velocity = AG.adsr_decay_table[n->sub_track->adsr_env.decay_idx];
             } else {
@@ -769,13 +777,13 @@ extern void Nas_AllocVoices(chnode* node, s32 count) {
     link* src;
     link* dst;
     
+    (void)&j;
     Nas_DeAllocAllVoices(node);
     
     for (i = 0, j = 0; j < count; i++) {
         if (i == 4) {
             return;
         }
-    s32* REF_count = &count;
 
         switch (i) {
             case 0:
@@ -1036,27 +1044,32 @@ null_return:
 
 extern void Nas_ChannelInit(void) {
     s32 i;
+    STACK_PAD_VAR(1);
     channel* chan;
+    u8 pad[8];
+    playbackch* pb;
     s32* REF_i = &i;
+    channel** REF_chan = &chan;
 
     for (i = 0; i < AG.num_channels; i++) {
         chan = &AG.channels[i];
+        pb = &chan->playback_ch;
         chan->common_ch = NA_CHINIT_TABLE[0];
-        chan->playback_ch.priority = 0;
-        chan->playback_ch.status = 0;
-        chan->playback_ch.current_parent_note = NA_NO_NOTE;
-        chan->playback_ch.wanted_parent_note = NA_NO_NOTE;
-        chan->playback_ch.previous_parent_note = NA_NO_NOTE;
-        chan->playback_ch.wave_id = 0;
-        chan->playback_ch.params.velocity = 0.0f;
-        chan->playback_ch.adsr_volume_scale_unused = 0;
-        chan->playback_ch.adsr_envp.state.as_byte = 0;
-        chan->playback_ch.vibrato_tmtable.active = FALSE;
-        chan->playback_ch.portamento_sweep.current = 0;
-        chan->playback_ch.portamento_sweep.speed = 0;
-        chan->playback_ch.stereo_headset_effects = FALSE;
-        chan->playback_ch.start_sample_pos = 0;
+        pb->priority = 0;
+        pb->status = 0;
+        pb->current_parent_note = NA_NO_NOTE;
+        pb->wanted_parent_note = NA_NO_NOTE;
+        pb->previous_parent_note = NA_NO_NOTE;
+        pb->wave_id = 0;
+        pb->params.velocity = 0.0f;
+        pb->adsr_volume_scale_unused = 0;
+        pb->adsr_envp.state.as_byte = 0;
+        pb->vibrato_tmtable.active = FALSE;
+        pb->portamento_sweep.current = 0;
+        pb->portamento_sweep.speed = 0;
+        pb->stereo_headset_effects = FALSE;
+        pb->start_sample_pos = 0;
         chan->driver_ch.synth_params = (synthparams*)Nas_NcHeapAlloc(&AG.misc_heap, sizeof(synthparams));
-        chan->playback_ch.params.filter_buf = (s16*)Nas_NcHeapAlloc(&AG.misc_heap, 8 * sizeof(s16));
+        pb->params.filter_buf = (s16*)Nas_NcHeapAlloc(&AG.misc_heap, 8 * sizeof(s16));
     }
 }

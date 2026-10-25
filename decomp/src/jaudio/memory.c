@@ -435,10 +435,14 @@ void* Nas_SzHeapAlloc(s32 tableType, s32 size, s32 param_3, s32 id) {
     u8 status0;
     u8 status1;
     int end;
-    ALHeapEntry* entry;
     int checkId;
     u8* outStatus;
     int idx;
+    int i;
+    u8* REF_status0 = &status0;
+    u8* REF_status1 = &status1;
+    int* REF_i = &i;
+    STACK_PAD_VAR(9);
 
     switch (tableType) {
         case SEQUENCE_TABLE: {
@@ -476,7 +480,6 @@ void* Nas_SzHeapAlloc(s32 tableType, s32 size, s32 param_3, s32 id) {
 
         if (tableType == BANK_TABLE) {
             if (status0 == 4) {
-                int i;
                 end = AG.num_channels;
                 checkId = auto_heap->entries[0].id;
                 for (i = 0; i < end; i++) {
@@ -485,7 +488,7 @@ void* Nas_SzHeapAlloc(s32 tableType, s32 size, s32 param_3, s32 id) {
                     }
                 }
 
-                if (i == AG.num_channels) {
+                if (i == end) {
                     Nas_WriteIDbank(auto_heap->entries[0].id, 3);
                     status0 = 3;
                 }
@@ -1236,9 +1239,10 @@ SwMember* __Nas_Alloc_Single_Auto_Inner(s32 size) {
     for (i = 0; i < heap->num_entries; i++) {
         s8 inUse = heap->entries[i].in_use;
         if (inUse) {
-            u8* p = heap->entries[i].allocated_addr + heap->entries[i].size - 1;
-            if ((p >= oldCurrent || heap->entries[i].allocated_addr >= oldCurrent) &&
-                (p < nowCurrent || heap->entries[i].allocated_addr < nowCurrent)) {
+            u8* start = heap->entries[i].allocated_addr;
+            u8* p = start + heap->entries[i].size - 1;
+            if ((p >= oldCurrent || start >= oldCurrent) &&
+                (p < nowCurrent || start < nowCurrent)) {
                 __KillSwMember(&heap->entries[i]);
                 heap->entries[i].in_use = 0;
                 if (s == -1) {
@@ -1247,16 +1251,17 @@ SwMember* __Nas_Alloc_Single_Auto_Inner(s32 size) {
             }
         }
     }
+    int n = heap->num_entries;
     if (s == -1) {
-        for (i = 0; i < heap->num_entries; i++) {
+        for (i = 0; i < n; i++) {
             s8 inUse = heap->entries[i].in_use;
             if (inUse == 0) {
                 break;
             }
         }
         s = i;
-        if (s == heap->num_entries) {
-            if (heap->num_entries == ARRAY_COUNT(heap->entries)) {
+        if (s == n) {
+            if (n == ARRAY_COUNT(heap->entries)) {
                 return NULL;
             }
             heap->num_entries++;
@@ -1313,8 +1318,9 @@ void __SearchBank(SwMember* entry, s32 bank) {
  */
 void __KillSwMember(SwMember* a) {
     for (int i = 0, end = AG.bank_header->numEntries; i < end; i++) {
-        int bank0 = AG.voice_info[i].wave_bank_id0;
-        int bank1 = AG.voice_info[i].wave_bank_id1;
+        voiceinfo* vi = &AG.voice_info[i];
+        int bank0 = vi->wave_bank_id0;
+        int bank1 = vi->wave_bank_id1;
         int* REF_end = &end;
         int* REF_bank0 = &bank0;
         int* REF_bank1 = &bank1;
@@ -1388,10 +1394,12 @@ void Emem_KillSwMember() {
         s32* REF_id1 = &id1;
         if ((id0 != 0xff || id1 != 0xff) && Nas_SzCacheCheck(1, 3, i) && Nas_CheckIDbank(i)) {
             for (j = 0; j < AG.emem_persistent_wave_heap.num_entries; j++) {
-                __Do_EmemKill(&AG.emem_persistent_wave_heap.entries[j], id0, id1, i);
+                SwMember* m = &AG.emem_persistent_wave_heap.entries[j];
+                __Do_EmemKill(m, id0, id1, i);
             }
             for (j = 0; j < AG.emem_temporary_wave_heap.num_entries; j++) {
-                __Do_EmemKill(&AG.emem_temporary_wave_heap.entries[j], id0, id1, i);
+                SwMember* m = &AG.emem_temporary_wave_heap.entries[j];
+                __Do_EmemKill(m, id0, id1, i);
             }
         }
     }
@@ -1449,13 +1457,18 @@ void EntryWave(s32 id) {
 void __ExchangeWave(s32 a, s32 b) {
     s32* REF_b = &b;
     s32 i;
-    Wavelookuptable wavetable;
-    voiceinfo* voiceinfo;
+    STACK_PAD_VAR(1);
     s32 bVar1;
     s32 bVar2;
-    ArcHeader* wave_header = AG.wave_header;
+    Wavelookuptable wavetable;
+    voiceinfo* voiceinfo;
     s16 numEntries = AG.bank_header->numEntries;
+    ArcHeader* wave_header = AG.wave_header;
     Wavelookuptable* pWaveTable = &wavetable;
+    s32* REF_i = &i;
+    s32* REF_bVar1 = &bVar1;
+    s32* REF_bVar2 = &bVar2;
+    STACK_PAD_VAR(4);
     u8* alloc = (u8*)Nas_SzCacheCheck(2, 2, b);
     pWaveTable->sample = alloc;
     if (pWaveTable->sample) {
@@ -1464,8 +1477,9 @@ void __ExchangeWave(s32 a, s32 b) {
         pWaveTable->_04 = (u8*)wave_header[b].entries[0].addr;
         switch (a) {
             case 1: {
-                pWaveTable->_04 = alloc;
-                pWaveTable->sample = (u8*)wave_header[b].entries[0].addr;
+                u8* tmp = pWaveTable->_04;
+                pWaveTable->_04 = pWaveTable->sample;
+                pWaveTable->sample = tmp;
             } break;
             case 0:
             default:

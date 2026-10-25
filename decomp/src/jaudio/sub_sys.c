@@ -252,20 +252,17 @@ extern void Nap_SetU16(u32 cmd, u16 param) {
 extern s32 Nap_SendStart(void) {
     static u8 worst = 0;
     s32 msg;
-    s32 pending;
-    STACK_PAD_VAR(6);
+    STACK_PAD_VAR(5);
 
     if (AUDIO_SYSTEM_READY != TRUE) {
         return -1;
     }
 
-    // IPL: tracks the deepest command backlog instead of AC's OSReport.
-    pending = (u8)((AG.thread_cmd_write_pos + 0x100) - AG.thread_cmd_read_pos);
-    if (worst < pending) {
-        worst = pending;
+    if (worst < (s32)(u8)((AG.thread_cmd_write_pos + 0x100) - AG.thread_cmd_read_pos)) {
+        worst = (u8)((AG.thread_cmd_write_pos + 0x100) - AG.thread_cmd_read_pos);
     }
 
-    msg = (AG.thread_cmd_write_pos & 0xFF) | ((AG.thread_cmd_read_pos & 0xFF) << 8);
+    msg = (((s32)AG.thread_cmd_read_pos & 0xFF) << 8) | ((s32)AG.thread_cmd_write_pos & 0xFF);
     if (Z_osSendMesg(AG.thread_cmd_proc_mq_p, (OSMesg)msg, OS_MESG_NOBLOCK) != -1) {
         AG.thread_cmd_read_pos = AG.thread_cmd_write_pos;
     } else {
@@ -316,22 +313,26 @@ extern void Nap_Process1Command(AudioPort* port) {
 
 extern void Nap_AudioPortProcess(u32 msg) {
     static u8 begin = 0;
-    STACK_PAD_VAR(4);
+    u8 end;
+    AudioPort* port;
+    u8 now;
+    u8* REF_end = &end;
+    STACK_PAD_VAR(3);
 
     if (AG.thread_cmd_queue_finished == FALSE) {
         begin = (msg >> 8) & 0xFF;
     }
 
-    while (TRUE) {
-        u32 now = begin;
-        AudioPort* port;
+    end = msg & 0xFF;
 
-        if (now == (msg & 0xFF)) {
+    while (TRUE) {
+        now = begin;
+        if (now == end) {
             AG.thread_cmd_queue_finished = FALSE;
             return;
         }
 
-        port = &AG.audio_port_cmds[now];
+        port = &AG.audio_port_cmds[now & 0xFF];
         begin++;
         if (port->command.opcode == AUDIOCMD_SYS_STOP_PROCESSING) {
             AG.thread_cmd_queue_finished = TRUE;
@@ -650,8 +651,13 @@ extern void Nas_InitGAudio(void) {
 
 extern s32 CreateAudioTask(Acmd* cmds, s16* pSamples, u32 nSamples, s32 param_4) {
     s32 i;
+    s32 processed_cmds;
+    u32 msg;
+    s32 remaining;
     s32 max;
-    STACK_PAD_VAR(6);
+    s32* REF_max = &max;
+    s32* REF_remaining = &remaining;
+    STACK_PAD_VAR(2);
 
     AG.audio_random_seed = (AG.audio_random_seed + AG.frame_audio_task_count) * OSGetTick();
     AG.frame_audio_task_count++;
@@ -662,12 +668,20 @@ extern s32 CreateAudioTask(Acmd* cmds, s16* pSamples, u32 nSamples, s32 param_4)
         (*NA_VFRAME_CALLBACK)();
     }
 
+    remaining = AG.current_frame_dma_count;
     for (i = 0; i < AG.current_frame_dma_count; i++) {
-        Z_osRecvMesg(&AG.cur_audio_frame_dma_queue, nullptr, OS_MESG_NOBLOCK);
+        if (Z_osRecvMesg(&AG.cur_audio_frame_dma_queue, nullptr, OS_MESG_NOBLOCK) == 0) {
+            remaining--;
+        }
     }
 
-    max = AG.cur_audio_frame_dma_queue.validCount;
-    if (max != 0) {
+    if (remaining != 0) {
+        for (i = 0; i < remaining; i++) {
+            Z_osRecvMesg(&AG.cur_audio_frame_dma_queue, nullptr, OS_MESG_BLOCK);
+        }
+    }
+
+    if ((max = AG.cur_audio_frame_dma_queue.validCount) != 0) {
         for (i = 0; i < max; i++) {
             Z_osRecvMesg(&AG.cur_audio_frame_dma_queue, nullptr, OS_MESG_NOBLOCK);
         }
@@ -688,7 +702,6 @@ extern s32 CreateAudioTask(Acmd* cmds, s16* pSamples, u32 nSamples, s32 param_4)
         return 0;
     } else {
         s32 port_cmds;
-        s32 processed_cmds;
 
         if (AG.reset_timer != 0) {
             AG.reset_timer++;
@@ -696,8 +709,6 @@ extern s32 CreateAudioTask(Acmd* cmds, s16* pSamples, u32 nSamples, s32 param_4)
 
         port_cmds = 0;
         if (AG.reset_status == 0) {
-            u32 msg;
-
             while (Z_osRecvMesg(AG.thread_cmd_proc_mq_p, (OSMesg*)&msg, OS_MESG_NOBLOCK) != -1) {
                 Nap_AudioPortProcess(msg);
                 port_cmds++;
