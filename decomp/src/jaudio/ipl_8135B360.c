@@ -1,11 +1,12 @@
 #include "jaudio/jaudio_types.h"
 #include "jaudio/virload.h"
-#include <string.h>
 
 // Lookups into the sound archive linked into the IPL, so JAudio reads its
 // bank, wave and sequence files from memory instead of the disc.
 
 BEGIN_SCOPE_EXTERN_C
+
+#include <string.h>
 
 // The sound archive linked into the IPL (ipl.bnk, ipl.ws, ipl_0.aw, iplrom.com).
 extern u8 lbl_813F7620[];
