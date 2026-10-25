@@ -435,10 +435,14 @@ void* Nas_SzHeapAlloc(s32 tableType, s32 size, s32 param_3, s32 id) {
     u8 status0;
     u8 status1;
     int end;
-    ALHeapEntry* entry;
     int checkId;
     u8* outStatus;
     int idx;
+    int i;
+    u8* REF_status0 = &status0;
+    u8* REF_status1 = &status1;
+    int* REF_i = &i;
+    STACK_PAD_VAR(9);
 
     switch (tableType) {
         case SEQUENCE_TABLE: {
@@ -476,7 +480,6 @@ void* Nas_SzHeapAlloc(s32 tableType, s32 size, s32 param_3, s32 id) {
 
         if (tableType == BANK_TABLE) {
             if (status0 == 4) {
-                int i;
                 end = AG.num_channels;
                 checkId = auto_heap->entries[0].id;
                 for (i = 0; i < end; i++) {
@@ -485,7 +488,7 @@ void* Nas_SzHeapAlloc(s32 tableType, s32 size, s32 param_3, s32 id) {
                     }
                 }
 
-                if (i == AG.num_channels) {
+                if (i == end) {
                     Nas_WriteIDbank(auto_heap->entries[0].id, 3);
                     status0 = 3;
                 }
