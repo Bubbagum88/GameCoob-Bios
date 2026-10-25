@@ -107,7 +107,7 @@
 <rect x="299.2" y="274.1" width="117.6" height="98.9" fill="#6e9d36" stroke="#0d1117" stroke-width="1"/>
 <text x="302.2" y="286.1" font-size="10" fill="#0d1117">memory</text>
 </g>
-<g><title>jaudio/channel: 7504 bytes, 73.6% matched, 98.8% fuzzy, 29/31 functions</title>
+<g><title>jaudio/channel: 7504 bytes, 73.6% matched, 99.2% fuzzy, 29/31 functions</title>
 <rect x="416.9" y="274.1" width="73.6" height="98.9" fill="#599e3a" stroke="#0d1117" stroke-width="1"/>
 <text x="419.9" y="286.1" font-size="10" fill="#0d1117">channel</text>
 </g>

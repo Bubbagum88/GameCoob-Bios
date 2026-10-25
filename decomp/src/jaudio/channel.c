@@ -522,7 +522,9 @@ static void __Nas_Release_Channel_Main(note* n, int target) {
     playbackparams* param;
     sub* subtrack;
     s32 i;
-    int* REF_target = &target;
+    note** wanted;
+    note** cur;
+    envp* adsr;
 
     if (n == NA_NO_NOTE) {
         return;
@@ -530,19 +532,20 @@ static void __Nas_Release_Channel_Main(note* n, int target) {
 
     n->channel_attached = FALSE;
 
-    if (n->channel == NULL) {
+    if ((chan = n->channel) == NULL) {
         return;
     }
 
-    chan = n->channel;
+    wanted = &chan->playback_ch.wanted_parent_note;
     param = &chan->playback_ch.params;
 
-    if (chan->playback_ch.wanted_parent_note == n) {
-        chan->playback_ch.wanted_parent_note = NA_NO_NOTE;
+    if (*wanted == n) {
+        *wanted = NA_NO_NOTE;
     }
 
+    cur = &chan->playback_ch.current_parent_note;
     if (chan->playback_ch.current_parent_note != n) {
-        if (chan->playback_ch.current_parent_note != NA_NO_NOTE || chan->playback_ch.wanted_parent_note != NA_NO_NOTE ||
+        if (chan->playback_ch.current_parent_note != NA_NO_NOTE || *wanted != NA_NO_NOTE ||
             chan->playback_ch.previous_parent_note != n || target == ADSR_STATUS_DECAY) {
             return;
         }
@@ -552,7 +555,8 @@ static void __Nas_Release_Channel_Main(note* n, int target) {
         return;
     }
 
-    if (chan->playback_ch.adsr_envp.state.flags.status != ADSR_STATUS_DECAY) {
+    adsr = &chan->playback_ch.adsr_envp;
+    if (adsr->state.flags.status != ADSR_STATUS_DECAY) {
         param->pitch = n->note_frequency_scale;
         param->velocity = n->note_velocity;
         param->pan = n->note_pan;
@@ -605,15 +609,15 @@ static void __Nas_Release_Channel_Main(note* n, int target) {
             chan->playback_ch.priority = 1;
         }
 
-        chan->playback_ch.previous_parent_note = chan->playback_ch.current_parent_note;
-        chan->playback_ch.current_parent_note = NA_NO_NOTE;
+        chan->playback_ch.previous_parent_note = *cur;
+        *cur = NA_NO_NOTE;
         if (target == ADSR_STATUS_RELEASE) {
             chan->playback_ch.adsr_envp.fadeout_velocity = AG.audio_params.updates_per_frame_inverse;
-            chan->playback_ch.adsr_envp.state.flags.release = TRUE;
+            adsr->state.flags.release = TRUE;
             chan->playback_ch.status = 2;
         } else {
             chan->playback_ch.status = 1;
-            chan->playback_ch.adsr_envp.state.flags.decay = TRUE;
+            adsr->state.flags.decay = TRUE;
             if (n->adsr_env.decay_idx == 0) {
                 chan->playback_ch.adsr_envp.fadeout_velocity = AG.adsr_decay_table[n->sub_track->adsr_env.decay_idx];
             } else {
