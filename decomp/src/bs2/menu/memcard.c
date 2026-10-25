@@ -1750,6 +1750,10 @@ void CardDraw_SlotHeader(u8 slot, CardSlot* slots, GXColor* c) {
     Glh_DrawText(slot, sCardSth, sCardGlh, c);
 }
 
+static inline u8 CardDraw_Alpha(GXColor* c) {
+    return c->a;
+}
+
 /* 0x81319D6C: one slot: header, scroll arrows and the selected file's banner. */
 void CardDraw_FileBanner(u8 slot, CardSlot* slots, GXColor* c) {
     s16 a;
@@ -1766,7 +1770,7 @@ void CardDraw_FileBanner(u8 slot, CardSlot* slots, GXColor* c) {
     /* the copy is scheduled after the alpha math, as a comma */
     CardDraw_SlotHeader(slot, slots, (hdr = *c, &hdr));
     GX_Setup2DTex();
-    a2 = c->a;
+    a2 = CardDraw_Alpha(c);
     Fader_GetAlpha(&sCardFadeD[slot], &arrow[0], NULL);
     Fader_GetAlpha(&sCardFadeE[slot], &arrow[1], NULL);
     c->a = a2 * arrow[0] / 255;
