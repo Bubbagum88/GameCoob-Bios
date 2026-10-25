@@ -1,6 +1,6 @@
 # GameCube IPL (BS2) decompilation, PAL 1.0
 
-![code](progress/badge-code.svg) ![functions](progress/badge-functions.svg)
+![total](progress/badge-total.svg) ![code](progress/badge-code.svg) ![functions](progress/badge-functions.svg)
 
 ![Decomp progress](progress/progress.svg)
 

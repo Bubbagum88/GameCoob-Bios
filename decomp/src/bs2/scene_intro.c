@@ -220,14 +220,14 @@ static void Scene_CalcWorldMtx(Mtx m) {
 }
 
 /* Squash the world along XZ and stretch it along Y as the spin speeds up */
-static inline void Scene_SquashWorld(Scene *s) {
-    Vec squash = { 0.0f, 0.0f, 0.0f };
+static inline void Scene_SquashWorld(Scene *s, MtxPtr w) {
     f32 xz = 1.0f - s->squashXZ;
+    Vec squash = { 0.0f, 0.0f, 0.0f };
 
     squash.x = 1.0f - xz * s->spinSpeed / s->spinThreshold;
     squash.y = 1.0f + s->stretchY * s->spinSpeed / s->spinThreshold;
     squash.z = 1.0f - xz * s->spinSpeed / s->spinThreshold;
-    MtxScaleCols(sWorldMtx, &squash);
+    MtxScaleCols(w, &squash);
 }
 
 /* See Scene_ColorRef: passing the Vec through this pointer helper gives the
@@ -262,23 +262,19 @@ void Scene_DrawWorld(void) {
     Scene *s = Scene_Get();
     Mtx m;
     Mtx id;
-    MtxPtr view;
 
     Scene_CalcWorldMtx(m);
     PSMTXIdentity(id);
     PSMTXConcat(m, id, w);
-    Scene_SquashWorld(s);
+    Scene_SquashWorld(s, w);
     Scene_SetModelSplat(s, w);
-    view = Camera_GetView();
-    J3D_SetViewMtx(Scene_GetBgInner(), view);
+    J3D_SetViewMtx(Scene_GetBgInner(), Camera_GetView());
     J3D_CalcJoints(Scene_GetBgInner());
     Scene_SetModelOne(w);
-    view = Camera_GetView();
-    J3D_SetViewMtx(Scene_GetLogo(), view);
+    J3D_SetViewMtx(Scene_GetLogo(), Camera_GetView());
     J3D_CalcJoints(Scene_GetLogo());
-    Scene_SetModelOuter(w);
-    view = Camera_GetView();
-    J3D_SetViewMtx(Scene_GetBgOuter(), view);
+    Scene_SetModelOuter(sWorldMtx);
+    J3D_SetViewMtx(Scene_GetBgOuter(), Camera_GetView());
     J3D_CalcJoints(Scene_GetBgOuter());
 
     Cube_Draw();

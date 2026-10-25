@@ -604,7 +604,7 @@ config.libs = [
             Object(Matching, "bs2/gMRdraw.c", extra_cflags=["-fp_contract off"]),
             Object(Matching, "bs2/gMRshape.c"),
             Object(NonMatching, "bs2/gMRtexture.c"),
-            Object(NonMatching, "bs2/gMRanim.c"),
+            Object(Matching, "bs2/gMRanim.c"),
             Object(NonMatching, "bs2/mtx.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
             Object(Matching, "bs2/gBase.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
             Object(Matching, "bs2/rnd.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
@@ -615,9 +615,9 @@ config.libs = [
             Object(NonMatching, "bs2/lang.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
             Object(Matching, "bs2/scene.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
             Object(NonMatching, "bs2/scene_intro.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
-            Object(NonMatching, "bs2/scene_spinout.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
+            Object(Matching, "bs2/scene_spinout.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
             Object(NonMatching, "bs2/cube.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
-            Object(NonMatching, "bs2/cube_draw.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
+            Object(Matching, "bs2/cube_draw.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
             Object(NonMatching, "bs2/menu/menu.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
             Object(Matching, "bs2/menu/game_params.c"),
             Object(Matching, "bs2/menu/game.c"),
@@ -629,10 +629,10 @@ config.libs = [
             Object(NonMatching, "bs2/menu/memcard_card.c", extra_cflags=["-inline noauto"]),
             Object(NonMatching, "bs2/menu/memcard_draw.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
             Object(Matching, "bs2/menu/menu_icon_game.c"),
-            Object(NonMatching, "bs2/menu/menu_icon_option.c", extra_cflags=["-inline noauto"]),
+            Object(Matching, "bs2/menu/menu_icon_option.c", extra_cflags=["-inline noauto"]),
             Object(NonMatching, "bs2/menu/menu_icon_clock.c"),
-            Object(NonMatching, "bs2/menu/menu_fx_shape.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
-            Object(NonMatching, "bs2/menu/menu_fx.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
+            Object(Matching, "bs2/menu/menu_fx_shape.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
+            Object(Matching, "bs2/menu/menu_fx.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
             Object(Matching, "bs2/menu/options.c"),
             Object(Matching, "bs2/menu/menu_fx_anim.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
             Object(Matching, "bs2/menu/menu_fx_draw.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
@@ -650,7 +650,7 @@ config.libs = [
         "objects": [
             Object(Matching, "jaudio/dummyprobe.c"),
             Object(NonMatching, "jaudio/rspsim.c", extra_cflags=["-i include/neos", "-D_LANGUAGE_C"]),  # from AC jaudio_NES
-            Object(NonMatching, "jaudio/aictrl.c"),
+            Object(Matching, "jaudio/aictrl.c"),
             Object(Matching, "jaudio/sample.c"),
             Object(Matching, "jaudio/dummyrom.c"),
             Object(Matching, "jaudio/audiothread.c"),
@@ -663,7 +663,7 @@ config.libs = [
             Object(NonMatching, "jaudio/driver.c", extra_cflags=["-i include/neos", "-D_LANGUAGE_C"]),  # NEOS (N64 audio on CPU), from AC jaudio_NES
             Object(NonMatching, "jaudio/memory.c", extra_cflags=["-i include/neos", "-D_LANGUAGE_C"]),
             Object(NonMatching, "jaudio/system.c", extra_cflags=["-i include/neos", "-D_LANGUAGE_C"]),
-            Object(NonMatching, "jaudio/sub_sys.c", extra_cflags=["-i include/neos", "-D_LANGUAGE_C"]),
+            Object(Matching, "jaudio/sub_sys.c", extra_cflags=["-i include/neos", "-D_LANGUAGE_C"]),
             Object(Matching, "jaudio/os.c", extra_cflags=["-i include/neos", "-D_LANGUAGE_C"]),
             Object(Matching, "jaudio/astest.c", extra_cflags=["-i include/neos", "-D_LANGUAGE_C"]),
             Object(NonMatching, "jaudio/channel.c", extra_cflags=["-i include/neos", "-D_LANGUAGE_C"]),
@@ -695,7 +695,7 @@ config.libs = [
             Object(Matching, "jaudio/jamosc.c"),
             Object(Matching, "jaudio/oneshot.c"),
             Object(Matching, "jaudio/ipl_8135A8E0.c"),  # Sound_* and boot helpers, built like JAudio (32-byte aligned)
-            Object(NonMatching, "jaudio/ipl_8135B360.c"),  # sound archive lookups, same flags
+            Object(Matching, "jaudio/ipl_8135B360.c"),  # sound archive lookups, same flags
         ],
     },
 ]

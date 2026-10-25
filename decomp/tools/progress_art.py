@@ -3,7 +3,8 @@
 
 Writes into progress/:
   progress.svg           treemap of every unit, sized by code bytes
-  badge-code.svg         shields.io style badges
+  badge-total.svg        shields.io style badges (total = code + data bytes)
+  badge-code.svg
   badge-functions.svg
   history.csv            one row per day: date, code %, matched / total functions
   history.svg            line chart of history.csv
@@ -127,10 +128,16 @@ def text_width(s, px=11):
     return len(s) * px * 0.6
 
 
+def total_percent(m):
+    """Matched bytes of code and data together, out of all bytes."""
+    total = num(m.get("total_code")) + num(m.get("total_data"))
+    return 100.0 * (num(m.get("matched_code")) + num(m.get("matched_data"))) / total if total else 0.0
+
+
 def treemap_svg(report, units):
     m = report["measures"]
-    head = "%s: %.2f%% code, %.2f%% data, %d/%d functions" % (
-        TITLE, num(m.get("matched_code_percent")), num(m.get("matched_data_percent")),
+    head = "%s: %.2f%% total, %.2f%% code, %.2f%% data, %d/%d functions" % (
+        TITLE, total_percent(m), num(m.get("matched_code_percent")), num(m.get("matched_data_percent")),
         int(m.get("matched_functions", 0)), int(m.get("total_functions", 0)))
     out = [
         '<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" font-family="Verdana,DejaVu Sans,sans-serif">'
@@ -248,7 +255,9 @@ def main(report_path="build/PAL10/report.json", out_dir="progress"):
     m = report["measures"]
     code = num(m.get("matched_code_percent"))
     funcs = (int(m.get("matched_functions", 0)), int(m.get("total_functions", 0)))
+    total = total_percent(m)
     files = {
+        "badge-total.svg": badge_svg("total", "%.2f%%" % total, badge_color(total)),
         "progress.svg": treemap_svg(report, units_of(report)),
         "badge-code.svg": badge_svg("code", "%.2f%%" % code, badge_color(code)),
         "badge-functions.svg": badge_svg("functions", "%d/%d" % funcs, badge_color(100.0 * funcs[0] / max(1, funcs[1]))),
@@ -259,7 +268,7 @@ def main(report_path="build/PAL10/report.json", out_dir="progress"):
     rows = update_history(os.path.join(out_dir, "history.csv"), report)
     with open(os.path.join(out_dir, "history.svg"), "w", encoding="utf-8") as f:
         f.write(history_svg(rows))
-    print("progress art: %.2f%% code, %d/%d functions -> %s" % (code, funcs[0], funcs[1], out_dir))
+    print("progress art: %.2f%% total, %.2f%% code, %d/%d functions -> %s" % (total, code, funcs[0], funcs[1], out_dir))
 
 
 if __name__ == "__main__":

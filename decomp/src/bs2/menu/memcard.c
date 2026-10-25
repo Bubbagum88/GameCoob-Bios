@@ -97,7 +97,7 @@ static s16 sCardFmtSel[2];
 static s16 sCardYesNo;
 static void* sCardGlh;
 static void* sCardSth;
-static TexHeader* sCardBarTex;
+static TexHeader* sCardBarTexture;
 static u16 sCardNameX[3];
 static u16 sCardNameY[3];
 static u32 sCardMsgWait;
@@ -111,7 +111,7 @@ static s16 sCardArrowMax;
 CardParams gCardParamsBuf;
 static s16 sCardAnchorX[2][16];
 static s16 sCardAnchorY[2][16];
-static s16 sCardIconFrame[2][CARD_MAX_FILES];
+static s16 sCardFileFrame[2][CARD_MAX_FILES];
 static CardSortEntry sCardSort[2][CARD_MAX_FILES];
 static Fader sCardMsg[0x2F];
 static Fader sCardFadeA[2];
@@ -164,7 +164,7 @@ void CardDraw_SetScissor(s32 x, s32 y, s32 w, s32 h, s32 t, GXColor* c);
 static inline void Card_ClearFrames(u8 slot) {
     int j;
     for (j = 0; j < CARD_MAX_FILES; j++) {
-        sCardIconFrame[slot][j] = 0;
+        sCardFileFrame[slot][j] = 0;
     }
 }
 
@@ -282,7 +282,7 @@ void Card_Init(BOOL first) {
         sCardGlh = ResGet(Res_CardLayout());
         sCardSth = ResGet(Res_CardStrings());
         CardParams_SetColors(sCardGlh);
-        sCardBarTex = ResGet(Res_CardBarTex());
+        sCardBarTexture = ResGet(Res_CardBarTex());
     }
     fn_8131EEC4(first, sCardAnchorX, sCardAnchorY);
     Card_ClearFrames(0);
@@ -924,7 +924,9 @@ static inline void Card_SetMaxTop(u8 slot) {
     }
 }
 
-static inline void Card_BuildSort(CardFile (*files)[CARD_MAX_FILES], u8 slot) {
+/* 0x81317564: rebuild the display order of a slot's files. */
+void Card_SortFiles(u8 slot) {
+    CardFile(*files)[CARD_MAX_FILES] = CardThread_GetFiles();
     u32 i;
 
     for (i = 0; i < CARD_MAX_FILES; i++) {
@@ -937,14 +939,6 @@ static inline void Card_BuildSort(CardFile (*files)[CARD_MAX_FILES], u8 slot) {
         }
     }
     qsort(sCardSort[slot], CARD_MAX_FILES, sizeof(CardSortEntry), CardFile_Compare);
-}
-
-/* 0x81317564: rebuild the display order of a slot's files. */
-void Card_SortFiles(u8 slot) {
-    CardFile(*files)[CARD_MAX_FILES] = CardThread_GetFiles();
-    u32 i;
-
-    Card_BuildSort(files, slot);
     Card_SetMaxTop(slot);
     if (sCardMaxTop[slot] < sCardTop[slot]) {
         sCardTop[slot] = sCardMaxTop[slot];
@@ -975,6 +969,9 @@ static inline BOOL Card_UpdateMaxTop(u8 slot) {
 void CardUi_OnSlotRefresh(u8 slot) {
     CardSlot* s = &CardThread_GetSlots()[slot];
 
+    /* fake match: gives slot a fresh value for the register allocator */
+    slot++;
+    slot--;
     s->dirty = FALSE;
     if (Card_UpdateMaxTop(slot)) {
         Card_SortFiles(slot);
@@ -1271,7 +1268,7 @@ void CardUi_UpdateIconAnim(void) {
             file = sCardSort[slot][j + sCardTop[slot] * 4].file;
             if (files[slot][file].used) {
                 icon = &icons[slot][file];
-                frame = &sCardIconFrame[slot][file];
+                frame = &sCardFileFrame[slot][file];
                 step = &icons[slot][file].step;
                 dur = &icons[slot][file].duration;
                 *frame += *step;
@@ -1592,14 +1589,14 @@ void CardDraw_SetupTev(void) {
 /* 0x81319414: one digit cell of the 11-cell number strip. */
 void CardDraw_LoadIconTex(s32 x, s32 y, s32 digit) {
     f32 u = digit / 11.0f;
-    s16 w = sCardBarTex->width * 16 / 11;
-    s16 h = sCardBarTex->height * 16;
+    s16 w = sCardBarTexture->width * 16 / 11;
+    s16 h = sCardBarTexture->height * 16;
     s16 unused[4];
 
     CardDraw_SetupTev();
     x -= w / 2;
     y -= h / 2;
-    J3D_LoadTexture(0, sCardBarTex);
+    J3D_LoadTexture(0, sCardBarTexture);
     GXBegin(GX_QUADS, GX_VTXFMT1, 4);
     GXPosition3s16(x, y, 0);
     GXTexCoord2f32(u, 0.0f);
@@ -1614,7 +1611,7 @@ void CardDraw_LoadIconTex(s32 x, s32 y, s32 digit) {
 
 /* 0x81319568: a number of up to four digits, centred on x. */
 void CardDraw_LoadTexture(s32 x, s32 y, s32 n) {
-    s32 w = sCardBarTex->width * 16 / 11;
+    s32 w = sCardBarTexture->width * 16 / 11;
 
     if (n < 10) {
         CardDraw_LoadIconTex(x, y, n % 10);
@@ -1700,7 +1697,7 @@ BOOL CardDraw_IconFrameCount(s32 slot, s32 file) {
     do {
         t += ((icons[slot][file].speeds >> (n * 2)) & 3) * 4;
         n++;
-    } while (sCardIconFrame[slot][file] > t && n <= 8);
+    } while (sCardFileFrame[slot][file] > t && n <= 8);
     return CardDraw_SetIconFrame(slot, file, (u8)(n - 1));
 }
 
@@ -1753,6 +1750,10 @@ void CardDraw_SlotHeader(u8 slot, CardSlot* slots, GXColor* c) {
     Glh_DrawText(slot, sCardSth, sCardGlh, c);
 }
 
+static inline u8 CardDraw_Alpha(GXColor* c) {
+    return c->a;
+}
+
 /* 0x81319D6C: one slot: header, scroll arrows and the selected file's banner. */
 void CardDraw_FileBanner(u8 slot, CardSlot* slots, GXColor* c) {
     s16 a;
@@ -1769,7 +1770,7 @@ void CardDraw_FileBanner(u8 slot, CardSlot* slots, GXColor* c) {
     /* the copy is scheduled after the alpha math, as a comma */
     CardDraw_SlotHeader(slot, slots, (hdr = *c, &hdr));
     GX_Setup2DTex();
-    a2 = c->a;
+    a2 = CardDraw_Alpha(c);
     Fader_GetAlpha(&sCardFadeD[slot], &arrow[0], NULL);
     Fader_GetAlpha(&sCardFadeE[slot], &arrow[1], NULL);
     c->a = a2 * arrow[0] / 255;
@@ -1799,7 +1800,7 @@ static inline u8 Card_IconFrame(u8 slot, s16 pos) {
     do {
         t += ((icons[slot][file].speeds >> (n * 2)) & 3) * 4;
         n++;
-    } while (sCardIconFrame[slot][file] > t && n <= 8);
+    } while (sCardFileFrame[slot][file] > t && n <= 8);
     return n - 1;
 }
 
@@ -1839,10 +1840,26 @@ static inline u16 CardDraw_ChoiceWidth(u16 idx, u16* h, u16* lineH) {
 }
 
 /* 0x8131A13C: a message with a two-choice menu under it (0x27 copy, 0x29 move). */
+static inline u16 CardDraw_MeasureOpts(void* sth, void* glh, u16 idx, u16* lh) {
+    SthEntry* entries = ((Sth*)sth)->entry;
+    GlhText* texts = GLH_TEXTS(glh);
+    u16 max = 0;
+    u16 sw = 0;
+    u16 i;
+
+    for (i = 0; i < 2; i++) {
+        Glh_MeasureString(&texts[entries[idx].pane], (u8*)&entries[i + 5] + entries[i + 5].ofs, &sw, lh);
+        if (max < sw) {
+            max = sw;
+        }
+    }
+    return max;
+}
+
 void CardDraw_OpMenu(u16 msg, u8 slot, u8 alpha) {
     DispSettings* disp = Disp_GetSettings();
     CardParams* p = Card_GetParams();
-    u16 maxW = 0;
+    u16 maxW;
     u16 w = 0;
     u16 h = 0;
     u16 lh = 0;
@@ -1883,21 +1900,12 @@ void CardDraw_OpMenu(u16 msg, u8 slot, u8 alpha) {
     Glh_MeasureString(&texts[e->pane], (u8*)e + e->ofs, &w, &h);
     entries2 = ((Sth*)sCardSth)->entry;
     texts2 = GLH_TEXTS(sCardGlh);
-    {
-        u16 sw = 0;
-        s16 unused[4];
-
-        for (i = 0; i < 2; i++) {
-            Glh_MeasureString(&texts2[entries2[(u16)idx].pane], (u8*)&entries2[i + 5] + entries2[i + 5].ofs, &sw, &lh);
-            if (maxW < sw) {
-                maxW = sw;
-            }
-        }
-    }
+    maxW = CardDraw_MeasureOpts(sCardSth, sCardGlh, idx, &lh);
+    boxH = lh + texts2[entries2[(u16)idx].pane].lineSpace * 16;
     h += disp->textPad * 32;
-    boxH = lh + texts2[entries2[(u16)idx].pane].lineSpace * 16 + disp->textPad * 32;
+    boxH += disp->textPad * 32;
     total = h + (boxH + Card_GetParams()->cols * 16);
-    Glh_DrawStringOfs(idx, sCardSth, sCardGlh, &c, 0, -total / 2 + h / 2);
+    Glh_DrawStringOfs(idx, sCardSth, sCardGlh, &c, 0, (s16)(-total / 2 + h / 2));
     if (f->frame > sCardMsg[idx].length / 2) {
         glow.a = c.a = alpha * (f->frame - sCardMsg[idx].length / 2) * 2 / sCardMsg[idx].length;
     } else {
@@ -2249,7 +2257,7 @@ u32 CardDraw_LoadFileIcon(void) {
     }
     icon = &icons[sCardSlot][file];
     image = (u8*)icon + (u32)icons[sCardSlot][file].banner;
-    if (icon->hasBanner == 0) {
+    if (icons[sCardSlot][file].hasBanner == 0) {
         return FALSE;
     }
     tex.mipmap = 0;

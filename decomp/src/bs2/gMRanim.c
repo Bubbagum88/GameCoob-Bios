@@ -5,8 +5,8 @@
 
 f32 Hermite(f32 t, f32 t0, f32 p0, f32 v0, f32 t1, f32 p1, f32 v1); /* 0x81307D08 */
 
+void* lbl_814AD334; /* .sbss comes out in reverse definition order */
 GMRAnimOwner* lbl_814AD330;
-void* lbl_814AD334;
 
 /* 0x81306A3C: sample a float key table (keys are {time, value, [inTan,] outTan}) */
 f32 fn_81306A3C(GMRKeyTable* tbl, f32* keys, f32 frame) {
@@ -75,12 +75,12 @@ void fn_81306CE0(u16 joint, GMRJointXform* out, f32 frame) {
     f32 v[3];
     s16 r[3];
     GMRAnmTransform* anm = lbl_814AD330->jointAnm;
+    s32 i;
     GMRJointKeys* tbl = anm->tables;
     u8 shift = anm->rotShift;
     f32* scale = anm->scale;
     s16* rot = anm->rotation;
     f32* trans = anm->translation;
-    s32 i;
 
     for (i = 0; i < 3; i++) {
         switch (tbl[joint * 3 + i].scale.count) {
@@ -141,12 +141,12 @@ void fn_81306F14(u16 mat, GXColor* out, f32 frame) {
     f32 r, g, b, a;
     f32 t = frame / 30.0f;
     GMRAnmColor* anm = lbl_814AD330->colorAnm;
-    s16* remap = anm->remap;
-    GMRColorKeys* tbl = anm->tables;
+    s16* remap = lbl_814AD330->colorAnm->remap;
+    GMRColorKeys* tbl = lbl_814AD330->colorAnm->tables;
     f32* rv = anm->r;
-    f32* gv = anm->g;
-    f32* bv = anm->b;
-    f32* av = anm->a;
+    f32* gv = lbl_814AD330->colorAnm->g;
+    f32* bv = lbl_814AD330->colorAnm->b;
+    f32* av = lbl_814AD330->colorAnm->a;
 
     switch (tbl[remap[mat]].r.count) {
     case 0:

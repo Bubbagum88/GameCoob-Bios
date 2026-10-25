@@ -19,11 +19,12 @@ static void __SetSubParam(sub* subtrack, AudioPort* port);
 
 static void Nap_AudioSysProcess(AudioPort* port) {
     group* group = AG.groups_p[port->command.arg0];
+    s32 ret;
+    u8 pad[16];
     s32 i;
     s32 idx;
     s32 flags;
-    STACK_PAD_VAR(3);
-    s32* REF_flags = &flags;
+    s32* REF_ret = &ret;
 
     switch (port->command.opcode) {
         case AUDIOCMD_PRELOAD_SEQ:
@@ -66,10 +67,13 @@ static void Nap_AudioSysProcess(AudioPort* port) {
                     channel* channel = &AG.channels[i];
                     commonch* common_state = &channel->common_ch;
 
-                    if (common_state->enabled && channel->playback_ch.status == 0 &&
-                        (channel->playback_ch.current_parent_note->sub_track->mute_flags &
-                         AUDIO_MUTE_FLAG_STOP_SAMPLES)) {
-                        common_state->finished = TRUE;
+                    if (common_state->enabled) {
+                        playbackch* playback = &channel->playback_ch;
+                        if (playback->status == 0 &&
+                            (playback->current_parent_note->sub_track->mute_flags &
+                             AUDIO_MUTE_FLAG_STOP_SAMPLES)) {
+                            common_state->finished = TRUE;
+                        }
                     }
                 }
             }
@@ -147,8 +151,12 @@ static void Nap_AudioSysProcess(AudioPort* port) {
         case AUDIOCMD_SET_PERC_BANK:
         case AUDIOCMD_SET_EFFECT_BANK:
         case AUDIOCMD_SET_VOICE_BANK:
-            OverwriteBank(port->command.opcode - AUDIOCMD_SET_PERC_BANK, port->command.arg1, port->command.arg2,
+            ret = OverwriteBank(port->command.opcode - AUDIOCMD_SET_PERC_BANK, port->command.arg1, port->command.arg2,
                           port->param.asS32);
+            if (ret == 0) {
+            } else {
+                (void)ret;
+            }
             break;
         case AUDIOCMD_FORCE_STOP_ALL_GROUPS:
             flags = port->param.asS32;
@@ -312,6 +320,7 @@ extern void Nap_Process1Command(AudioPort* port) {
 }
 
 extern void Nap_AudioPortProcess(u32 msg) {
+    u8 last;
     static u8 begin = 0;
     u8 end;
     AudioPort* port;
@@ -324,10 +333,11 @@ extern void Nap_AudioPortProcess(u32 msg) {
     }
 
     end = msg & 0xFF;
+    last = end;
 
     while (TRUE) {
         now = begin;
-        if (now == end) {
+        if (now == last) {
             AG.thread_cmd_queue_finished = FALSE;
             return;
         }
@@ -608,11 +618,13 @@ static s32 Nap_SilenceCheck_Inner(s32 flags) {
     for (i = 0; i < AG.num_channels; i++) {
         channel* channel = &AG.channels[i];
         playbackch* playback_chan = &channel->playback_ch;
-        if (channel->common_ch.enabled) {
-            commonch* common_chan = &channel->common_ch;
+        commonch* common_chan = &channel->common_ch;
+        if (common_chan->enabled) {
             if (playback_chan->adsr_envp.state.flags.status != ADSR_STATUS_DISABLED) {
                 if (flags >= AUDIO_NOTE_SAMPLE_NOTES) {
                     wtstr* tuned_sample = common_chan->tuned_sample;
+                    //! FAKE:
+                    if (channelCount && channelCount) {}
                     if ((tuned_sample == nullptr) || common_chan->is_synth_wave) {
                         continue;
                     }

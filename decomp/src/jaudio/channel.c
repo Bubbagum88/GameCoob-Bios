@@ -186,8 +186,9 @@ extern void Nas_StopVoice(channel* chan) {
 extern void Nas_UpdateChannel(void) {
     playbackparams* main_param_p;
     channel* chan;
-    commonch* common_chan;
+    u8 pad[8];
     playbackch* playback_chan;
+    commonch* common_chan;
     drvparam param;
     u8 bookOfs;
     f32 scale;
@@ -195,11 +196,11 @@ extern void Nas_UpdateChannel(void) {
     STACK_PAD_VAR(1);
     drvparam* REF_param = &param;
     channel** REF_chan = &chan;
-    playbackparams** REF_main_param_p = &main_param_p;
 
     for (i = 0; i < AG.num_channels; i++) {
         chan = &AG.channels[i];
         playback_chan = &chan->playback_ch;
+        common_chan = &chan->common_ch;
 
         if (playback_chan->current_parent_note != NA_NO_NOTE) {
             if ((u32)playback_chan->current_parent_note < 0x7FFFFFFF) {
@@ -241,8 +242,6 @@ extern void Nas_UpdateChannel(void) {
 
     step2:
         {
-            common_chan = &chan->common_ch;
-
             if (playback_chan->status >= 1 || common_chan->finished) {
                 if (playback_chan->adsr_envp.state.flags.status == ADSR_STATUS_DISABLED || common_chan->finished) {
                     if (playback_chan->wanted_parent_note != NA_NO_NOTE) {

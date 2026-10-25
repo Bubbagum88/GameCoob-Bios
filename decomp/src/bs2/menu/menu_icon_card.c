@@ -178,7 +178,7 @@ void CardIcon_UpdateFly(void) {
     }
 }
 
-static inline void CardIcon_AddAlpha(s16 i, s16 step) {
+static inline void CardIcon_AddAlpha(int i, s16 step) {
     s16 alpha;
 
     sCardIconInst[i].alpha += step;
@@ -235,8 +235,8 @@ void CardIcon_FadeInner(BOOL in) {
 }
 
 void CardIcon_SpinY(s32 t) {
-    s32 t0;
-    s32 t1;
+    s16 t0;
+    s16 t1;
 
     if (t < 50) {
         t1 = 50;
@@ -305,6 +305,27 @@ void CardIcon_UpdateFace(void) {
     }
 }
 
+/* Passing the scale through VecRef gives the IPL's stack layout for the
+ * by-value Vec argument (rodata copy, then the argument copy above it). */
+static inline Vec* VecRef(Vec* v) {
+    (void)v;
+    return v;
+}
+
+static inline void CardIcon_SetInnerMtx(J3DModelInstance* inst, Mtx m, CardParams* p) {
+    Vec scale = { 0.0f, 0.0f, 0.0f };
+
+    scale.z = scale.y = scale.x = p->cubeScale / 2.0f;
+    J3D_SetModelMtx(inst, m, *VecRef(&scale));
+}
+
+static inline void CardIcon_SetOuterMtx(J3DModelInstance* inst, Mtx m, CardParams* p) {
+    Vec scale = { 0.0f, 0.0f, 0.0f };
+
+    scale.z = scale.y = scale.x = p->cubeScale;
+    J3D_SetModelMtx(inst, m, *VecRef(&scale));
+}
+
 /* 0x81322A18 */
 void CardIcon_CalcMtx(void) {
     CardParams* p = Card_GetParams();
@@ -322,23 +343,9 @@ void CardIcon_CalcMtx(void) {
         PSMTXConcat(tilt, m, m);
         PSMTXConcat(Menu_GetCubeMtx(), m, m);
         if (CardIcon_IsInner(i)) {
-            Vec scale = { 0.0f, 0.0f, 0.0f };
-            Vec *d;
-
-            scale.x = p->cubeScale * 0.5f;
-            scale.y = p->cubeScale * 0.5f;
-            scale.z = p->cubeScale * 0.5f;
-            d = &scale;
-            J3D_SetModelMtx(&sCardIconInst[i], m, *d);
+            CardIcon_SetInnerMtx(&sCardIconInst[i], m, p);
         } else {
-            Vec scale = { 0.0f, 0.0f, 0.0f };
-            Vec *d;
-
-            scale.x = p->cubeScale;
-            scale.y = p->cubeScale;
-            scale.z = p->cubeScale;
-            d = &scale;
-            J3D_SetModelMtx(&sCardIconInst[i], m, *d);
+            CardIcon_SetOuterMtx(&sCardIconInst[i], m, p);
         }
         J3D_SetViewMtx(&sCardIconInst[i], Camera_GetView());
         J3D_CalcJoints(&sCardIconInst[i]);
