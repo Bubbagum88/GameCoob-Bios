@@ -754,7 +754,7 @@ static void Scene_DrawList(GlhTextBox *boxes, SthEntry *entries, u16 first, u16 
     hi.a = alpha;
     lo.a = alpha;
     box = boxes[entries[first].box];
-    box.y = (s16)(disp->textPad * 16 + (s32)h / 2) + y;
+    box.y = y + disp->textPad * 16 + h / 2;
     GX_Setup2DText();
     for (i = 0; i < count; i++) {
         fn_813095A0(&lo, &lo);
