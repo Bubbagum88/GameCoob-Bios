@@ -948,7 +948,6 @@ fail:
 s32 CardThread_CopyFile(u8 slot, s16 file, s16 dst, BOOL* done) {
     CARDDir dir;
     u32 time;
-    int other;
     s32 result;
 
     result = __CARDGetStatusEx(slot, file, &dir);
@@ -962,8 +961,8 @@ s32 CardThread_CopyFile(u8 slot, s16 file, s16 dst, BOOL* done) {
     }
     time = dir.time;
     dir.time = OSTicksToSeconds(OSGetTime());
-    other = slot ^ 1;
-    result = __CARDSetStatusEx(other, dst, &dir);
+    
+    result = __CARDSetStatusEx(slot ^ 1, dst, &dir);
     if (result < 0) {
         if (result != CARD_RESULT_NOCARD) {
             dir.copyTimes--;
@@ -973,7 +972,7 @@ s32 CardThread_CopyFile(u8 slot, s16 file, s16 dst, BOOL* done) {
         return result;
     }
     *done = TRUE;
-    result = CardThread_ReadEntry(other, dst, &dir);
+    result = CardThread_ReadEntry(slot ^ 1, dst, &dir);
     if (result < 0) {
         return result;
     }
@@ -987,13 +986,13 @@ s32 CardThread_MoveFile(u8 slot, s16 file, s16 dst, BOOL* done) {
     CARDDir dir;
     CARDDir hidden;
     BOOL enabled;
-    u8 other;
     s16 n = 0;
     s32 result;
+    u8 pad[4];
 
     result = __CARDGetStatusEx(slot, file, &dir);
     if (result < 0) {
-        return result;
+        goto end;
     }
     hidden = dir;
     memset(hidden.company, 0, sizeof(hidden.company));
@@ -1003,7 +1002,7 @@ s32 CardThread_MoveFile(u8 slot, s16 file, s16 dst, BOOL* done) {
         sprintf((char*)hidden.fileName, "Broken File%03d", n);
         result = __CARDSetStatusEx(slot, file, &hidden);
         if (result < 0 && result != CARD_RESULT_EXIST) {
-            return result;
+            goto end;
         }
         n++;
         if (result == CARD_RESULT_READY || n >= 128) {
@@ -1011,8 +1010,7 @@ s32 CardThread_MoveFile(u8 slot, s16 file, s16 dst, BOOL* done) {
         }
     }
 
-    other = slot ^ 1;
-    result = __CARDSetStatusEx(other, dst, &dir);
+    result = __CARDSetStatusEx(slot ^ 1, dst, &dir);
     if (result < 0) {
         if (result == CARD_RESULT_NOCARD) {
             CARDFastDelete(slot, file);
@@ -1028,7 +1026,7 @@ s32 CardThread_MoveFile(u8 slot, s16 file, s16 dst, BOOL* done) {
         } else {
             __CARDSetStatusEx(slot, file, &dir);
         }
-        return result;
+        goto end;
     }
     *done = TRUE;
     result = CARDFastDelete(slot, file);
@@ -1042,14 +1040,15 @@ s32 CardThread_MoveFile(u8 slot, s16 file, s16 dst, BOOL* done) {
         sCardIcons[slot][file].hasIcon = FALSE;
         sCardIcons[slot][file].hasBanner = FALSE;
         OSRestoreInterrupts(enabled);
-        result = __CARDGetStatusEx(other, dst, &dir);
+        result = __CARDGetStatusEx(slot ^ 1, dst, &dir);
         if (result >= 0) {
-            result = CardThread_ReadEntry(other, dst, &dir);
+            result = CardThread_ReadEntry(slot ^ 1, dst, &dir);
             if (result >= 0) {
                 return 0;
             }
         }
     }
+end:
     return result;
 }
 
