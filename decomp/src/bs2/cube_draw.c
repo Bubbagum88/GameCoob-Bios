@@ -98,10 +98,10 @@ static void Cube_DrawTile(s32 x, s32 y, s32 face, u8 alpha) {
     GXSetChanMatColor(4, color);
     J3D_LoadTexture(0, sTileTex);
     GXBegin(0x80, 1, 4);
-    Cube_TileVtx(face, -(px + inset), -(py + inset), 0, 0);
-    Cube_TileVtx(face, -(px + full), -(py + inset), 0, 0x4000);
-    Cube_TileVtx(face, -(px + full), -(py + full), 0x4000, 0x4000);
-    Cube_TileVtx(face, -(px + inset), -(py + full), 0x4000, 0);
+    Cube_TileVtx(face, -(s32)(px + inset), -(s32)(py + inset), 0, 0);
+    Cube_TileVtx(face, -(s32)(px + full), -(s32)(py + inset), 0, 0x4000);
+    Cube_TileVtx(face, -(s32)(px + full), -(s32)(py + full), 0x4000, 0x4000);
+    Cube_TileVtx(face, -(s32)(px + inset), -(s32)(py + full), 0x4000, 0);
 }
 
 /* 0x81310E24: the trail tiles, then the small cube, faded by `alpha`. */
