@@ -87,6 +87,7 @@ void ClockIcon_InitHands(void) {
 /* 0x813262E4 */
 void ClockIcon_UpdateFace(void) {
     OSCalendarTime t;
+    s16 j;
     s16 i;
     s32 n;
     s32 r;
@@ -107,7 +108,8 @@ void ClockIcon_UpdateFace(void) {
             n = 30;
         }
         sClockDial[i].alpha = (u8)(n * 255 / 30);
-        sClockDialPos[i].x = r * SinS((i - 1) << 14);
+        j = i; /* copy only for the register allocation */
+        sClockDialPos[i].x = r * SinS((j - 1) << 14);
         sClockDialPos[i].y = r * CosS((i - 1) << 14);
     }
 
