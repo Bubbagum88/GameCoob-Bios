@@ -937,16 +937,24 @@ static void Scene_DrawAsk(Scene *s, u16 idx, s16 sel, u8 alpha) {
     Scene_DrawList(boxes, entries, 1, 2, y, listH, sel, alpha);
 }
 
-static inline void Scene_SetAmbDark(void) {
-    GXColor c[1] = { { 0x28, 0x28, 0x28, 0xFF } };
+/* Passing a struct through this pointer helper gives the original's stack
+   layout: the by-value copy sits right above the local, and the helper's
+   parameter slot goes to the bottom of the frame. */
+static inline GXColor *Scene_ColorRef(GXColor *c) {
+    (void)c;
+    return c;
+}
 
-    GXSetChanAmbColor(GX_COLOR0A0, c[0]);
+static inline void Scene_SetAmbDark(void) {
+    GXColor c = { 0x28, 0x28, 0x28, 0xFF };
+
+    GXSetChanAmbColor(GX_COLOR0A0, *Scene_ColorRef(&c));
 }
 
 static inline void Scene_SetAmbFull(void) {
-    GXColor c[1] = { { 0xFF, 0xFF, 0xFF, 0xFF } };
+    GXColor c = { 0xFF, 0xFF, 0xFF, 0xFF };
 
-    GXSetChanAmbColor(GX_COLOR0A0, c[0]);
+    GXSetChanAmbColor(GX_COLOR0A0, *Scene_ColorRef(&c));
 }
 
 /* 0x8130E17C */
@@ -991,10 +999,6 @@ void Scene_Draw2DDisc(void) {
     }
 }
 
-static inline u8 Scene_ShakeAlpha(Scene *s, s32 shake) {
-    return s->shakeAlpha * shake / SCENE_SHAKE_MAX;
-}
-
 /* 0x8130E3C8 */
 void Scene_Draw2DSpinOut(void) {
     Scene *s = Scene_Get();
@@ -1007,7 +1011,7 @@ void Scene_Draw2DSpinOut(void) {
         if (shake > SCENE_SHAKE_MAX) {
             shake = SCENE_SHAKE_MAX;
         }
-        sBgInner.alpha = Scene_ShakeAlpha(s, shake);
+        sBgInner.alpha = (u8)(s->shakeAlpha * shake / SCENE_SHAKE_MAX);
         sBigCube.alpha = (u8)(s->bgAlpha * s->outFrame / s->outFadeFrames);
         sText.alpha = (u8)(s->bgAlpha * s->outFrame / s->outFadeFrames);
         sBgInner.alpha = (u8)((s->outFadeFrames - s->outFrame) * (s->shakeAlpha * shake) /
@@ -1039,10 +1043,10 @@ void Scene_Draw2DSpinOut(void) {
 
 /* 0x8130E5C0 */
 void Scene_Draw2DMenu(void) {
+    Scene *s = Scene_Get();
     MenuWork *menu;
     u8 alpha;
 
-    Scene_Get();
     menu = Menu_Get();
     alpha = menu->bgMinAlpha + (255 - menu->bgMinAlpha) * (0x7FFF - menu->zoom) / 0x7FFF;
     sBigCube.alpha = alpha;
