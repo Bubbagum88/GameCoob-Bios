@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="960" height="584" font-family="Verdana,DejaVu Sans,sans-serif">
 <rect width="100%" height="100%" fill="#0d1117"/>
 <rect x="0" y="0" width="960" height="44" fill="#161b22"/>
-<rect x="0" y="40" width="792.8" height="4" fill="#2ea043"/>
-<text x="12" y="27" font-size="16" fill="#e6edf3">BS2 PAL 1.0: 82.58% code, 45.58% data, 1938/2041 functions</text>
+<rect x="0" y="40" width="795.3" height="4" fill="#2ea043"/>
+<text x="12" y="27" font-size="16" fill="#e6edf3">BS2 PAL 1.0: 82.84% code, 45.58% data, 1940/2041 functions</text>
 <g><title>BS2 menu</title>
 <rect x="0.0" y="44.0" width="297.2" height="540.0" fill="#21262d" stroke="#0d1117"/>
 <text x="4.0" y="56.0" font-size="11" fill="#e6edf3">BS2 menu</text>
@@ -299,8 +299,8 @@
 <g><title>bs2/scene_spinout: 2108 bytes, 36.8% matched, 96.4% fuzzy, 2/4 functions</title>
 <rect x="707.9" y="192.3" width="38.4" height="51.2" fill="#969c2e" stroke="#0d1117" stroke-width="1"/>
 </g>
-<g><title>bs2/gMRanim: 1996 bytes, 33.9% matched, 99.8% fuzzy, 3/5 functions</title>
-<rect x="707.9" y="243.5" width="38.4" height="48.5" fill="#9a9b2d" stroke="#0d1117" stroke-width="1"/>
+<g><title>bs2/gMRanim: 1996 bytes, 100.0% matched, 100.0% fuzzy, 5/5 functions</title>
+<rect x="707.9" y="243.5" width="38.4" height="48.5" fill="#2ea043" stroke="#0d1117" stroke-width="1"/>
 </g>
 <g><title>bs2/pad: 1896 bytes, 100.0% matched, 100.0% fuzzy, 7/7 functions</title>
 <rect x="746.3" y="192.3" width="46.1" height="38.4" fill="#2ea043" stroke="#0d1117" stroke-width="1"/>
