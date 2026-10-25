@@ -17,9 +17,9 @@ static Mtx sSpinOutMtx;              /* 0x814AFD28 */
 
 /* 0x8130E70C: coast, then 3 full turns plus outSettle (Hermite), then
    settle back to 0. Returns FALSE while faster than the threshold. */
-static void Scene_UpdateSpinOut(void) {
+static s32 Scene_UpdateSpinOut(void) {
     Scene *s = Scene_Get();
-    s32 id;
+    s32 ok;
     f32 level;
 
     sPrevSpin = s->spin;
@@ -27,26 +27,26 @@ static void Scene_UpdateSpinOut(void) {
         s->spin = s->spin + s->spinSpeed;
         s->outStart = s->spin;
     } else if (s->outFrame >= s->outCoastFrames &&
-               s->outFrame < s->outTurnFrames + s->outCoastFrames) {
-        s->spin = (s32)Hermite(s->outFrame, s->outCoastFrames, -(s->outStart + (s->outTurns << 16)),
-                          s->outSpeed, s->outTurnFrames + s->outCoastFrames, s->outSettle, 0.0f);
+               s->outFrame < s->outCoastFrames + s->outTurnFrames) {
+        s->spin = Hermite(s->outFrame, s->outCoastFrames, -(s->outStart + (s->outTurns << 16)),
+                          s->outSpeed, s->outCoastFrames + s->outTurnFrames, s->outSettle, 0.0f);
         if (s->outFrame > s->outCoastFrames) {
-            s->spinSpeed = (s16)((u16)s->spin - (u16)sPrevSpin);
+            s->spinSpeed = (s16)(s->spin - sPrevSpin);
         }
-    } else if (s->outFrame >= s->outTurnFrames + s->outCoastFrames &&
-               s->outFrame < s->outCoastFrames + (s->outTurnFrames + s->outSettleFrames)) {
-        s->spin = (s32)Hermite(s->outFrame, s->outTurnFrames + s->outCoastFrames, s->outSettle, 0.0f,
-                          s->outCoastFrames + (s->outTurnFrames + s->outSettleFrames), 0.0f, 0.0f);
-        s->spinSpeed = (s16)((u16)s->spin - (u16)sPrevSpin);
-    } else if (s->outFrame == s->outCoastFrames + (s->outTurnFrames + s->outSettleFrames)) {
+    } else if (s->outFrame >= s->outCoastFrames + s->outTurnFrames &&
+               s->outFrame < s->outCoastFrames + s->outTurnFrames + s->outSettleFrames) {
+        s->spin = Hermite(s->outFrame, s->outCoastFrames + s->outTurnFrames, s->outSettle, 0.0f,
+                          s->outCoastFrames + s->outTurnFrames + s->outSettleFrames, 0.0f, 0.0f);
+        s->spinSpeed = (s16)(s->spin - sPrevSpin);
+    } else if (s->outFrame == s->outCoastFrames + s->outTurnFrames + s->outSettleFrames) {
         s->spin = 0;
         s->spinSpeed = 0.0f;
     }
 
     if (s->spinSpeed > 5000.0f) {
-        id = 0;
+        ok = FALSE;
     } else {
-        id = 1;
+        ok = TRUE;
     }
     level = s->spinSpeed / 5000.0f;
     if (level > 1.0f) {
@@ -56,10 +56,11 @@ static void Scene_UpdateSpinOut(void) {
         level = 0.0f;
     }
     if (sPrevSpin < 0 && s->spin >= 0 && level > s->outWhooshMin) {
-        Sound_UpdateSpin(id, level);
+        Sound_UpdateSpin(SE_SPIN_CYCLE, level);
     } else if (sPrevSpin > 0 && s->spin < 0 && level > s->outWhooshMin) {
-        Sound_UpdateSpin(id, level);
+        Sound_UpdateSpin(SE_SPIN_CYCLE, level);
     }
+    return ok;
 }
 
 /* 0x8130EA34: the spin-out cube matrix: the intro wobble blended into the

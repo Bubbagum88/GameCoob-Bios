@@ -155,7 +155,6 @@ void Glh_DrawPaneRect(u16 pane, void *glh, GXColor *c, s32 x, s32 y, s32 w, s32 
     u32 a1 = alpha * (c1 & 0xFF) / 255;
     u32 a2 = alpha * (c2 & 0xFF) / 255;
     u32 a3 = alpha * (c3 & 0xFF) / 255;
-    u8 pad[8];
 
     if (a0 > 0xFF) {
         a0 = 0xFF;
