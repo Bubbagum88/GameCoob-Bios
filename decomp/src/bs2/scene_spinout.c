@@ -9,7 +9,7 @@
 
 /* Not yet decompiled */
 f32 Hermite(f32 t, f32 t0, f32 p0, f32 v0, f32 t1, f32 p1, f32 v1); /* 0x81307D08 */
-void Sound_UpdateSpin(s32 id, f32 level);                   /* 0x8135A8E0 */
+void Sound_UpdateSpin(u8 mode, f32 speed);                   /* 0x8135A8E0 */
 
 static s16 sPrevSpin;                /* 0x814AD3D0 */
 
@@ -17,9 +17,9 @@ static Mtx sSpinOutMtx;              /* 0x814AFD28 */
 
 /* 0x8130E70C: coast, then 3 full turns plus outSettle (Hermite), then
    settle back to 0. Returns FALSE while faster than the threshold. */
-static s32 Scene_UpdateSpinOut(void) {
+static void Scene_UpdateSpinOut(void) {
     Scene *s = Scene_Get();
-    s32 ok;
+    u8 slow;
     f32 level;
 
     sPrevSpin = s->spin;
@@ -27,26 +27,26 @@ static s32 Scene_UpdateSpinOut(void) {
         s->spin = s->spin + s->spinSpeed;
         s->outStart = s->spin;
     } else if (s->outFrame >= s->outCoastFrames &&
-               s->outFrame < s->outCoastFrames + s->outTurnFrames) {
-        s->spin = Hermite(s->outFrame, s->outCoastFrames, -(s->outStart + (s->outTurns << 16)),
+               s->outFrame < s->outTurnFrames + s->outCoastFrames) {
+        s->spin = (s32)Hermite(s->outFrame, s->outCoastFrames, -(s->outStart + (s->outTurns << 16)),
                           s->outSpeed, s->outCoastFrames + s->outTurnFrames, s->outSettle, 0.0f);
         if (s->outFrame > s->outCoastFrames) {
-            s->spinSpeed = (s16)(s->spin - sPrevSpin);
+            s->spinSpeed = (s16)((u16)s->spin - (u16)sPrevSpin);
         }
-    } else if (s->outFrame >= s->outCoastFrames + s->outTurnFrames &&
-               s->outFrame < s->outCoastFrames + s->outTurnFrames + s->outSettleFrames) {
-        s->spin = Hermite(s->outFrame, s->outCoastFrames + s->outTurnFrames, s->outSettle, 0.0f,
-                          s->outCoastFrames + s->outTurnFrames + s->outSettleFrames, 0.0f, 0.0f);
-        s->spinSpeed = (s16)(s->spin - sPrevSpin);
-    } else if (s->outFrame == s->outCoastFrames + s->outTurnFrames + s->outSettleFrames) {
+    } else if (s->outFrame >= s->outTurnFrames + s->outCoastFrames &&
+               s->outFrame < s->outCoastFrames + (s->outTurnFrames + s->outSettleFrames)) {
+        s->spin = (s32)Hermite(s->outFrame, s->outTurnFrames + s->outCoastFrames, s->outSettle, 0.0f,
+                          s->outCoastFrames + (s->outTurnFrames + s->outSettleFrames), 0.0f, 0.0f);
+        s->spinSpeed = (s16)((u16)s->spin - (u16)sPrevSpin);
+    } else if (s->outFrame == s->outCoastFrames + (s->outTurnFrames + s->outSettleFrames)) {
         s->spin = 0;
         s->spinSpeed = 0.0f;
     }
 
     if (s->spinSpeed > 5000.0f) {
-        ok = FALSE;
+        slow = FALSE;
     } else {
-        ok = TRUE;
+        slow = TRUE;
     }
     level = s->spinSpeed / 5000.0f;
     if (level > 1.0f) {
@@ -56,11 +56,10 @@ static s32 Scene_UpdateSpinOut(void) {
         level = 0.0f;
     }
     if (sPrevSpin < 0 && s->spin >= 0 && level > s->outWhooshMin) {
-        Sound_UpdateSpin(SE_SPIN_CYCLE, level);
+        Sound_UpdateSpin(slow, level);
     } else if (sPrevSpin > 0 && s->spin < 0 && level > s->outWhooshMin) {
-        Sound_UpdateSpin(SE_SPIN_CYCLE, level);
+        Sound_UpdateSpin(slow, level);
     }
-    return ok;
 }
 
 /* 0x8130EA34: the spin-out cube matrix: the intro wobble blended into the
@@ -99,13 +98,31 @@ static void Scene_CalcSpinOutMtx(Mtx m, u8 advance) {
     menu->wobbleFrame = frame;
 }
 
-static inline Vec Scene_VecXYZ(f32 x, f32 y, f32 z) {
+/* Pointer pass-through helpers: routing the by-value Vec through them gives
+   the original's stack layout (copy right above the local, the helpers'
+   parameter slots at the bottom of the frame). */
+static inline Vec *Scene_VecRef0(Vec *v) {
+    return v;
+}
+
+static inline Vec *Scene_VecRef(Vec *v) {
+    (void)v;
+    return Scene_VecRef0(v);
+}
+
+static inline void Scene_SetBigCubeMtx(Scene *s) {
+    f32 k = s->spinSpeed / s->spinThreshold;
+    f32 rest = 1.1f * (1.0f - k);
+    f32 scale;
+    f32 xz;
     Vec r = { 0.0f, 0.0f, 0.0f };
 
-    r.x = x;
-    r.y = y;
-    r.z = z;
-    return r;
+    scale = s->modelScale;
+    xz = scale * (rest + (1.0f - (1.0f - s->squashXZ)) * k);
+    r.x = xz;
+    r.y = scale * (rest + (1.0f + s->stretchY) * k);
+    r.z = xz;
+    J3D_SetModelMtx(Scene_GetBigCube(), sSpinOutMtx, *Scene_VecRef(&r));
 }
 
 /* 0x8130ED30: state 4. Returns SCENE_MENU once the spin has settled. */
@@ -116,10 +133,8 @@ s32 Scene_SpinOut(void) {
     Mtx rot;
     Mtx wobble;
     MtxPtr view;
-    f32 k;
+    f32 k;    /* unused, but they take stack slots in the original */
     f32 rest;
-    f32 xz;
-    Vec sc;
 
     if (t->outFirst) {
         t->outStart = t->spin;
@@ -135,11 +150,7 @@ s32 Scene_SpinOut(void) {
     Scene_CalcSpinOutMtx(wobble, TRUE);
     PSMTXConcat(rot, wobble, sSpinOutMtx);
 
-    k = s->spinSpeed / s->spinThreshold;
-    rest = 1.1f * (1.0f - k);
-    xz = s->modelScale * (rest + (1.0f - (1.0f - s->squashXZ)) * k);
-    sc = Scene_VecXYZ(xz, s->modelScale * (rest + (1.0f + s->stretchY) * k), xz);
-    J3D_SetModelMtx(Scene_GetBigCube(), sSpinOutMtx, sc);
+    Scene_SetBigCubeMtx(s);
     view = Camera_GetView();
     J3D_SetViewMtx(Scene_GetBigCube(), view);
     J3D_CalcJoints(Scene_GetBigCube());
