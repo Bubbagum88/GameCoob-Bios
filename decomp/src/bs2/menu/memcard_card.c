@@ -1076,11 +1076,14 @@ s32 CardThread_MoveFile(u8 slot, s16 file, s16 dst, BOOL* done) {
         sCardIcons[slot][file].hasIcon = FALSE;
         sCardIcons[slot][file].hasBanner = FALSE;
         OSRestoreInterrupts(enabled);
-        result = __CARDGetStatusEx(slot ^ 1, dst, &dir);
-        if (result >= 0) {
-            result = CardThread_ReadEntry(slot ^ 1, dst, &dir);
+        {
+            s16 d = dst;
+            result = __CARDGetStatusEx(slot ^ 1, d, &dir);
             if (result >= 0) {
-                return 0;
+                result = CardThread_ReadEntry(slot ^ 1, d, &dir);
+                if (result >= 0) {
+                    return 0;
+                }
             }
         }
     }
