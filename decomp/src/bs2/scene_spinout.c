@@ -112,9 +112,9 @@ static inline Vec *Scene_VecRef(Vec *v) {
 
 static inline void Scene_SetBigCubeMtx(Scene *s) {
     f32 k = s->spinSpeed / s->spinThreshold;
-    f32 rest = 1.1f * (1.0f - k);
     f32 scale;
     f32 xz;
+    f32 rest = 1.1f * (1.0f - k);
     Vec r = { 0.0f, 0.0f, 0.0f };
 
     scale = s->modelScale;
