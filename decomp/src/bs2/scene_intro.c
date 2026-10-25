@@ -230,25 +230,30 @@ static inline void Scene_SquashWorld(Scene *s) {
     MtxScaleCols(sWorldMtx, &squash);
 }
 
-static inline Vec Scene_VecSplat(Scene *s) {
+/* See Scene_ColorRef: passing the Vec through this pointer helper gives the
+   original's stack layout for the by-value copy. */
+static inline Vec *Scene_VecRef(Vec *v) {
+    (void)v;
+    return v;
+}
+
+static inline void Scene_SetModelSplat(Scene *s, MtxPtr w) {
     Vec r = { 0.0f, 0.0f, 0.0f };
 
-    r.x = s->modelScale;
-    r.y = s->modelScale;
-    r.z = s->modelScale;
-    return r;
+    r.z = r.y = r.x = s->modelScale;
+    J3D_SetModelMtx(Scene_GetBgInner(), w, *Scene_VecRef(&r));
 }
 
-static inline Vec Scene_VecOne(void) {
+static inline void Scene_SetModelOne(MtxPtr w) {
     Vec r = { 1.0f, 1.0f, 1.0f };
 
-    return r;
+    J3D_SetModelMtx(Scene_GetLogo(), w, *Scene_VecRef(&r));
 }
 
-static inline Vec Scene_VecOuter(void) {
+static inline void Scene_SetModelOuter(MtxPtr w) {
     Vec r = { 1.01f, 1.01f, 1.01f };
 
-    return r;
+    J3D_SetModelMtx(Scene_GetBgOuter(), w, *Scene_VecRef(&r));
 }
 
 /* 0x8130C90C */
@@ -263,15 +268,15 @@ void Scene_DrawWorld(void) {
     PSMTXIdentity(id);
     PSMTXConcat(m, id, w);
     Scene_SquashWorld(s);
-    J3D_SetModelMtx(Scene_GetBgInner(), w, Scene_VecSplat(s));
+    Scene_SetModelSplat(s, w);
     view = Camera_GetView();
     J3D_SetViewMtx(Scene_GetBgInner(), view);
     J3D_CalcJoints(Scene_GetBgInner());
-    J3D_SetModelMtx(Scene_GetLogo(), w, Scene_VecOne());
+    Scene_SetModelOne(w);
     view = Camera_GetView();
     J3D_SetViewMtx(Scene_GetLogo(), view);
     J3D_CalcJoints(Scene_GetLogo());
-    J3D_SetModelMtx(Scene_GetBgOuter(), w, Scene_VecOuter());
+    Scene_SetModelOuter(w);
     view = Camera_GetView();
     J3D_SetViewMtx(Scene_GetBgOuter(), view);
     J3D_CalcJoints(Scene_GetBgOuter());
