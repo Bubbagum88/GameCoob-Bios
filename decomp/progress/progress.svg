@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="960" height="584" font-family="Verdana,DejaVu Sans,sans-serif">
 <rect width="100%" height="100%" fill="#0d1117"/>
 <rect x="0" y="0" width="960" height="44" fill="#161b22"/>
-<rect x="0" y="40" width="741.7" height="4" fill="#2ea043"/>
-<text x="12" y="27" font-size="16" fill="#e6edf3">BS2 PAL 1.0: 77.26% code, 45.32% data, 1891/2041 functions</text>
+<rect x="0" y="40" width="743.3" height="4" fill="#2ea043"/>
+<text x="12" y="27" font-size="16" fill="#e6edf3">BS2 PAL 1.0: 77.43% code, 45.32% data, 1893/2041 functions</text>
 <g><title>BS2 menu</title>
 <rect x="0.0" y="44.0" width="297.2" height="540.0" fill="#21262d" stroke="#0d1117"/>
 <text x="4.0" y="56.0" font-size="11" fill="#e6edf3">BS2 menu</text>
@@ -271,8 +271,8 @@
 <rect x="714.2" y="60.0" width="63.7" height="78.5" fill="#2ea043" stroke="#0d1117" stroke-width="1"/>
 <text x="717.2" y="72.0" font-size="10" fill="#0d1117">gInit</text>
 </g>
-<g><title>bs2/glh: 4684 bytes, 61.5% matched, 98.0% fuzzy, 15/19 functions</title>
-<rect x="777.9" y="60.0" width="55.6" height="78.5" fill="#6d9d36" stroke="#0d1117" stroke-width="1"/>
+<g><title>bs2/glh: 4684 bytes, 80.1% matched, 99.1% fuzzy, 17/19 functions</title>
+<rect x="777.9" y="60.0" width="55.6" height="78.5" fill="#4f9f3c" stroke="#0d1117" stroke-width="1"/>
 <text x="780.9" y="72.0" font-size="10" fill="#0d1117">glh</text>
 </g>
 <g><title>bs2/gMRtexture: 4632 bytes, 14.8% matched, 99.6% fuzzy, 4/7 functions</title>

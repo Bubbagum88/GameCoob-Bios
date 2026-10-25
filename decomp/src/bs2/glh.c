@@ -185,18 +185,22 @@ void Glh_DrawPaneRect(u16 pane, void *glh, GXColor *c, s32 x, s32 y, s32 w, s32 
     Glh_DrawSlices(&frames[pane], x, y, w, h, x + w, y + h);
 }
 
+static inline void Glh_DrawTextBg(u16 pane, void *glh, GXColor *c, s32 dx, s32 dy, s32 w, s32 h) {
+    GlhFrame *f = GLH_FRAMES(glh);
+    s32 x = dx + (f[pane].x - w / 2);
+    s32 y = dy + (f[pane].y - h / 2);
+
+    Glh_DrawPaneRect(pane, glh, c, x, y, w, h);
+}
+
 /* 0x81309C3C: every frame with this tag at its own size */
 void Glh_DrawFrame(u32 tag, void *glh, GXColor *c) {
     GlhFrame *f = GLH_FRAMES(glh);
-    u32 ofs = 0;
     u16 i;
-    u8 pad[8];
 
-    for (i = 0; i < ((Glh *)glh)->nFrames; f++, ofs += sizeof(GlhFrame), i++) {
-        Glh *g = glh;
+    for (i = 0; i < ((Glh *)glh)->nFrames; f++, i++) {
         if (tag == f->tag) {
-            GlhFrame *at = (GlhFrame *)((u8 *)glh + (g->frames + ofs));
-            Glh_DrawPaneRect(i, glh, c, at->x - f->innerW / 2, at->y - f->innerH / 2, f->innerW, f->innerH);
+            Glh_DrawTextBg(i, glh, c, 0, 0, f->innerW, f->innerH);
         }
     }
 }
@@ -382,12 +386,7 @@ void Glh_DrawString(u16 idx, void *sth, void *glh, GXColor *c, GXColor *glow, s3
     if (((Sth *)sth)->magic == STH_MAGIC) {
         Glh_MeasureString(&texts[entries[idx].pane], (u8 *)&entries[idx] + entries[idx].ofs, &w, &h);
         if (texts[entries[idx].pane].bgPane != 0xFFFF) {
-            GlhFrame *f = GLH_FRAMES(glh);
-
-            Glh_DrawPaneRect(texts[entries[idx].pane].bgPane, glh, c,
-                             dx + (f[texts[entries[idx].pane].bgPane].x - (w + disp->textPad * 32) / 2),
-                             dy + (f[texts[entries[idx].pane].bgPane].y - (h + disp->textPad * 32) / 2),
-                             w + disp->textPad * 32, h + disp->textPad * 32);
+            Glh_DrawTextBg(texts[entries[idx].pane].bgPane, glh, c, dx, dy, w + disp->textPad * 32, h + disp->textPad * 32);
         }
         texts[entries[idx].pane].x += dx;
         texts[entries[idx].pane].y += dy;
@@ -427,13 +426,8 @@ void Glh_DrawBannerText(u16 idx, void *glh, GXColor *c, const void *str, s32 max
     u16 h;
 
     if (texts[idx].bgPane != 0xFFFF) {
-        GlhFrame *f;
-
         Glh_MeasureString(&texts[idx], NULL, &w, &h);
-        f = GLH_FRAMES(glh);
-        Glh_DrawPaneRect(texts[idx].bgPane, glh, c, f[texts[idx].bgPane].x - (w + disp->textPad * 32) / 2,
-                         f[texts[idx].bgPane].y - (h + disp->textPad * 32) / 2, w + disp->textPad * 32,
-                         h + disp->textPad * 32);
+        Glh_DrawTextBg(texts[idx].bgPane, glh, c, 0, 0, w + disp->textPad * 32, h + disp->textPad * 32);
     }
     GX_Setup2DText();
     Font_SetColorU32(color, color);
