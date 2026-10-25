@@ -335,8 +335,13 @@ void ClockIcon_UpdateEnter(void) {
         FADE(sClockHour[i])
         SETTLE(sClockHourPos[i])
     }
-    FADE(sClockSec)
-    SETTLE(sClockSecPos)
+    {
+        s16 alpha;
+        f32 v;
+
+        FADE(sClockSec)
+        SETTLE(sClockSecPos)
+    }
     if (settled == (CLOCK_DIAL + CLOCK_MIN + CLOCK_HOUR + 1) * 2) {
         sClockFrame = 0;
         sClockIconSettled = TRUE;
