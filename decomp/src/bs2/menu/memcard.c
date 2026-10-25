@@ -924,7 +924,9 @@ static inline void Card_SetMaxTop(u8 slot) {
     }
 }
 
-static inline void Card_BuildSort(CardFile (*files)[CARD_MAX_FILES], u8 slot) {
+/* 0x81317564: rebuild the display order of a slot's files. */
+void Card_SortFiles(u8 slot) {
+    CardFile(*files)[CARD_MAX_FILES] = CardThread_GetFiles();
     u32 i;
 
     for (i = 0; i < CARD_MAX_FILES; i++) {
@@ -937,14 +939,6 @@ static inline void Card_BuildSort(CardFile (*files)[CARD_MAX_FILES], u8 slot) {
         }
     }
     qsort(sCardSort[slot], CARD_MAX_FILES, sizeof(CardSortEntry), CardFile_Compare);
-}
-
-/* 0x81317564: rebuild the display order of a slot's files. */
-void Card_SortFiles(u8 slot) {
-    CardFile(*files)[CARD_MAX_FILES] = CardThread_GetFiles();
-    u32 i;
-
-    Card_BuildSort(files, slot);
     Card_SetMaxTop(slot);
     if (sCardMaxTop[slot] < sCardTop[slot]) {
         sCardTop[slot] = sCardMaxTop[slot];
