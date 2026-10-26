@@ -599,7 +599,7 @@ config.libs = [
             Object(Matching, "bs2/bs2main.c"),
             Object(Matching, "bs2/gInit.c"),
             Object(Matching, "bs2/pad.c", extra_cflags=["-fp_contract off"]),
-            Object(NonMatching, "bs2/camera.c"),
+            Object(Matching, "bs2/camera.c"),
             Object(Matching, "bs2/gMRbuild.c"),
             Object(Matching, "bs2/gMRdraw.c", extra_cflags=["-fp_contract off"]),
             Object(Matching, "bs2/gMRshape.c"),
