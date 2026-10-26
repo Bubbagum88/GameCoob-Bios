@@ -2395,6 +2395,7 @@ void Card_Draw(u8 fxAlpha, u8 bgAlpha, u8 alpha) {
     Mtx view;
     Mtx nrm;
     s16 unused[2];
+    Vec* p1;
 
     eye.z = 224.0f / tanf(3.141592f * disp->fovy / 360.0f);
     C_MTXLookAt(view, &eye, &up, &at);
@@ -2406,11 +2407,18 @@ void Card_Draw(u8 fxAlpha, u8 bgAlpha, u8 alpha) {
     GXSetCurrentMtx(GX_PNMTX0);
 
     Card_SpotPos(&spot0, 0);
-    Card_SpotPos(&spot1, 1);
+    {
+        CardParams* p = Card_GetParams();
+
+        p1 = &spot1;
+        p1->x = (sCardAnchorX[1][5] + sCardAnchorX[1][6]) / 32.0f;
+        p1->y = (sCardAnchorY[1][5] + sCardAnchorY[1][9]) / 32.0f;
+        p1->z = p->f70;
+    }
     Fader_GetAlpha(&sCardFadeF[0], &a[0], NULL);
     Fader_GetAlpha(&sCardFadeF[1], &a[1], NULL);
     Fader_GetAlpha(&sCardFadeF[2], &a2, NULL);
-    Backdrop_DrawSpots(mv, bgAlpha, &spot0, &spot1, a[0], a[1], a2);
+    Backdrop_DrawSpots(mv, bgAlpha, &spot0, p1, a[0], a[1], a2);
 
     {
         GXColor fr = { 255, 255, 255, 255 };
