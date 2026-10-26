@@ -271,6 +271,9 @@ bs2/menu/menu_fx_anim.c:
 	.data       start:0x813817E8 end:0x81381810
 	.bss        start:0x814FE850 end:0x814FE868
 
+bs2/res_archive.c:
+	.data       start:0x81381820 end:0x813F0EA0
+
 bs2/menu/menu_fx_draw.c:
 	.text       start:0x81332FB8 end:0x81333344
 	.sbss       start:0x814AD600 end:0x814AD608
@@ -552,6 +555,7 @@ jaudio/ipl_8135A8E0.c:
 jaudio/ipl_8135B360.c:
 	.text       start:0x8135B360 end:0x8135B57C align:32
 	.rodata     start:0x81380A10 end:0x81380A28
+	.data       start:0x813F7620 end:0x814AB2C0
 	.sbss       start:0x814AD838 end:0x814AD840
 	.sdata2     start:0x814AE4E0 end:0x814AE4F0
 
