@@ -808,9 +808,9 @@ static s32 __SetVoice(note* n, s32 arg) {
     f32 tuning;
     f32 t0;
     f32 t1;
-    f32 freq0;
     f32 freq1;
     f32 time;
+    u8 pad[40]; // frame is 0x28 bigger than the visible locals need
     u8* REF_semitone = &semitone;
     perctable** REF_percussion = &percussion;
     percvoicetable** REF_effect = &effect;
@@ -1008,6 +1008,8 @@ static s32 __SetVoice(note* n, s32 arg) {
             time = 0.0f;
         }
 
+        //! FAKE: second tempo int->float conversion (dead in target)
+        (void)(f32)grp->tempo;
         time *= grp->tempo;
         time *= AG.sample_to_update_delay_scale;
         time /= n->frequency_scale;
@@ -1016,7 +1018,7 @@ static s32 __SetVoice(note* n, s32 arg) {
             time = (f32)0x7FFE;
         }
 
-        n->delay = (u16)(s32)time + 1;
+        n->delay = (s16)(s32)time + 1;
         n->gate_delay = 0;
 
         if (n->portamento_sweep.mode != PORTAMENTO_MODE_OFF) {
