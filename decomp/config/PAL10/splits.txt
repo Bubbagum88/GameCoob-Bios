@@ -390,6 +390,12 @@ jaudio/sub_sys.c:
 	.sbss       start:0x814AD760 end:0x814AD778
 	.sdata2     start:0x814AE260 end:0x814AE278
 
+jaudio/audiotable.c:
+	.data       start:0x813F1430 end:0x813F4608
+
+jaudio/audioconst.c:
+	.data       start:0x813F4608 end:0x813F4760
+
 jaudio/os.c:
 	.text       start:0x81346B20 end:0x81346D00 align:32
 
