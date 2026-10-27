@@ -240,6 +240,11 @@ s32 Card_MapError(s32 result) {
     }
 }
 
+/* the mount message goes through an inline cast (register allocation) */
+static inline OSMessage CardThread_Msg(u32 m) {
+    return (OSMessage)m;
+}
+
 /* 0x8131C268: called every frame by the UI. Mounts and unmounts cards as they
    come and go, and takes the thread's replies. */
 void CardThread_Poll(void) {
@@ -275,7 +280,7 @@ void CardThread_Poll(void) {
             sCardCmd = CARD_CMD_MOUNT;
             m = CARD_MSG(CARD_CMD_MOUNT, 0, 1, 0);
             sCardResult = CARD_UI_OK;
-            if (OSSendMessage(CardThread_CmdQueue(), (OSMessage)m, OS_MESSAGE_NOBLOCK)) {
+            if (OSSendMessage(CardThread_CmdQueue(), CardThread_Msg(m), OS_MESSAGE_NOBLOCK)) {
                 gCardSlots[1].state = 3;
                 gCardSlots[1].dirty = FALSE;
             }
