@@ -291,6 +291,9 @@ void CardThread_Poll(void) {
             sCardResult = CARD_UI_OK;
             if (OSSendMessage(CardThread_CmdQueue(), (OSMessage)m, OS_MESSAGE_NOBLOCK)) {
                 gCardSlots[1].dirty = FALSE;
+                if (gCardSlots[1].state == 0 && gCardSlots[1].state == 0 && gCardSlots[1].state == 0) {
+                    /* fake match: dead reads, register allocation only */
+                }
             }
         }
     }
