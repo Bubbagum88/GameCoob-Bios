@@ -1021,6 +1021,7 @@ s32 CardThread_CopyFile(u8 slot, s16 file, s16 dst, BOOL* done) {
 s32 CardThread_MoveFile(u8 slot, s16 file, s16 dst, BOOL* done) {
     CARDDir dir;
     CARDDir hidden;
+    s16 d;
     BOOL enabled;
     s16 n = 0;
     s32 result;
@@ -1076,11 +1077,13 @@ s32 CardThread_MoveFile(u8 slot, s16 file, s16 dst, BOOL* done) {
         sCardIcons[slot][file].hasIcon = FALSE;
         sCardIcons[slot][file].hasBanner = FALSE;
         OSRestoreInterrupts(enabled);
+        d = dst;
         {
-            s16 d = dst;
-            result = __CARDGetStatusEx(slot ^ 1, d, &dir);
+            u8 o = slot ^ 1;
+
+            result = __CARDGetStatusEx(o, d, &dir);
             if (result >= 0) {
-                result = CardThread_ReadEntry(slot ^ 1, d, &dir);
+                result = CardThread_ReadEntry(o, dst, &dir);
                 if (result >= 0) {
                     return 0;
                 }
