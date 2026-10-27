@@ -875,6 +875,7 @@ static void Nas_BankOfsToAddr_Inner(s32 bank_id, u8* ctrl_p, WaveMedia* wave_med
     s32 j;
     s32 k;
     s32 n_sfx_inst;
+    u32 ctrl;
     u32* REF_base = &base;
     STACK_PAD_VAR(7);
     u8** REF_ctrl_p = &ctrl_p;
@@ -886,6 +887,7 @@ static void Nas_BankOfsToAddr_Inner(s32 bank_id, u8* ctrl_p, WaveMedia* wave_med
     s32* REF_n_voice_inst = &n_voice_inst;
     base = (u32)ctrl_p;
     n_perc_inst = AG.voice_info[bank_id].num_drums;
+    ctrl = (u32)ctrl_p;
     n_voice_inst = AG.voice_info[bank_id].num_instruments;
     n_sfx_inst = AG.voice_info[bank_id].num_sfx;
 
@@ -913,7 +915,7 @@ static void Nas_BankOfsToAddr_Inner(s32 bank_id, u8* ctrl_p, WaveMedia* wave_med
         }
     }
 
-    ofs = *BANK_ENTRY(ctrl_p, 1);
+    ofs = *BANK_ENTRY(ctrl, 1);
     if (ofs != 0 && n_sfx_inst != 0) {
         *BANK_ENTRY(ctrl_p, 1) = ofs + base;
 
