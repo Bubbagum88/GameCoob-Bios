@@ -177,6 +177,12 @@ static inline void GXSetTexCoordGen(GXTexCoordID dst, GXTexGenType func, GXTexGe
     GXSetTexCoordGen2(dst, func, src, mtx, GX_FALSE, GX_PTIDENTITY);
 }
 
+static inline GXColor gMR_AlphaColor(u8 a) {
+    GXColor c = {0, 0, 0, 0};
+    c.a = a;
+    return c;
+}
+
 /* 0x813061EC: load all GX state of a material */
 void fn_813061EC(u16 index) {
     GMRMaterial* mat = &lbl_814AD324->materials[index];
@@ -281,9 +287,7 @@ void fn_813061EC(u16 index) {
         fn_813060B8(mat->vtxNrm);
     }
     if (lbl_814AD320->alpha != 0xFF) {
-        GXColor c = {0, 0, 0, 0};
-        c.a = lbl_814AD320->alpha;
-        kc = c;
+        kc = gMR_AlphaColor(lbl_814AD320->alpha);
         if (mat->numTevStages != 0xFF) {
             GXSetNumTevStages(mat->numTevStages + 1);
             GXSetTevKColor(GX_KCOLOR0, *(GXColor*)&kc);
@@ -310,12 +314,6 @@ void fn_813061EC(u16 index) {
 }
 
 /* 0x81306850: reload only the TEV colors and the alpha stage of a material */
-static inline GXColor GMR_KAlpha(u8 a) {
-    GXColor c = {0, 0, 0, 0};
-    c.a = a;
-    return c;
-}
-
 void fn_81306850(u16 index) {
     GMRMaterial* mat = &lbl_814AD324->materials[index];
     s32 i;
@@ -327,7 +325,7 @@ void fn_81306850(u16 index) {
         }
     }
     if (lbl_814AD320->alpha != 0xFF) {
-        kc = GMR_KAlpha(lbl_814AD320->alpha);
+        kc = gMR_AlphaColor(lbl_814AD320->alpha);
         if (mat->numTevStages != 0xFF) {
             GXSetNumTevStages(mat->numTevStages + 1);
             GXSetTevKColor(GX_KCOLOR0, *(GXColor*)&kc);
