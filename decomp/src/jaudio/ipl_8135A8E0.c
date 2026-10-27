@@ -29,7 +29,7 @@ int Check_GlobalActiveChannel();
 BEGIN_SCOPE_EXTERN_C
 
 // Track the IPL's sequence plays on.
-extern seqp_ lbl_815D3C68;
+static seqp_ lbl_815D3C68;
 
 static char sBankName[0x20] = "Banks/ipl.bnk";
 static char sWaveName[0x20] = "Banks/ipl.ws";
