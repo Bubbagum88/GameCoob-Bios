@@ -480,15 +480,14 @@ void* Nas_SzHeapAlloc(s32 tableType, s32 size, s32 param_3, s32 id) {
 
         if (tableType == BANK_TABLE) {
             if (status0 == 4) {
-                end = AG.num_channels;
                 checkId = auto_heap->entries[0].id;
-                for (i = 0; i < end; i++) {
+                for (i = 0; i < AG.num_channels; i++) {
                     if (checkId == AG.channels[i].playback_ch.bank_id && AG.channels[i].common_ch.enabled) {
                         break;
                     }
                 }
 
-                if (i == end) {
+                if (i == AG.num_channels) {
                     Nas_WriteIDbank(auto_heap->entries[0].id, 3);
                     status0 = 3;
                 }
