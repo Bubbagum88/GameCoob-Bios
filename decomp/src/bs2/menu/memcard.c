@@ -1813,6 +1813,7 @@ void CardDraw_FileGrid(u8 slot, u8 alpha) {
     s16 unused[2];
     s16 a;
     s16 unused2[2];
+    u8 frame;
     s16 i;
 
     Fader_GetAlpha(&sCardFadeA[slot], &a, NULL);
@@ -1820,7 +1821,10 @@ void CardDraw_FileGrid(u8 slot, u8 alpha) {
     GX_Setup2DTex();
     for (i = 0; i < 16; i++) {
         if (files[slot][sCardSort[slot][i + sCardTop[slot] * 4].file].used) {
-            CardDraw_Icon(slot, i, Card_IconFrame(slot, i), alpha);
+            frame = Card_IconFrame(slot, i);
+            frame++; /* fake match: gives frame a fresh value for the register allocator */
+            frame--;
+            CardDraw_Icon(slot, i, frame, alpha);
         }
     }
 }
