@@ -1209,8 +1209,8 @@ SwMember* __Nas_Alloc_Single_Auto_Inner(s32 size) {
     void* alloc;
     u8* oldCurrent = heap->heap.current;
     u8* nowCurrent;
-    alloc = Nas_HeapAlloc(&heap->heap, size);
 
+    alloc = Nas_HeapAlloc(&heap->heap, size);
     if (!alloc) {
         u8* nowCurrent = heap->heap.current;
         heap->heap.current = heap->heap.base;
@@ -1221,10 +1221,10 @@ SwMember* __Nas_Alloc_Single_Auto_Inner(s32 size) {
         }
         oldCurrent = heap->heap.base;
     }
-    nowCurrent = heap->heap.current;
 
+    nowCurrent = heap->heap.current;
     int s = -1;
-    for (i = 0; i < AG.num_requested_samples; i++) {
+    for (i = 0; (s32)i < AG.num_requested_samples; i++) { // (s32) casts change regalloc
         Bgloadreq* loadReq = &AG.requested_samples[i];
         if (loadReq->is_free == FALSE) {
             u8* p = loadReq->ram_addr + loadReq->sample->size - 1;
@@ -1234,7 +1234,8 @@ SwMember* __Nas_Alloc_Single_Auto_Inner(s32 size) {
             }
         }
     }
-    for (i = 0; i < heap->num_entries; i++) {
+
+    for (i = 0; (s32)i < heap->num_entries; i++) {
         s8 inUse = heap->entries[i].in_use;
         if (inUse) {
             u8* start = heap->entries[i].allocated_addr;
@@ -1242,29 +1243,34 @@ SwMember* __Nas_Alloc_Single_Auto_Inner(s32 size) {
             if ((p >= oldCurrent || start >= oldCurrent) &&
                 (p < nowCurrent || start < nowCurrent)) {
                 __KillSwMember(&heap->entries[i]);
-                heap->entries[i].in_use = 0;
+                heap->entries[i].in_use = FALSE;
                 if (s == -1) {
                     s = i;
                 }
             }
         }
     }
+
     int n = heap->num_entries;
     if (s == -1) {
         for (i = 0; i < n; i++) {
             s8 inUse = heap->entries[i].in_use;
-            if (inUse == 0) {
+            if (inUse == FALSE) {
                 break;
             }
         }
+
         s = i;
         if (s == n) {
-            if (n == ARRAY_COUNT(heap->entries)) {
+            // if/else and a plain 32 (not ARRAY_COUNT) make CW reload num_entries
+            if (heap->num_entries == 32) {
                 return NULL;
+            } else {
+                heap->num_entries++;
             }
-            heap->num_entries++;
         }
     }
+
     SwMember* entry = &heap->entries[s];
     entry->in_use = TRUE;
     entry->allocated_addr = (u8*)alloc;
