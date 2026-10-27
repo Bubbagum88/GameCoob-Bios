@@ -517,13 +517,13 @@ extern s32 OverwriteBank(s32 type, s32 bankId, s32 idx, s32 table) {
 static void __Nas_Release_Channel_Main(note* n, int target) {
     note** REF_n = &n;
     STACK_PAD_VAR(1);
-    channel* chan;
-    playbackparams* param;
-    sub* subtrack;
-    s32 i;
+    envp* adsr;
     note** wanted;
     note** cur;
-    envp* adsr;
+    s32 i;
+    playbackparams* param;
+    sub* subtrack;
+    channel* chan;
 
     if (n == NA_NO_NOTE) {
         return;
@@ -535,8 +535,8 @@ static void __Nas_Release_Channel_Main(note* n, int target) {
         return;
     }
 
-    wanted = &chan->playback_ch.wanted_parent_note;
     param = &chan->playback_ch.params;
+    wanted = &chan->playback_ch.wanted_parent_note;
 
     if (*wanted == n) {
         *wanted = NA_NO_NOTE;
