@@ -1175,6 +1175,9 @@ void CardUi_UpdateFormatMsg(CardSlot* slots, u8 slot, BOOL show) {
                 }
                 Fader_Step(&sCardMsg[41 + slot], FADE_OUT);
             } else {
+                if (st == NULL) {
+                    /* fake match: keeps st live so CW forms the lhau */
+                }
                 Fader_Step(&sCardMsg[39 + slot], FADE_OUT);
                 if (slot == sCardSlot) {
                     Fader_Step(&sCardMsg[41 + slot], FADE_IN);
