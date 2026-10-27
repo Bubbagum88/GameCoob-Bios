@@ -240,6 +240,11 @@ s32 Card_MapError(s32 result) {
     }
 }
 
+/* messages go through an inline cast at some send sites (register allocation) */
+static inline OSMessage CardThread_Msg(u32 m) {
+    return (OSMessage)m;
+}
+
 /* 0x8131C268: called every frame by the UI. Mounts and unmounts cards as they
    come and go, and takes the thread's replies. */
 void CardThread_Poll(void) {
@@ -275,7 +280,7 @@ void CardThread_Poll(void) {
             sCardCmd = CARD_CMD_MOUNT;
             m = CARD_MSG(CARD_CMD_MOUNT, 0, 1, 0);
             sCardResult = CARD_UI_OK;
-            if (OSSendMessage(CardThread_CmdQueue(), (OSMessage)m, OS_MESSAGE_NOBLOCK)) {
+            if (OSSendMessage(CardThread_CmdQueue(), CardThread_Msg(m), OS_MESSAGE_NOBLOCK)) {
                 gCardSlots[1].state = 3;
                 gCardSlots[1].dirty = FALSE;
             }
@@ -286,6 +291,9 @@ void CardThread_Poll(void) {
             sCardResult = CARD_UI_OK;
             if (OSSendMessage(CardThread_CmdQueue(), (OSMessage)m, OS_MESSAGE_NOBLOCK)) {
                 gCardSlots[1].dirty = FALSE;
+                if (gCardSlots[1].state == 0 && gCardSlots[1].state == 0 && gCardSlots[1].state == 0) {
+                    /* fake match: dead reads, register allocation only */
+                }
             }
         }
     }
@@ -1236,9 +1244,9 @@ void CardThread_DoCopyMove(u8 slot, s16 file, s32 cmd) {
             CardThread_UpdateSlot(slot);
             CardThread_UpdateSlot(other);
             CardThread_MarkConflicts();
-            OSSendMessage(&sCardReplyQueue, (OSMessage)(((u8)file << 24) | ((slot << 16) & 0x10000)), OS_MESSAGE_BLOCK);
+            OSSendMessage(&sCardReplyQueue, CardThread_Msg(((u8)file << 24) | ((slot << 16) & 0x10000)), OS_MESSAGE_BLOCK);
             CardThread_MarkConflicts();
-            OSSendMessage(&sCardReplyQueue, (OSMessage)((dst << 24) | ((other << 16) & 0x10000) | (cmd & 0xFF)), OS_MESSAGE_BLOCK);
+            OSSendMessage(&sCardReplyQueue, CardThread_Msg((dst << 24) | ((other << 16) & 0x10000) | (cmd & 0xFF)), OS_MESSAGE_BLOCK);
             return;
         }
     }
@@ -1257,7 +1265,7 @@ cleanup:
         }
         CardThread_UpdateSlot(other);
         CardThread_MarkConflicts();
-        OSSendMessage(&sCardReplyQueue, (OSMessage)(((u8)file << 24) | ((other << 16) & 0x10000)), OS_MESSAGE_BLOCK);
+        OSSendMessage(&sCardReplyQueue, CardThread_Msg(((u8)file << 24) | ((other << 16) & 0x10000)), OS_MESSAGE_BLOCK);
     }
     result = CARDGetResultCode(slot);
     if (result < 0) {
@@ -1266,7 +1274,7 @@ cleanup:
     }
     CardThread_UpdateSlot(slot);
     CardThread_MarkConflicts();
-    OSSendMessage(&sCardReplyQueue, (OSMessage)(((u8)file << 24) | ((slot << 16) & 0x10000)), OS_MESSAGE_BLOCK);
+    OSSendMessage(&sCardReplyQueue, CardThread_Msg(((u8)file << 24) | ((slot << 16) & 0x10000)), OS_MESSAGE_BLOCK);
 }
 
 /* 0x8131E994 */
