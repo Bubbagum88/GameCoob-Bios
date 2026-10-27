@@ -563,6 +563,7 @@ jaudio/ipl_8135A8E0.c:
 	.data       start:0x813F7560 end:0x813F7620
 	.sbss       start:0x814AD810 end:0x814AD838
 	.sdata2     start:0x814AE4A0 end:0x814AE4E0
+	.bss        start:0x815D3C68 end:0x815D40A0
 
 jaudio/ipl_8135B360.c:
 	.text       start:0x8135B360 end:0x8135B57C align:32
