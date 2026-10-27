@@ -9,7 +9,11 @@ BEGIN_SCOPE_EXTERN_C
 #include <string.h>
 
 // The sound archive linked into the IPL (ipl.bnk, ipl.ws, ipl_0.aw, iplrom.com).
-extern u8 lbl_813F7620[];
+// Its bytes are extracted from your bs2.dol at build time (config.yml
+// "extract"), never stored in the repository.
+u8 lbl_813F7620[0xB3CA0] ATTRIBUTE_ALIGN(32) = {
+#include "jaudio/sound_archive.inc"
+};
 
 static u32 sVirtualHandle;
 

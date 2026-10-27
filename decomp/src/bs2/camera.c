@@ -65,35 +65,46 @@ MtxPtr fn_81302F94(void) {
     return lbl_814AF660;
 }
 
-/* NONMATCHING (96.6%): same code, but the stack frame is 0x20 larger than
-   the original; the rodata->temp->local double copies of pos/dir come from
-   the inline Vec returns. */
-static inline Vec Camera_LightPos(void) {
-    Vec v = { 400.0f, 500.0f, 200.0f };
+static inline Vec *Camera_VecRef(Vec *v) {
+    (void)v;
     return v;
 }
 
-static inline Vec Camera_LightDir(void) {
-    Vec v = { 0.0f, 0.0f, 0.0f };
-    return v;
-}
-
-static inline GXColor Camera_White(void) {
-    GXColor c = { 255, 255, 255, 255 };
+static inline GXColor *Camera_ColorRef(GXColor *c) {
+    (void)c;
     return c;
 }
 
-void fn_81302FA0(void) {
-    CamDispSettings *disp = Disp_GetSettings();
-    Vec pos = Camera_LightPos();
-    Vec dir = Camera_LightDir();
-    GXLightObj light;
+/* out-param + nested ref inline: rodata -> temp -> local with no dead
+   result slot (a Vec-returning inline leaves 12 dead bytes each) */
+static inline void Camera_LightPos(Vec *out) {
+    Vec v = { 400.0f, 500.0f, 200.0f };
+    *out = *Camera_VecRef(&v);
+}
 
+static inline void Camera_LightDir(Vec *out) {
+    Vec v = { 0.0f, 0.0f, 0.0f };
+    *out = *Camera_VecRef(&v);
+}
+
+static inline void Camera_SetWhite(GXLightObj *light) {
+    GXColor c = { 255, 255, 255, 255 };
+    GXInitLightColor(light, *Camera_ColorRef(&c));
+}
+
+void fn_81302FA0(void) {
+    GXLightObj light;
+    CamDispSettings *disp = Disp_GetSettings();
+    Vec pos;
+    Vec dir;
+
+    Camera_LightPos(&pos);
+    Camera_LightDir(&dir);
     PSMTXMultVec(lbl_814AF630, &pos, &pos);
     PSMTXMultVec(lbl_814AF630, &dir, &dir);
     GXInitLightPos(&light, pos.x, pos.y, pos.z);
     GXInitLightDir(&light, dir.x, dir.y, dir.z);
-    GXInitLightColor(&light, Camera_White());
+    Camera_SetWhite(&light);
     GXLoadLightObjImm(&light, GX_LIGHT0);
 }
 

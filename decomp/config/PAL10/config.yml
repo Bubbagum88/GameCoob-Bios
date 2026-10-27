@@ -19,30 +19,14 @@ add_relocations:
   type: l
   target: __ArenaLo
 block_relocations:
-# asset bytes in .data that only look like pointers into menu_fx's static pools
-- source: .data:0x8144D17C
-- source: .data:0x81496EC8
-- source: .data:0x814A1F24
-- source: .data:0x814AAC1C
-- source: .data:0x814AAC30
-- source: .data:0x814AAC44
-# word in the app's .data asset blob that only looks like a pointer into dvdthread's CALLSTACK
-- source: .data:0x81436730
-# word in the app's .data asset blob that only looks like a pointer into audiothread's stacks
-- source: .data:0x8145F484
-# word in the app's .data asset blob that only looks like a pointer into neosthread's task_buf
-- source: .data:0x8143442C
-# word in the app's .data asset blob that only looks like a pointer into parse_format
-- source: .data:0x81475984
-# word in the app's .data asset blob that only looks like a pointer into JAudio's bankp
-- source: .data:0x8145EF74
-# word in the app's .data asset blob that only looks like a pointer into JAudio's CHANNEL
-- source: .data:0x81411434
+# the two asset archives in .data (resources, sound) hold no pointers: any word
+# in them that looks like one is texture, model, layout or wave bytes
+- source: .data:0x81381820
+  end: .data:0x813F0EA0
+- source: .data:0x813F7620
+  end: .data:0x814AB2C0
 # Shift-JIS text and asset bytes that only look like pointers into seqsetup's seq array
-- source: .data:0x8149217C
 - source: .rodata:0x8137F724
-- source: .data:0x813B827C
-- source: .data:0x813C94B0
 - source: .rodata:0x8137F5F4
 - source: .rodata:0x8137F0A4
 - source: .rodata:0x8137F14C
@@ -50,40 +34,27 @@ block_relocations:
 - source: .rodata:0x8137FFD4
 - source: .rodata:0x81380004
 - source: .rodata:0x813800C0
-# asset words in .data that only look like pointers into menu_fx_draw's bss arrays
-- source: .data:0x8138D6E0
-- source: .data:0x8139A770
-- source: .data:0x8139F1B8
-- source: .data:0x813A2114
-- source: .data:0x813C548C
-- source: .data:0x8140AE80
-- source: .data:0x814317D0
-- source: .data:0x8143FD08
-- source: .data:0x8144C3EC
-- source: .data:0x81456474
-- source: .data:0x81459174
-- source: .data:0x8145C0D4
-- source: .data:0x8145E29C
-- source: .data:0x81473ECC
-- source: .data:0x81476B44
-- source: .data:0x81479F9C
-- source: .data:0x81486848
-- source: .data:0x8148E7B8
-- source: .data:0x8148FD3C
-- source: .data:0x814913FC
-- source: .data:0x8149625C
-- source: .data:0x814AABCC
-# asset words in .data that only look like pointers into memcard_draw's bss blocks
-- source: .data:0x813C5504
-- source: .data:0x813C5A08
-- source: .data:0x814AABE0
-- source: .data:0x814AAC08
-- source: .data:0x814AAC58
-# word in the same asset data that only looks like a pointer into EXIIntrruptHandler
-- source: .data:0x8141EF04
+# JAudio float tables in .rodata whose words only look like pointers into the sound archive
+- source: .rodata:0x8137F0DC
+- source: .rodata:0x8137F5B8
+- source: .rodata:0x8137F5F0
+- source: .rodata:0x8137F630
+- source: .rodata:0x8137F668
+- source: .rodata:0x8137F6A0
+- source: .rodata:0x8137F7AC
+- source: .rodata:0x813800AC
+- source: .rodata:0x813806C8
+- source: .rodata:0x8138083C
+- source: .rodata:0x81380940
 
 # Data extracted at build time into build/PAL10/include (never committed)
 extract:
 - symbol: DSPInitCode
   header: dolphin/os/DSPInitCode.inc
+  header_type: raw
+- symbol: lbl_81381820
+  header: bs2/res_archive.inc
+  header_type: raw
+- symbol: lbl_813F7620
+  header: jaudio/sound_archive.inc
   header_type: raw
