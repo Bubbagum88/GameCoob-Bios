@@ -1557,6 +1557,9 @@ static void Nas_SubSeq(sub* subtrack) {
                                 cmdArgU8 = (u8)cmdArgs[0];
                                 subtrack->gain = cmdArgU8;
                                 break;
+                            case 0xEF: // IPL-only: reads its arg, does nothing
+                                (void)cmdArgs[0];
+                                break;
                             case SUBTRACK_CMD_SET_FILTER: // set filter
                                 cmdArgU16 = (u16)cmdArgs[0];
                                 data = &grp->seq_data[cmdArgU16];
@@ -1687,8 +1690,7 @@ static void Nas_SubSeq(sub* subtrack) {
                     // continue;
                 } else if (cmd >= SUBTRACK_CMD_PORT_WRITE_MACRO_REG_MASK) {
                     s32 hi_bits = (cmd & (u8)~7);
-                    lo_bits = cmd;
-                    lo_bits &= ~0xF8;
+                    lo_bits = cmd & 7;
 
                     /* if command is not in range [0x70, 0x77] and the lower 4 bits are >= 4, set them to be 0xY0*/
                     if (hi_bits != SUBTRACK_CMD_PORT_WRITE_MACRO_REG_MASK && lo_bits >= ARRAY_COUNT(subtrack->note_layers)) {
