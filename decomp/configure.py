@@ -661,10 +661,13 @@ config.libs = [
             Object(Matching, "jaudio/cpubuf.c"),
             Object(Matching, "jaudio/playercall.c"),
             Object(Matching, "jaudio/dvdthread.c"),
+            Object(Matching, "jaudio/rate.c"),  # data only
             Object(NonMatching, "jaudio/driver.c", extra_cflags=["-i include/neos", "-D_LANGUAGE_C"]),  # NEOS (N64 audio on CPU), from AC jaudio_NES
             Object(NonMatching, "jaudio/memory.c", extra_cflags=["-i include/neos", "-D_LANGUAGE_C"]),
             Object(NonMatching, "jaudio/system.c", extra_cflags=["-i include/neos", "-D_LANGUAGE_C"]),
             Object(Matching, "jaudio/sub_sys.c", extra_cflags=["-i include/neos", "-D_LANGUAGE_C"]),
+            Object(Matching, "jaudio/audiotable.c", extra_cflags=["-i include/neos", "-D_LANGUAGE_C"]),  # data only
+            Object(Matching, "jaudio/audioconst.c", extra_cflags=["-i include/neos", "-D_LANGUAGE_C"]),  # data only
             Object(Matching, "jaudio/os.c", extra_cflags=["-i include/neos", "-D_LANGUAGE_C"]),
             Object(Matching, "jaudio/astest.c", extra_cflags=["-i include/neos", "-D_LANGUAGE_C"]),
             Object(NonMatching, "jaudio/channel.c", extra_cflags=["-i include/neos", "-D_LANGUAGE_C"]),
@@ -678,6 +681,7 @@ config.libs = [
             Object(Matching, "jaudio/dspdriver.c"),
             Object(Matching, "jaudio/dspinterface.c"),
             Object(Matching, "jaudio/fxinterface.c"),
+            Object(Matching, "jaudio/tables.c"),  # data only
             Object(Matching, "jaudio/bankread.c"),
             Object(Matching, "jaudio/waveread.c"),
             Object(Matching, "jaudio/connect.c"),
@@ -695,6 +699,7 @@ config.libs = [
             Object(Matching, "jaudio/centcalc.c"),
             Object(Matching, "jaudio/jamosc.c"),
             Object(Matching, "jaudio/oneshot.c"),
+            Object(Matching, "jaudio/audioheaders.c", extra_cflags=["-i include/neos", "-D_LANGUAGE_C"]),  # data only
             Object(Matching, "jaudio/ipl_8135A8E0.c"),  # Sound_* and boot helpers, built like JAudio (32-byte aligned)
             Object(Matching, "jaudio/ipl_8135B360.c"),  # sound archive lookups, same flags
         ],

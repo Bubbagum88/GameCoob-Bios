@@ -34,6 +34,9 @@ block_relocations:
 - source: .rodata:0x8137FFD4
 - source: .rodata:0x81380004
 - source: .rodata:0x813800C0
+- source: .rodata:0x81380524
+- source: .rodata:0x81380560
+- source: .rodata:0x8138058C
 # JAudio float tables in .rodata whose words only look like pointers into the sound archive
 - source: .rodata:0x8137F0DC
 - source: .rodata:0x8137F5B8

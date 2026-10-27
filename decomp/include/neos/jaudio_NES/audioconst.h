@@ -31,7 +31,7 @@ typedef struct _na_spec_config {
     s32 _34;
 } na_spec_config;
 
-extern na_spec_config NA_SPEC_CONFIG[1];
+extern na_spec_config NA_SPEC_CONFIG[];
 typedef struct ALGlobalsConst_ {
     s8 maxChan;
     s16 timeBase;

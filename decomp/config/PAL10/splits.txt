@@ -372,6 +372,10 @@ jaudio/dvdthread.c:
 	.sbss       start:0x814AD6F0 end:0x814AD740
 	.bss        start:0x8156ABD0 end:0x81573898
 
+jaudio/rate.c:
+	.sdata      start:0x814AD0E0 end:0x814AD0F0
+	.sbss       start:0x814AD740 end:0x814AD748
+
 jaudio/driver.c:
 	.text       start:0x8133B560 end:0x8133E860 align:32
 	.data       start:0x813F1218 end:0x813F1378
@@ -389,6 +393,12 @@ jaudio/sub_sys.c:
 	.data       start:0x813F13A0 end:0x813F1430
 	.sbss       start:0x814AD760 end:0x814AD778
 	.sdata2     start:0x814AE260 end:0x814AE278
+
+jaudio/audiotable.c:
+	.data       start:0x813F1430 end:0x813F4608
+
+jaudio/audioconst.c:
+	.data       start:0x813F4608 end:0x813F4760
 
 jaudio/os.c:
 	.text       start:0x81346B20 end:0x81346D00 align:32
@@ -456,6 +466,9 @@ jaudio/dspinterface.c:
 jaudio/fxinterface.c:
 	.text       start:0x81351040 end:0x81351180 align:32
 	.data       start:0x813F6820 end:0x813F6838
+
+jaudio/tables.c:
+	.data       start:0x813F6838 end:0x813F6A38
 
 jaudio/bankread.c:
 	.text       start:0x81351180 end:0x81351580 align:32
@@ -545,12 +558,16 @@ jaudio/oneshot.c:
 	.sdata      start:0x814AD150 end:0x814AD158
 	.sdata2     start:0x814AE470 end:0x814AE4A0
 
+jaudio/audioheaders.c:
+	.data       start:0x813F7370 end:0x813F7560
+
 jaudio/ipl_8135A8E0.c:
 	.text       start:0x8135A8E0 end:0x8135B360 align:32
 	.rodata     start:0x813806F0 end:0x81380A10
 	.data       start:0x813F7560 end:0x813F7620
 	.sbss       start:0x814AD810 end:0x814AD838
 	.sdata2     start:0x814AE4A0 end:0x814AE4E0
+	.bss        start:0x815D3C68 end:0x815D40A0
 
 jaudio/ipl_8135B360.c:
 	.text       start:0x8135B360 end:0x8135B57C align:32

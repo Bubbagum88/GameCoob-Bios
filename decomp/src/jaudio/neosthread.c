@@ -20,7 +20,7 @@ typedef struct NeosGlobalConfig {
 	u32 _08;
 	u32 _0C;
 } NeosGlobalConfig;
-extern "C" NeosGlobalConfig lbl_813F4750;                                    // AGC
+extern "C" NeosGlobalConfig AGC; // jaudio/audioconst.c (ALGlobalsConst there)
 union Acmd;
 void Nas_InitAudio(u64* acmdBuf, s32 size);
 u32 CreateAudioTask(Acmd* cmds, s16* dst, u32 samples, s32 flags);
@@ -93,7 +93,7 @@ void* neosproc(void* param)
 
 	tmp_buf = (s16*)OSAlloc2(DAC_SIZE * 2);
 
-	s32 tmp      = lbl_813F4750.acmdBufSize;
+	s32 tmp      = AGC.acmdBufSize;
 	addr = (u32)OSAlloc2(tmp);
 	if (addr == NULL) {
 		// "could not reserve memory for CPU audio"
