@@ -680,6 +680,7 @@ config.libs = [
             Object(Matching, "jaudio/dspdriver.c"),
             Object(Matching, "jaudio/dspinterface.c"),
             Object(Matching, "jaudio/fxinterface.c"),
+            Object(Matching, "jaudio/tables.c"),  # data only
             Object(Matching, "jaudio/bankread.c"),
             Object(Matching, "jaudio/waveread.c"),
             Object(Matching, "jaudio/connect.c"),
@@ -697,6 +698,7 @@ config.libs = [
             Object(Matching, "jaudio/centcalc.c"),
             Object(Matching, "jaudio/jamosc.c"),
             Object(Matching, "jaudio/oneshot.c"),
+            Object(Matching, "jaudio/audioheaders.c", extra_cflags=["-i include/neos", "-D_LANGUAGE_C"]),  # data only
             Object(Matching, "jaudio/ipl_8135A8E0.c"),  # Sound_* and boot helpers, built like JAudio (32-byte aligned)
             Object(Matching, "jaudio/ipl_8135B360.c"),  # sound archive lookups, same flags
         ],

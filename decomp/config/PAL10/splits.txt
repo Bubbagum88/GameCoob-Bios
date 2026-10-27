@@ -463,6 +463,9 @@ jaudio/fxinterface.c:
 	.text       start:0x81351040 end:0x81351180 align:32
 	.data       start:0x813F6820 end:0x813F6838
 
+jaudio/tables.c:
+	.data       start:0x813F6838 end:0x813F6A38
+
 jaudio/bankread.c:
 	.text       start:0x81351180 end:0x81351580 align:32
 	.bss        start:0x8158DEC0 end:0x8158E2C0
@@ -550,6 +553,9 @@ jaudio/oneshot.c:
 	.data       start:0x813F7330 end:0x813F7370
 	.sdata      start:0x814AD150 end:0x814AD158
 	.sdata2     start:0x814AE470 end:0x814AE4A0
+
+jaudio/audioheaders.c:
+	.data       start:0x813F7370 end:0x813F7560
 
 jaudio/ipl_8135A8E0.c:
 	.text       start:0x8135A8E0 end:0x8135B360 align:32
