@@ -428,8 +428,8 @@ void Nas_SzAutoDivide(AutoHeapstrc* param_1) {
 void* Nas_SzHeapAlloc(s32 tableType, s32 size, s32 param_3, s32 id) {
     s32* REF_size = &size;
     s32* REF_param_3 = &param_3;
-    SZAuto* auto_heap;
     SZHeap* sound_heap;
+    SZAuto* auto_heap;
     void* alloc;
     ALHeap* heap;
     u8 status0;
@@ -494,7 +494,6 @@ void* Nas_SzHeapAlloc(s32 tableType, s32 size, s32 param_3, s32 id) {
             }
 
             if (status1 == 4) {
-                int i;
                 end = AG.num_channels;
                 for (i = 0; i < end; i++) {
                     if (auto_heap->entries[1].id == AG.channels[i].playback_ch.bank_id &&
@@ -974,11 +973,11 @@ s32 Nas_SpecChange() {
  */
 void __Nas_MemoryReconfig() {
     s32 j;
+    s32 d;
     s32 i;
     s32 a;
     s32 b;
     s32 c;
-    s32 d;
     u8 pad2[24];
     na_spec_config* spec = &NA_SPEC_CONFIG[AG.spec_id];
     na_spec_config** REF_spec = &spec;
