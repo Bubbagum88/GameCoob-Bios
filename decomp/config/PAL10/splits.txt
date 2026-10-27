@@ -372,6 +372,10 @@ jaudio/dvdthread.c:
 	.sbss       start:0x814AD6F0 end:0x814AD740
 	.bss        start:0x8156ABD0 end:0x81573898
 
+jaudio/rate.c:
+	.sdata      start:0x814AD0E0 end:0x814AD0F0
+	.sbss       start:0x814AD740 end:0x814AD748
+
 jaudio/driver.c:
 	.text       start:0x8133B560 end:0x8133E860 align:32
 	.data       start:0x813F1218 end:0x813F1378
