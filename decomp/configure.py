@@ -611,7 +611,7 @@ config.libs = [
             Object(NonMatching, "bs2/font.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
             Object(NonMatching, "bs2/glh.c", extra_cflags=["-fp_contract off"]),
             Object(Matching, "bs2/fader.c"),
-            Object(NonMatching, "bs2/backdrop.c", extra_cflags=["-fp_contract off"]),
+            Object(Matching, "bs2/backdrop.c", extra_cflags=["-fp_contract off"]),
             Object(Matching, "bs2/lang.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
             Object(Matching, "bs2/scene.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
             Object(NonMatching, "bs2/scene_intro.c", extra_cflags=["-inline noauto", "-fp_contract off"]),
