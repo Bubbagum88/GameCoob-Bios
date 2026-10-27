@@ -1480,7 +1480,7 @@ extern Acmd* Nas_Synth_Envelope(Acmd* cmd, commonch* common, driverch* driver, s
     targetVolRight = common->target_volume_right << 4;
 
     if (AG.sound_mode == SOUND_OUTPUT_DOLBY_SURROUND) {
-        u8 idx = common->surround_effect_idx;
+        s32 idx = common->surround_effect_idx;
 
         if (idx != 0xFF) {
             defaultPanVolume = StereoLeft[idx];

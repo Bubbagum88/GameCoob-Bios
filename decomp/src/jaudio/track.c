@@ -808,9 +808,9 @@ static s32 __SetVoice(note* n, s32 arg) {
     f32 tuning;
     f32 t0;
     f32 t1;
-    f32 freq0;
     f32 freq1;
     f32 time;
+    u8 pad[40]; // frame is 0x28 bigger than the visible locals need
     u8* REF_semitone = &semitone;
     perctable** REF_percussion = &percussion;
     percvoicetable** REF_effect = &effect;
@@ -1008,6 +1008,8 @@ static s32 __SetVoice(note* n, s32 arg) {
             time = 0.0f;
         }
 
+        //! FAKE: second tempo int->float conversion (dead in target)
+        (void)(f32)grp->tempo;
         time *= grp->tempo;
         time *= AG.sample_to_update_delay_scale;
         time /= n->frequency_scale;
@@ -1016,7 +1018,7 @@ static s32 __SetVoice(note* n, s32 arg) {
             time = (f32)0x7FFE;
         }
 
-        n->delay = (u16)(s32)time + 1;
+        n->delay = (s16)(s32)time + 1;
         n->gate_delay = 0;
 
         if (n->portamento_sweep.mode != PORTAMENTO_MODE_OFF) {
@@ -1555,6 +1557,9 @@ static void Nas_SubSeq(sub* subtrack) {
                                 cmdArgU8 = (u8)cmdArgs[0];
                                 subtrack->gain = cmdArgU8;
                                 break;
+                            case 0xEF: // IPL-only: reads its arg, does nothing
+                                (void)cmdArgs[0];
+                                break;
                             case SUBTRACK_CMD_SET_FILTER: // set filter
                                 cmdArgU16 = (u16)cmdArgs[0];
                                 data = &grp->seq_data[cmdArgU16];
@@ -1685,8 +1690,7 @@ static void Nas_SubSeq(sub* subtrack) {
                     // continue;
                 } else if (cmd >= SUBTRACK_CMD_PORT_WRITE_MACRO_REG_MASK) {
                     s32 hi_bits = (cmd & (u8)~7);
-                    lo_bits = cmd;
-                    lo_bits &= ~0xF8;
+                    lo_bits = cmd & 7;
 
                     /* if command is not in range [0x70, 0x77] and the lower 4 bits are >= 4, set them to be 0xY0*/
                     if (hi_bits != SUBTRACK_CMD_PORT_WRITE_MACRO_REG_MASK && lo_bits >= ARRAY_COUNT(subtrack->note_layers)) {
