@@ -240,7 +240,7 @@ s32 Card_MapError(s32 result) {
     }
 }
 
-/* the mount message goes through an inline cast (register allocation) */
+/* messages go through an inline cast at some send sites (register allocation) */
 static inline OSMessage CardThread_Msg(u32 m) {
     return (OSMessage)m;
 }
@@ -1244,9 +1244,9 @@ void CardThread_DoCopyMove(u8 slot, s16 file, s32 cmd) {
             CardThread_UpdateSlot(slot);
             CardThread_UpdateSlot(other);
             CardThread_MarkConflicts();
-            OSSendMessage(&sCardReplyQueue, (OSMessage)(((u8)file << 24) | ((slot << 16) & 0x10000)), OS_MESSAGE_BLOCK);
+            OSSendMessage(&sCardReplyQueue, CardThread_Msg(((u8)file << 24) | ((slot << 16) & 0x10000)), OS_MESSAGE_BLOCK);
             CardThread_MarkConflicts();
-            OSSendMessage(&sCardReplyQueue, (OSMessage)((dst << 24) | ((other << 16) & 0x10000) | (cmd & 0xFF)), OS_MESSAGE_BLOCK);
+            OSSendMessage(&sCardReplyQueue, CardThread_Msg((dst << 24) | ((other << 16) & 0x10000) | (cmd & 0xFF)), OS_MESSAGE_BLOCK);
             return;
         }
     }
@@ -1265,7 +1265,7 @@ cleanup:
         }
         CardThread_UpdateSlot(other);
         CardThread_MarkConflicts();
-        OSSendMessage(&sCardReplyQueue, (OSMessage)(((u8)file << 24) | ((other << 16) & 0x10000)), OS_MESSAGE_BLOCK);
+        OSSendMessage(&sCardReplyQueue, CardThread_Msg(((u8)file << 24) | ((other << 16) & 0x10000)), OS_MESSAGE_BLOCK);
     }
     result = CARDGetResultCode(slot);
     if (result < 0) {
@@ -1274,7 +1274,7 @@ cleanup:
     }
     CardThread_UpdateSlot(slot);
     CardThread_MarkConflicts();
-    OSSendMessage(&sCardReplyQueue, (OSMessage)(((u8)file << 24) | ((slot << 16) & 0x10000)), OS_MESSAGE_BLOCK);
+    OSSendMessage(&sCardReplyQueue, CardThread_Msg(((u8)file << 24) | ((slot << 16) & 0x10000)), OS_MESSAGE_BLOCK);
 }
 
 /* 0x8131E994 */
