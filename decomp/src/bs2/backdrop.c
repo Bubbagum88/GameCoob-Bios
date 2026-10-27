@@ -86,26 +86,35 @@ static inline void Backdrop_LoadSpot(Mtx mv, Vec *pos, f32 bright, f32 cutoff, u
     GXLoadLightObjImm(&light, id);
 }
 
-static inline Vec Backdrop_Vec(Vec *p) {
-    Vec v = { 0.0f, 0.0f, 0.0f };
-
-    v.x = p->x;
-    v.y = p->y;
-    v.z = p->z;
+/* copy *p into the caller's zeroed v; returning the pointer keeps v a
+   caller local (slot below amb) instead of an inline temp */
+static inline Vec *Backdrop_Vec(Vec *v, Vec *p) {
+    v->x = p->x;
+    v->y = p->y;
+    v->z = p->z;
     return v;
 }
 
 /* 0x8130AF54: the menu background, a 584x448 grid of 32x32 tiles (res 89)
    lit by GX_LIGHT3 at menu->lightPos plus the extra lights in mask */
 void Backdrop_DrawLit(Mtx mv, u8 alpha, u32 lights, u8 spotAlpha) {
+    /* named consts, assigned after pos: the original stores mat/amb late */
+    static const GXColor kMat = { 255, 255, 255, 255 };
+    static const GXColor kAmb = { 0, 0, 0, 0 };
     MenuWork *menu = Menu_Get();
-    Vec pos = Backdrop_Vec(&menu->lightPos);
-    GXColor mat = { 255, 255, 255, 255 };
-    GXColor amb = { 0, 0, 0, 0 };
+    Vec pos;
+    GXColor mat;
+    s32 pad;
+    GXColor amb;
+    Vec v = { 0.0f, 0.0f, 0.0f };
     s32 x;
     s32 y;
-    void *tex = ResGet(89);
+    void *tex;
 
+    pos = *Backdrop_Vec(&v, &menu->lightPos);
+    mat = kMat;
+    amb = kAmb;
+    tex = ResGet(89);
     Backdrop_LoadSpot(mv, &pos, menu->lightAttnK, menu->lightCutoff, spotAlpha, GX_LIGHT3);
     J3D_LoadTexture(0, tex);
     Backdrop_SetupGX(lights | GX_LIGHT3);
