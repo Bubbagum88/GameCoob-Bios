@@ -1214,12 +1214,11 @@ static inline void CardUi_UpdateSlotMsgs(CardSlot* slots, volatile CardSlot* s, 
 
 /* 0x81317F40: per-frame fades of the slot messages and arrows. */
 void CardUi_UpdateFaders(void) {
-    CardSlot* s;
     CardSlot* slots = CardThread_GetSlots();
     u8 i;
 
-    for (i = 0, s = slots; i < 2; i++, s++) {
-        if (s->state == CARD_SLOT_READY) {
+    for (i = 0; i < 2; i++) {
+        if (slots[i].state == CARD_SLOT_READY) {
             Fader_Step(&sCardFadeA[i], FADE_IN);
             CardUi_UpdateOpFaders(0);
             CardUi_UpdateOpFaders(1);
@@ -1227,14 +1226,14 @@ void CardUi_UpdateFaders(void) {
             Fader_Step(&sCardFadeA[i], FADE_OUT);
         }
         if (sCardUiState != 5) {
-            CardUi_UpdateSlotMsgs(slots, s, i, FALSE);
+            CardUi_UpdateSlotMsgs(slots, &slots[i], i, FALSE);
         } else if ((sCardOpKind != CARD_CMD_FORMAT && sCardOpKind != 8) || sCardOpSlot == i) {
             Fader_Step(&sCardMsg[33 + i], FADE_OUT);
             Fader_Step(&sCardMsg[35 + i], FADE_OUT);
             Fader_Step(&sCardMsg[39 + i], FADE_OUT);
             Fader_Step(&sCardMsg[41 + i], FADE_OUT);
         } else if (sCardOpSlot != i) {
-            CardUi_UpdateSlotMsgs(slots, s, i, TRUE);
+            CardUi_UpdateSlotMsgs(slots, &slots[i], i, TRUE);
         }
         if (sCardUiState == 1) {
             if (sCardTop[i] > 0) {
@@ -2301,12 +2300,25 @@ u32 CardDraw_LoadFileIcon(void) {
 }
 
 /* 0x8131B56C: title, comment and block count of the selected file. */
+static inline GXColor* CardDraw_ColorRef(GXColor* c) {
+    return c;
+}
+
+static inline void CardDraw_SetWhite(GXColor* out, u8 a) {
+    GXColor c = { 255, 255, 255, 0 };
+
+    c.a = a;
+    *out = *CardDraw_ColorRef(&c);
+}
+
 void CardDraw_FileInfo(u8 alpha) {
     u8 slot = sCardSlot;
     s16 file = sCardSort[slot][sCardCol[slot] + (sCardRow[slot] + sCardTop[slot]) * 4].file;
-    GXColor frm = CardDraw_White(alpha);
+    GXColor frm;
     CardFile(*files)[CARD_MAX_FILES];
+    u32 pad;
 
+    CardDraw_SetWhite(&frm, alpha);
     files = CardThread_GetFiles();
     GX_Setup2DTex();
     if (files[slot][file].used) {
