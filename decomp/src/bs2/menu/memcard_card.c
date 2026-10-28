@@ -1182,7 +1182,7 @@ void CardThread_DoCopyMove(u8 slot, s16 file, s32 cmd) {
     u32 sector;
 
     done = error = 0;
-    result = CardThread_FindInOther(slot, file);
+    result = sector = CardThread_FindInOther(slot, file); /* fake match: sector as scratch, regalloc only */
     if (result < 0) {
         CardThread_Error(slot, cmd, result);
         return;
