@@ -1705,24 +1705,38 @@ BOOL CardDraw_IconFrameCount(s32 slot, s32 file) {
     return CardDraw_SetIconFrame(slot, file, (u8)(n - 1));
 }
 
-/* white with alpha a */
-static inline GXColor CardDraw_White(u8 a) {
+static inline GXColor* CardDraw_ColorRef(GXColor* c) {
+    return c;
+}
+
+/* white with alpha a, copied out through a pointer (stack slot order) */
+static inline void CardDraw_SetWhite(GXColor* out, u8 a) {
     GXColor c = { 255, 255, 255, 0 };
 
     c.a = a;
-    return c;
+    *out = *CardDraw_ColorRef(&c);
+}
+
+/* fake match: only takes a stack slot below the inline color */
+static inline void CardDraw_StackPad(void) {
+    u8 unused[4];
+
+    (void)&unused;
 }
 
 /* 0x81319A8C: icon of grid cell `pos`; the selected file without a */
 /* banner also gets the 'ic00' pane. */
 void CardDraw_Icon(u8 slot, s16 pos, u8 frame, u8 alpha) {
     CardIconInfo(*icons)[CARD_MAX_FILES] = CardThread_GetIcons();
-    GXColor color = CardDraw_White(alpha);
+    GXColor color;
     u32 sel;
+    u32 p;
     u32 file;
 
+    CardDraw_SetWhite(&color, alpha);
+    CardDraw_StackPad();
     sel = sCardSort[sCardSlot][sCardCol[sCardSlot] + (sCardRow[sCardSlot] + sCardTop[sCardSlot]) * 4].file;
-    file = sCardSort[slot][pos + sCardTop[slot] * 4].file;
+    file = sCardSort[slot][(p = pos) + sCardTop[slot] * 4].file;
     if (CardDraw_SetIconFrame(slot, file, frame)) {
         GX_Setup2D(1, 0, 1);
         if (sel == file && slot == sCardSlot && icons[slot][file].hasBanner == 0) {
@@ -2302,11 +2316,8 @@ u32 CardDraw_LoadFileIcon(void) {
 }
 
 /* 0x8131B56C: title, comment and block count of the selected file. */
-static inline GXColor* CardDraw_ColorRef(GXColor* c) {
-    return c;
-}
-
-static inline void CardDraw_SetWhite(GXColor* out, u8 a) {
+/* own copy: each inline definition gets its own color literal */
+static inline void CardDraw_SetWhite2(GXColor* out, u8 a) {
     GXColor c = { 255, 255, 255, 0 };
 
     c.a = a;
@@ -2320,7 +2331,7 @@ void CardDraw_FileInfo(u8 alpha) {
     CardFile(*files)[CARD_MAX_FILES];
     u32 pad;
 
-    CardDraw_SetWhite(&frm, alpha);
+    CardDraw_SetWhite2(&frm, alpha);
     files = CardThread_GetFiles();
     GX_Setup2DTex();
     if (files[slot][file].used) {
