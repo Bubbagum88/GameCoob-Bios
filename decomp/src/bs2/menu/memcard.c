@@ -2073,7 +2073,7 @@ void CardDraw_TextBox(u8 slot, CardSlotFade* f, void* sth, void* glh, GXColor* c
     GlhText box;
     u16 step;
     u16 i;
-    u16 str;
+    int str;
 
     col.r = p->white[0];
     col.g = p->white[1];
