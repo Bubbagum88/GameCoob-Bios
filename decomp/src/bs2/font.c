@@ -348,6 +348,7 @@ s32 Font_Measure(FontBox *box, u8 *str, u16 *lineW, s32 *linesOut, BOOL wrap, BO
     u16 size = box->size;
     s32 height = sFont.ascent * size * 16 / sFont.cellHeight + sFont.descent * size * 16 / sFont.cellHeight;
     s32 cs;
+    s16 space;
     s32 line = 0;
     u16 curW = 0;
     s32 w = box->w & 0xFFFF;
@@ -378,8 +379,8 @@ s32 Font_Measure(FontBox *box, u8 *str, u16 *lineW, s32 *linesOut, BOOL wrap, BO
             }
         } else {
             last = code;
-            nw = box->charSpace * 16 + box->size * (sWidth[Font_Index(code)] * 16) / sFont.cellWidth + curW;
-            cs = box->charSpace;
+            nw = (space = box->charSpace) * 16 + box->size * (sWidth[Font_Index(code)] * 16) / sFont.cellWidth + curW;
+            cs = space;
             if (cs > 0) {
                 if (nw - cs * 16 > w) {
                     over = TRUE;
