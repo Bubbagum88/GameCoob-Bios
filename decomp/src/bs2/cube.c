@@ -394,23 +394,28 @@ static inline void Cube_DrawPath(void) {
         PSMTXConcat(t, sCubeMtx, sCubeMtx);
         break;
     }
-    {
-        Vec scale = { 0.0f, 0.0f, 0.0f };
-
-        scale.x = s->modelScale;
-        scale.y = s->modelScale;
-        scale.z = s->modelScale;
-        J3D_SetModelMtx(Cube_GetModel(), sCubeMtx, scale);
-    }
+    J3D_SetModelMtx(Cube_GetModel(), sCubeMtx, (Vec){ s->modelScale, s->modelScale, s->modelScale });
     view = Camera_GetView();
     J3D_SetViewMtx(Cube_GetModel(), view);
     J3D_CalcJoints(Cube_GetModel());
 }
 
-static inline Vec Cube_VecOne(void) {
-    Vec v = { 1.0f, 1.0f, 1.0f };
+/* Defined here, before Cube_SetModel, so its {1,1,1} literal lands between
+   the two zero vectors in .rodata. The compound literals give the original's
+   slot order (literal above its by-value copy). */
+static inline void Cube_DrawText(void) {
+    Mtx m;
+    MtxPtr view;
+    f32 frame;
 
-    return v;
+    /* The "GAMECUBE" wordmark joint animation (60 frames) runs off the
+       text clock that starts with the drop. */
+    frame = Cube_TextFrame();
+    PSMTXIdentity(m);
+    J3D_SetModelMtx(Scene_GetLogoText(), m, (Vec){ 1.0f, 1.0f, 1.0f });
+    view = Camera_GetView();
+    J3D_SetViewMtx(Scene_GetLogoText(), view);
+    J3D_AnimateJoints(Scene_GetLogoText(), frame);
 }
 
 static inline void Cube_SetModel(Scene *s) {
@@ -458,23 +463,6 @@ static void Cube_DrawRise(void) {
     }
     PSMTXConcat(t, sCubeMtx, sCubeMtx);
     Cube_SetModel(s);
-}
-
-/* Phases 0 and 1: fall, then roll along the path. */
-
-static inline void Cube_DrawText(void) {
-    Mtx m;
-    MtxPtr view;
-    f32 frame;
-
-    /* The "GAMECUBE" wordmark joint animation (60 frames) runs off the
-       text clock that starts with the drop. */
-    frame = Cube_TextFrame();
-    PSMTXIdentity(m);
-    J3D_SetModelMtx(Scene_GetLogoText(), m, Cube_VecOne());
-    view = Camera_GetView();
-    J3D_SetViewMtx(Scene_GetLogoText(), view);
-    J3D_AnimateJoints(Scene_GetLogoText(), frame);
 }
 
 /* 0x81310060 */
