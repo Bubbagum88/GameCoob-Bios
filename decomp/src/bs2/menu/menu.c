@@ -494,6 +494,9 @@ static s32 Menu_HandleInput(void) {
     return 0;
 }
 
+/* Passing the scale through VecRef gives the IPL's by-value copy + dead slot. */
+static inline Vec *VecRef(Vec *v) { (void)v; return v; }
+
 /* 0x81311D50: cube matrix = rotation * idle wobble * zoom, then the model. */
 static void Menu_CalcCubeMtx(void) {
     Mtx m;
@@ -505,7 +508,6 @@ static void Menu_CalcCubeMtx(void) {
     MenuWork *w;
     f32 tx, ty;
     s16 rz, ry;
-    MtxPtr view;
 
     scene = Scene_Get();
     PSMTXIdentity(m);
@@ -535,9 +537,8 @@ static void Menu_CalcCubeMtx(void) {
 
     s = sZeroVec;
     s.z = s.y = s.x = 1.1f * scene->modelScale;
-    J3D_SetModelMtx(Scene_GetBigCube(), sCubeMtx, s);
-    view = Camera_GetView();
-    J3D_SetViewMtx(Scene_GetBigCube(), view);
+    J3D_SetModelMtx(Scene_GetBigCube(), sCubeMtx, *VecRef(&s));
+    J3D_SetViewMtx(Scene_GetBigCube(), Camera_GetView());
 }
 
 /* 0x81312044: Game Play face shows the banner, "no disc" or an unknown disc. */
@@ -983,16 +984,25 @@ enum { FACE_TOP = 0, FACE_WORK = 1, FACE_CARD = 2, FACE_GAME = 3, FACE_CLOCK = 4
         GXSetCurrentMtx(GX_PNMTX0);                     \
     } while (0)
 
-/* 0x81312F88: the front face on the spinning cube during the spin-out
-   (Scene state 4). The alpha is applied twice (alpha^2 / 255). */
-static inline void Menu_DrawFrontFace(MtxPtr cube, SRT srt, u8 alpha) {
-    GXColor c = { 255, 255, 255, 255 };
-    Mtx m;
-    Mtx tmp;
+static const GXColor kWhite = { 255, 255, 255, 255 };
 
+/* 0x81312F88: the front face on the spinning cube during the spin-out
+   (Scene state 4). The alpha is applied twice (alpha^2 / 255).
+   Menu_DrawFaces inlines it (auto_inline) for the front face. */
+#pragma auto_inline on
+void Menu_DrawSpinOutFace(MtxPtr cube, u8 alpha) {
+    Mtx tmp;
+    Mtx m;
+    SRT s2;
+    GXColor c;
+    SRT srt = sFaceSRT[FACE_TOP];
+    SRT *d = &srt;
+
+    s2 = *d;
+    c = kWhite;
     PSMTXConcat(Camera_GetView(), cube, tmp);
     c.a = alpha;
-    MtxFromSRT(&srt, m);
+    MtxFromSRT(&s2, m);
     PSMTXConcat(tmp, m, m);
     GXLoadPosMtxImm(m, GX_PNMTX0);
     GXSetCurrentMtx(GX_PNMTX0);
@@ -1000,13 +1010,7 @@ static inline void Menu_DrawFrontFace(MtxPtr cube, SRT srt, u8 alpha) {
     GX_Setup2DTex();
     Glh_DrawAll(gTopFaceGlh, &c);
 }
-
-void Menu_DrawSpinOutFace(MtxPtr cube, u8 alpha) {
-    SRT srt = sFaceSRT[FACE_TOP];
-    SRT *d = &srt;
-
-    Menu_DrawFrontFace(cube, *d, alpha);
-}
+#pragma auto_inline reset
 
 /* 0x813130CC: disc banner on the Game face: image, short name, maker. */
 static void Menu_DrawBannerInfo(void *glh, u8 alpha) {
@@ -1109,9 +1113,9 @@ static inline void Menu_DrawFillBar(u32 tag, void *glh, GXColor *c, u8 fill) {
     }
     for (i = 0; i < ((Glh *)glh)->nFrames; f++, i++) {
         if (tag == f->tag) {
-            Glh_DrawPaneRect(i, glh, c, f->x - f->innerW / 2,
-                             f->y - f->innerH / 2 + f->innerH - fill * f->innerH / 255,
-                             f->innerW, fill * f->innerH / 255);
+            s32 y = f->y - f->innerH / 2;
+            s32 x = f->x - f->innerW / 2;
+            Glh_DrawPaneRect(i, glh, c, x, y + f->innerH - fill * f->innerH / 255, f->innerW, fill * f->innerH / 255);
         }
     }
 }
@@ -1313,19 +1317,13 @@ void Menu_DrawFaces(u8 alpha) {
     /* front face: fades with the larger of the two turns */
     if (ax > ay) {
         MtxPtr cube = sCubeMtx;
-        SRT s = sFaceSRT[FACE_TOP];
-        SRT *d = &s;
-        Menu_DrawFrontFace(cube, *d, 255 - ax * 255 / FACE_FADE_RANGE);
+        Menu_DrawSpinOutFace(cube, 255 - ax * 255 / FACE_FADE_RANGE);
     } else if (ax < ay) {
         MtxPtr cube = sCubeMtx;
-        SRT s = sFaceSRT[FACE_TOP];
-        SRT *d = &s;
-        Menu_DrawFrontFace(cube, *d, 255 - ay * 255 / FACE_FADE_RANGE);
+        Menu_DrawSpinOutFace(cube, 255 - ay * 255 / FACE_FADE_RANGE);
     } else if (ax == 0) {
         MtxPtr cube = sCubeMtx;
-        SRT s = sFaceSRT[FACE_TOP];
-        SRT *d = &s;
-        Menu_DrawFrontFace(cube, *d, 255 - ax * 255 / FACE_FADE_RANGE);
+        Menu_DrawSpinOutFace(cube, 255 - ax * 255 / FACE_FADE_RANGE);
     }
 
     /* bottom: Memory Card */
@@ -1399,6 +1397,7 @@ static void Menu_DrawGuideText(u8 alpha) {
     GXColor c = { 255, 255, 255, 255 };
     s32 lang;
     s16 a;
+    Fader *t = sGuideText;  /* labels 3..7 go through t: the IPL hoists only 1 and 2 */
 
     for (lang = 0; lang < 6; lang++) {
         Fader_GetAlpha(&sLangGuide[lang], &a, NULL);
@@ -1406,11 +1405,11 @@ static void Menu_DrawGuideText(u8 alpha) {
         Fader_DrawString(&sGuideText[0], sGuideSth[lang], gGuideGlh, &c);
         Fader_DrawString(&sGuideText[1], sGuideSth[lang], gGuideGlh, &c);
         Fader_DrawString(&sGuideText[2], sGuideSth[lang], gGuideGlh, &c);
-        Fader_DrawString(&sGuideText[3], sGuideSth[lang], gGuideGlh, &c);
-        Fader_DrawString(&sGuideText[4], sGuideSth[lang], gGuideGlh, &c);
-        Fader_DrawString(&sGuideText[5], sGuideSth[lang], gGuideGlh, &c);
-        Fader_DrawString(&sGuideText[6], sGuideSth[lang], gGuideGlh, &c);
-        Fader_DrawString(&sGuideText[7], sGuideSth[lang], gGuideGlh, &c);
+        Fader_DrawString(&t[3], sGuideSth[lang], gGuideGlh, &c);
+        Fader_DrawString(&t[4], sGuideSth[lang], gGuideGlh, &c);
+        Fader_DrawString(&t[5], sGuideSth[lang], gGuideGlh, &c);
+        Fader_DrawString(&t[6], sGuideSth[lang], gGuideGlh, &c);
+        Fader_DrawString(&t[7], sGuideSth[lang], gGuideGlh, &c);
     }
 }
 
@@ -1434,6 +1433,8 @@ void Menu_DrawGuide(u8 alpha) {
     u8 fa;
     u32 i;
     u32 tag;
+    u8 pad[4];
+    u32 stk = 'stk0';
 
     colA.r = (u8)gMenu->guideColorA[0];
     colA.g = (u8)gMenu->guideColorA[1];
@@ -1460,14 +1461,15 @@ void Menu_DrawGuide(u8 alpha) {
         pulse = 255 - (gGuideBlink % 128) * 155 / 127;
     }
     base = (s16)(pulse * alpha / 255);
+    tag = 'bac1';
     for (i = 0; i < 2; i++) {
         back.a = (u8)(base * ga[i] / 255);
         colB.a = (u8)(base * gb[i] / 255);
         colA.a = (u8)(base * gc[i] / 255);
-        tag = 'bac1' + i * 3;
         Glh_DrawPane(tag, gGuideGlh, &back);
         Glh_DrawPane(tag + 1, gGuideGlh, &colB);
         Glh_DrawPane(tag + 2, gGuideGlh, &colA);
+        tag += 3;
     }
 
     /* stick: every 128 frames cross-fade between the neutral sprite
@@ -1482,11 +1484,11 @@ void Menu_DrawGuide(u8 alpha) {
         fa = (u8)(f * alpha / 255);
         stick.a = 255 - fa;
         stick.a = (u8)(stick.a * ga[i] / 255);
-        tag = 'stk0' + i * 5;
-        Glh_DrawPane(tag + ((k + 1) / 2 + 3) % 4 + 1, gGuideGlh, &stick);
+        Glh_DrawPane(stk + ((k + 1) / 2 + 3) % 4 + 1, gGuideGlh, &stick);
         stick.a = fa;
         stick.a = (u8)(stick.a * ga[i] / 255);
-        Glh_DrawPane(tag, gGuideGlh, &stick);
+        Glh_DrawPane(stk, gGuideGlh, &stick);
+        stk += 5;
     }
 
     /* button glyphs and the dots after them, faded in by gGuideAlpha */
@@ -1513,8 +1515,8 @@ void Menu_DrawGuide(u8 alpha) {
     GX_Setup2DText();
     Menu_DrawGuideText(alpha);
 
-    gGuideAlpha += 4;
     gGuideBlink++;
+    gGuideAlpha += 4;
     if (gGuideAlpha > 255) gGuideAlpha = 255;
 }
 
