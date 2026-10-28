@@ -247,6 +247,18 @@ static inline void CardBlock_Move(CardBlock* b) {
     }
 }
 
+/* Unreferenced, so the linker strips it from the IPL. It sits here because the
+ * 0.0f/4672.0f/3200.0f it uses come before CalcBurst's 48/.25/.75 in .sdata2. */
+static void CardFly_Bounce(void) {
+    sFly.p1.z = 0.0f;
+    if (sFly.p1.x >= 4672.0f) {
+        sFly.p1.x = 4672.0f;
+    }
+    if (sFly.p1.y >= 3200.0f) {
+        sFly.p1.y = 3200.0f;
+    }
+}
+
 /* 0x8131F770: one piece of the Erase burst */
 static inline void CardBlock_SetBurstMtx(J3DModelInstance* inst, Mtx m) {
     Vec* s;
