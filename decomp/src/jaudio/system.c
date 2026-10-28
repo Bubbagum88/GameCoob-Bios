@@ -1990,7 +1990,7 @@ void WaveReload(s32 bank_id, s32 async, WaveMedia* wavemedia) {
     s32 n_sfx;
     perctable* percussion;
     voicetable* instrument;
-    u8* sample;
+    u32 hdr;
     percvoicetable* sfx;
     Bgloadreq* preload;
     Bgloadreq* top_preload;
@@ -2090,11 +2090,12 @@ void WaveReload(s32 bank_id, s32 async, WaveMedia* wavemedia) {
             continue;
         }
 
-        sample = wavetable->sample;
+        // raw first word of the wavetable (medium/flags + 24-bit size)
+        hdr = *(u32*)wavetable;
         switch (async) {
             case FALSE:
                 if (wavetable->medium == MEDIUM_DISK) {
-                    Nas_FastDiskCopy(sample, addr, wavetable->size, AG.wave_header->medium);
+                    Nas_FastDiskCopy(wavetable->sample, addr, hdr & 0xFFFFFF, AG.wave_header->medium);
                     wavetable->medium = MEDIUM_RAM;
                     wavetable->sample = addr;
                 } else {
