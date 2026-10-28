@@ -99,6 +99,9 @@ void CardBlock_DrawSlot(u8 slot, u8 alpha);
         dst = *d_;                         \
     } while (0)
 
+/* a by-value copy through this keeps the temp -> arg copy pair */
+static inline Vec* CardVecRef(Vec* v) { (void)v; return v; }
+
 /* 0x8131EDBC */
 void CardBlock_Init(CardBlock* b) {
     Vec zero = {0.0f, 0.0f, 0.0f};
@@ -171,8 +174,7 @@ void CardBlock_CalcMtx(void) {
     f32 t;
     MenuWork* menu;
     CardParams* params;
-    CardFile* files;
-    CardFile* f;
+    CardFile (*files)[CARD_MAX_FILES];
     CardBlock* b;
     int slot;
     int i;
@@ -189,9 +191,8 @@ void CardBlock_CalcMtx(void) {
     files = CardThread_GetFiles();
     w = sWobble;
     MtxFromSRT(&srt, base);
-    f = files;
     for (slot = 0; slot < 2; slot++) {
-        for (i = 0; i < CARD_MAX_FILES; i++, f++) {
+        for (i = 0; i < CARD_MAX_FILES; i++) {
             b = &sBlocks[slot][i];
             VEC_SETP(scale, b->zoom, b->zoom, b->zoom);
             if (slot == sOpSlot && i == sOpFile && sFlying) {
@@ -209,7 +210,7 @@ void CardBlock_CalcMtx(void) {
                        pos.y - t * params->f68_ * SinS(w * 70), pos.z);
             PSMTXConcat(m, base, m);
             PSMTXConcat(m, rot, m);
-            if (f->used) {
+            if (files[slot][i].used) {
                 J3D_SetModelMtx(&sFileInst[slot][i], m, scale);
                 J3D_SetViewMtx(&sFileInst[slot][i], fn_81302F94());
                 J3D_CalcJoints(&sFileInst[slot][i]);
@@ -241,8 +242,8 @@ void CardBlock_CalcMtx(void) {
 }
 
 static inline void CardBlock_Move(CardBlock* b) {
-    Vec zero = {0.0f, 0.0f, 0.0f};
     Vec p;
+    Vec zero = {0.0f, 0.0f, 0.0f};
 
     if (b->frame >= b->start) {
         VecHermite(&b->p0, &b->v0, &b->p1, &zero, &p, b->frame, b->start, b->end);
@@ -265,10 +266,14 @@ static inline void CardBlock_SetBurstMtx(J3DModelInstance* inst, Mtx m) {
     J3D_SetModelMtx(inst, m, *s);
 }
 
+/* y comes first: the args are evaluated right to left, so SinS runs before CosS */
+static inline void CardBurst_Trans(Mtx m, f32 y, f32 x) {
+    PSMTXTrans(m, x, y, 0.0f);
+}
+
 void CardBlock_CalcBurst(s32 i) {
     Mtx m;
-    f32 x;
-    f32 y;
+    u8 pad[16];
     f32 t;
 
     if (sBurstFrame[i] > sBurstDelay[i]) {
@@ -280,9 +285,8 @@ void CardBlock_CalcBurst(s32 i) {
     } else {
         t = 0.0f;
     }
-    x = 48.0f * (0.25f + 0.75f * t) * SinS(sBurstAngle[i]);
-    y = 48.0f * (0.25f + 0.75f * t) * CosS(sBurstAngle[i]);
-    PSMTXTrans(m, x, y, 0.0f);
+    CardBurst_Trans(m, 48.0f * (0.25f + 0.75f * t) * CosS(sBurstAngle[i]),
+                    48.0f * (0.25f + 0.75f * t) * SinS(sBurstAngle[i]));
     PSMTXConcat(sFlyMtx, m, m);
     CardBlock_SetBurstMtx(&sBurstInst[i], m);
     J3D_SetViewMtx(&sBurstInst[i], fn_81302F94());
@@ -290,12 +294,61 @@ void CardBlock_CalcBurst(s32 i) {
 }
 
 /* 0x8131F8F8 */
+/* the erased block shrinks; TRUE once it is gone */
+static inline BOOL CardBlock_Shrink(void) {
+    BOOL done = FALSE;
+
+    sFly.zoom = Hermite(sFly.zoomFrame, 0.0f, sFly.zoomMin, 0.0f, sFly.zoomLen, sFly.zoomMax, 0.0f);
+    sFly.zoomFrame--;
+    if (sFly.zoomFrame > sFly.zoomLen) {
+        sFly.zoomFrame = sFly.zoomLen;
+    }
+    if (sFly.zoomFrame < 0) {
+        sFly.zoomFrame = 0;
+        done = TRUE;
+    }
+    return done;
+}
+
+/* the Erase burst starts: random delays and directions */
+static inline void CardBlock_StartBurst(void) {
+    int i;
+
+    for (i = 0; i < CARD_BLOCK_BURST; i++) {
+        sBurstFrame[i] = 0;
+        sBurstLen[i] = 10;
+        sBurstDelay[i] = Rand() & 3;
+        sBurstAngle[i] = (u16)Rand();
+    }
+}
+
+/* one frame of the Erase burst; TRUE once every piece is done */
+static inline BOOL CardBlock_StepBurst(void) {
+    BOOL done;
+    int i;
+    int n;
+
+    done = FALSE;
+    n = 0;
+    for (i = 0; i < CARD_BLOCK_BURST; i++) {
+        sBurstFrame[i]++;
+        if (sBurstFrame[i] > sBurstDelay[i] && sBurstFrame[i] - sBurstDelay[i] > sBurstLen[i]) {
+            sBurstFrame[i] = sBurstLen[i] + sBurstDelay[i];
+            n++;
+        }
+        CardBlock_CalcBurst(i);
+    }
+    if (n == CARD_BLOCK_BURST) {
+        done = TRUE;
+    }
+    return done;
+}
+
 void fn_8131F8F8(void) {
     CardBlock* b;
     int slot;
     int i;
     int step;
-    BOOL done;
     int n;
 
     if (!CardIcon_IsSettled()) {
@@ -313,40 +366,12 @@ void fn_8131F8F8(void) {
                 sFly.zoomFrame = 0;
             }
         } else {
-            done = FALSE;
-            sFly.zoom = Hermite(sFly.zoomFrame, 0.0f, sFly.zoomMin, 0.0f, sFly.zoomLen, sFly.zoomMax, 0.0f);
-            sFly.zoomFrame--;
-            if (sFly.zoomFrame > sFly.zoomLen) {
-                sFly.zoomFrame = sFly.zoomLen;
-            }
-            if (sFly.zoomFrame < 0) {
-                sFly.zoomFrame = 0;
-                done = TRUE;
-            }
-            if (done) {
+            if (CardBlock_Shrink()) {
                 if (!sBursting) {
-                    for (i = 0; i < CARD_BLOCK_BURST; i++) {
-                        sBurstFrame[i] = 0;
-                        sBurstLen[i] = 10;
-                        sBurstDelay[i] = Rand() & 3;
-                        sBurstAngle[i] = (u16)Rand();
-                    }
+                    CardBlock_StartBurst();
                 }
-                done = FALSE;
                 sBursting = TRUE;
-                n = 0;
-                for (i = 0; i < CARD_BLOCK_BURST; i++) {
-                    sBurstFrame[i]++;
-                    if (sBurstFrame[i] > sBurstDelay[i] && sBurstFrame[i] - sBurstDelay[i] > sBurstLen[i]) {
-                        sBurstFrame[i] = sBurstLen[i] + sBurstDelay[i];
-                        n++;
-                    }
-                    CardBlock_CalcBurst(i);
-                }
-                if (n == CARD_BLOCK_BURST) {
-                    done = TRUE;
-                }
-                if (done) {
+                if (CardBlock_StepBurst()) {
                     sBursting = FALSE;
                     sErasing = FALSE;
                 }
@@ -436,9 +461,12 @@ inline void CardBlock_Finish(CardBlock* b) {
 
 /* 0x81320094: start Copy / Move (the block flies off) or Erase */
 void fn_81320094(u8 slot, u16 dest, u16 file, u16 kind) {
-    Vec vel;
+    Vec p1;
+    u8 pad[4];
     Vec pos;
+    Vec vel;
     u16 a;
+    static const Vec kZero = {0.0f, 0.0f, 0.0f};
 
     sOpDest = dest;
     sOpSlot = slot;
@@ -456,12 +484,10 @@ void fn_81320094(u8 slot, u16 dest, u16 file, u16 kind) {
             sBlocks[slot][file].alpha = 0;
             sBlocks[slot][file].alphaTarget = 0;
             a = Rand();
-            {
-                Vec p1 = {0.0f, 0.0f, 0.0f};
-                p1.x = 16.0f * (292.0f + 40.0f * SinS(a));
-                p1.y = 16.0f * (200.0f + 40.0f * CosS(a));
-                sFly.p1 = p1;
-            }
+            p1 = kZero;
+            p1.x = 16.0f * (292.0f + 40.0f * SinS(a));
+            p1.y = 16.0f * (200.0f + 40.0f * CosS(a));
+            sFly.p1 = p1;
             sFly.frame = 0;
             sFly.end = 40;
         } else {
@@ -480,6 +506,7 @@ void fn_81320094(u8 slot, u16 dest, u16 file, u16 kind) {
 
 /* 0x8132030C: the flying block lands on the other card as file `file` */
 void fn_8132030C(u8 file) {
+    u8 pad[4];
     if ((u16)(sOpKind - 2) <= 2) {
         sFlying = FALSE;
         if (sOpKind != 4) {
@@ -489,14 +516,10 @@ void fn_8132030C(u8 file) {
             }
             if (sOpDest < 8) {
                 Vec v = {0.0f, 150.0f, 0.0f};
-                Vec* d;
-                d = &v;
-                sBlocks[sOpSlot ^ 1][file].vel = *d;
+                sBlocks[sOpSlot ^ 1][file].vel = *CardVecRef(&v);
             } else {
                 Vec v = {0.0f, -150.0f, 0.0f};
-                Vec* d;
-                d = &v;
-                sBlocks[sOpSlot ^ 1][file].vel = *d;
+                sBlocks[sOpSlot ^ 1][file].vel = *CardVecRef(&v);
             }
             sBlocks[sOpSlot ^ 1][file].zoom = sBlocks[sOpSlot ^ 1][file].zoomMax;
             sBlocks[sOpSlot ^ 1][file].zoomFrame = sBlocks[sOpSlot ^ 1][file].zoomLen;
@@ -584,17 +607,15 @@ void CardIcon_ResetFiles(void) {
     for (slot = 0; slot < 2; slot++) {
         for (i = 0; i < CARD_MAX_FILES; i++) {
             {
-                Vec* d;
                 Vec start = {4672.0f, 3584.0f, 0.0f};
-                d = &start;
-                sBlocks[slot][i].pos = *d;
+                sBlocks[slot][i].pos = *CardVecRef(&start);
             }
             a = (u16)Rand();
             {
                 Vec vel = {0.0f, 0.0f, 0.0f};
                 vel.x = 350.0f * SinS(a);
                 vel.y = 350.0f * CosS(a);
-                sBlocks[slot][i].vel = vel;
+                sBlocks[slot][i].vel = *CardVecRef(&vel);
             }
             sBlocks[slot][i].p0 = sBlocks[slot][i].pos;
             sBlocks[slot][i].v0 = sBlocks[slot][i].vel;
@@ -891,35 +912,48 @@ void CardBlock_DrawBurst(J3DModelInstance* inst) {
     }
 }
 
-/* 0x81321378: one slot's blocks; the chosen one and the flying one last */
-void CardBlock_DrawSlot(u8 slot, u8 alpha) {
-    J3DModelInstance* emptyInst;
-    CardFile* f;
-    CardFile (*files)[CARD_MAX_FILES];
-    J3DModelInstance* fileInst;
-    CardBlock* b;
+/* the Erase burst pieces, faded out over their lifetime */
+static inline void CardBlock_DrawBursts(u8 alpha) {
     int i;
     u8 a;
+
+    for (i = 0; i < CARD_BLOCK_BURST; i++) {
+        if (sBurstFrame[i] > sBurstDelay[i]) {
+            if (sBurstFrame[i] - sBurstDelay[i] <= sBurstLen[i]) {
+                a = (alpha * (sBurstDelay[i] + (sBurstLen[i] - sBurstFrame[i]))) / sBurstLen[i];
+            } else {
+                a = 0;
+            }
+        } else {
+            a = 0;
+        }
+        if (a) {
+            sBurstInst[i].alpha = a;
+            CardBlock_DrawBurst(&sBurstInst[i]);
+        }
+    }
+}
+
+/* 0x81321378: one slot's blocks; the chosen one and the flying one last */
+void CardBlock_DrawSlot(u8 slot, u8 alpha) {
+    CardFile (*files)[CARD_MAX_FILES];
+    int i;
     s32 sel;
 
     files = CardThread_GetFiles();
-    fileInst = sFileInst[slot];
-    emptyInst = sEmptyInst[slot];
-    b = sBlocks[slot];
-    f = files[slot];
-    for (i = 0; i < CARD_MAX_FILES; i++, fileInst++, b++, emptyInst++, f++) {
+    for (i = 0; i < CARD_MAX_FILES; i++) {
         if (slot == sOpSlot && i == sOpFile && sFlying) {
-            fileInst->alpha = 0;
+            sFileInst[slot][i].alpha = 0;
         } else if (slot == Card_GetSlot() && i == Card_GetSelectedFile() && !sEntering) {
-            fileInst->alpha = 0;
+            sFileInst[slot][i].alpha = 0;
         } else {
-            fileInst->alpha = (u8)((alpha * b->alpha) / 255);
+            sFileInst[slot][i].alpha = (u8)((alpha * sBlocks[slot][i].alpha) / 255);
         }
-        emptyInst->alpha = (u8)((alpha * b->alpha) / 255);
-        if (f->used) {
-            CardBlock_DrawFile(fileInst, slot, i);
+        sEmptyInst[slot][i].alpha = (u8)((alpha * sBlocks[slot][i].alpha) / 255);
+        if (files[slot][i].used) {
+            CardBlock_DrawFile(&sFileInst[slot][i], slot, i);
         } else {
-            CardBlock_DrawEmpty(emptyInst, slot, i);
+            CardBlock_DrawEmpty(&sEmptyInst[slot][i], slot, i);
         }
     }
     if (sFlying) {
@@ -943,21 +977,7 @@ void CardBlock_DrawSlot(u8 slot, u8 alpha) {
             sFlyInst.alpha = (u8)((sFly.alpha * alpha) / 255);
             CardBlock_DrawFile(&sFlyInst, sOpSlot, -1);
         } else {
-            for (i = 0; i < CARD_BLOCK_BURST; i++) {
-                if (sBurstFrame[i] > sBurstDelay[i]) {
-                    if (sBurstFrame[i] - sBurstDelay[i] <= sBurstLen[i]) {
-                        a = (alpha * (sBurstDelay[i] + (sBurstLen[i] - sBurstFrame[i]))) / sBurstLen[i];
-                    } else {
-                        a = 0;
-                    }
-                } else {
-                    a = 0;
-                }
-                if (a) {
-                    sBurstInst[i].alpha = a;
-                    CardBlock_DrawBurst(&sBurstInst[i]);
-                }
-            }
+            CardBlock_DrawBursts(alpha);
         }
     }
 }
