@@ -86,7 +86,7 @@ OSMessageQueue* CardThread_CmdQueue(void);
 OSMessageQueue* CardThread_ReplyQueue(void);
 void* CardThread_Main(void* arg);
 void CardThread_MarkConflicts(void);
-void CardThread_SetEnabled(s8 cmd, BOOL enabled);
+void CardThread_SetEnabled(s32 cmd, BOOL enabled);
 s32 CardThread_Fail(u8 slot, s32 cmd, s32 result);
 void CardThread_ClearFiles(u8 slot);
 void CardThread_DoUnmount(u8 slot);
@@ -411,20 +411,22 @@ void CardFile_Clear(u8 slot, s16 file) {
 void* CardThread_Main(void* arg) {
     OSMessage msg;
     BOOL enabled = FALSE;
+    int cmd;
 
     sCardMounted[0] = FALSE;
     sCardMounted[1] = FALSE;
     for (;;) {
         OSReceiveMessage(&sCardCmdQueue, &msg, OS_MESSAGE_BLOCK);
         if ((u8)enabled == TRUE) {
-            switch (CARD_MSG_CMD((u32)msg)) {
+            cmd = CARD_MSG_CMD((u32)msg);
+            switch (cmd) {
             case CARD_CMD_ENABLE:
                 enabled = TRUE;
-                CardThread_SetEnabled(CARD_MSG_CMD((u32)msg), TRUE);
+                CardThread_SetEnabled(cmd, TRUE);
                 break;
             case CARD_CMD_DISABLE:
                 enabled = FALSE;
-                CardThread_SetEnabled(CARD_MSG_CMD((u32)msg), FALSE);
+                CardThread_SetEnabled(cmd, FALSE);
                 break;
             case CARD_CMD_MOUNT:
                 CardThread_DoMount(CARD_MSG_SLOT((u32)msg));
@@ -449,14 +451,15 @@ void* CardThread_Main(void* arg) {
                 break;
             }
         } else {
-            switch (CARD_MSG_CMD((u32)msg)) {
+            cmd = CARD_MSG_CMD((u32)msg);
+            switch (cmd) {
             case CARD_CMD_ENABLE:
                 enabled = TRUE;
-                CardThread_SetEnabled(CARD_MSG_CMD((u32)msg), TRUE);
+                CardThread_SetEnabled(cmd, TRUE);
                 break;
             case CARD_CMD_DISABLE:
                 enabled = FALSE;
-                CardThread_SetEnabled(CARD_MSG_CMD((u32)msg), FALSE);
+                CardThread_SetEnabled(cmd, FALSE);
                 break;
             case CARD_CMD_REFRESH:
                 CardThread_DoRefresh();
@@ -486,7 +489,7 @@ void CardThread_MarkConflicts(void) {
 }
 
 /* 0x8131CC10 */
-void CardThread_SetEnabled(s8 cmd, BOOL enabled) {
+void CardThread_SetEnabled(s32 cmd, BOOL enabled) {
     u32 msg;
 
     msg = ((enabled << 8) & 0xFF00) | (u8)cmd;
