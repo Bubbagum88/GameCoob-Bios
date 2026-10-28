@@ -241,6 +241,8 @@ u16 Font_DrawLines(FontBox *box, u8 *str, u16 *lineW, s32 height, s32 maxChars, 
     s32 y;
     u16 nx;
     BOOL over;
+    s16 space;
+    s32 cs;
 
     switch (box->valign) {
     case 0:
@@ -275,9 +277,10 @@ u16 Font_DrawLines(FontBox *box, u8 *str, u16 *lineW, s32 height, s32 maxChars, 
                 }
             }
         } else {
-            nx = box->charSpace * 16 + box->size * (sWidth[Font_Index(code)] * 16) / sFont.cellWidth + x;
-            if (box->charSpace > 0) {
-                if (nx - box->charSpace * 16 > w) {
+            nx = (space = box->charSpace) * 16 + box->size * (sWidth[Font_Index(code)] * 16) / sFont.cellWidth + x;
+            cs = space;
+            if (cs > 0) {
+                if (nx - cs * 16 > w) {
                     over = TRUE;
                 } else {
                     goto fits2;
@@ -306,8 +309,8 @@ u16 Font_DrawLines(FontBox *box, u8 *str, u16 *lineW, s32 height, s32 maxChars, 
                 }
             }
             Font_PutChar(x0 + x, y, box->size, code);
-            chars++;
             x += box->charSpace * 16 + box->size * (sWidth[Font_Index(code)] * 16) / sFont.cellWidth;
+            chars++;
         }
         if (maxChars != 0 && chars >= maxChars) {
             break;
