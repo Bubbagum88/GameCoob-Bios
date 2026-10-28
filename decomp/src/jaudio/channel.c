@@ -536,9 +536,8 @@ static void __Nas_Release_Channel_Main(note* n, int target) {
     }
 
     param = &chan->playback_ch.params;
-    wanted = &chan->playback_ch.wanted_parent_note;
 
-    if (*wanted == n) {
+    if (*(wanted = &chan->playback_ch.wanted_parent_note) == n) {
         *wanted = NA_NO_NOTE;
     }
 
