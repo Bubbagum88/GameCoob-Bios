@@ -970,6 +970,7 @@ void Nas_FastCopy(u8* SrcAddr, u8* DestAdd, size_t Length, s32 medium) {
     size_t* REF_Length = &Length;
     u8* unalign_src_copy;
     u32 unalign;
+    u32 unalign_len;
     u32 len;
 
     // The IPL build has no align32 warnings.
@@ -984,11 +985,11 @@ void Nas_FastCopy(u8* SrcAddr, u8* DestAdd, size_t Length, s32 medium) {
         Nas_StartDma(&AG.sync_dma_io_mesg, 1, 0, (u32)SrcAddr - unalign, unalign_src_copy, 0x20,
                      &AG.sync_dma_queue, medium, (s8*)"FastCopy");
         Z_osRecvMesg(&AG.sync_dma_queue, NULL, OS_MESG_BLOCK);
-        len = 32 - unalign;
-        Z_bcopy(unalign_src_copy + unalign, DestAdd, len);
-        SrcAddr += len;
-        DestAdd += len;
-        Length -= len;
+        unalign_len = 32 - unalign;
+        Z_bcopy(unalign_src_copy + unalign, DestAdd, unalign_len);
+        SrcAddr += unalign_len;
+        DestAdd += unalign_len;
+        Length -= unalign_len;
 
         while ((len = Length) != 0) {
             Nas_StartDma(&AG.sync_dma_io_mesg, 1, 0, (u32)SrcAddr, unalign_src_copy, 0x400, &AG.sync_dma_queue, medium,
@@ -1007,23 +1008,23 @@ void Nas_FastCopy(u8* SrcAddr, u8* DestAdd, size_t Length, s32 medium) {
             DestAdd += len;
         }
     } else {
+        OSMesgQueue* q = &AG.sync_dma_queue;
+        OSIoMesg* io = &AG.sync_dma_io_mesg;
         while (TRUE) {
             if (Length < 0x400) {
                 break;
             }
 
-            Nas_StartDma(&AG.sync_dma_io_mesg, 1, 0, (u32)SrcAddr, DestAdd, 0x400, &AG.sync_dma_queue, medium,
-                         (s8*)"FastCopy");
-            Z_osRecvMesg(&AG.sync_dma_queue, NULL, OS_MESG_BLOCK);
+            Nas_StartDma(io, 1, 0, (u32)SrcAddr, DestAdd, 0x400, q, medium, (s8*)"FastCopy");
+            Z_osRecvMesg(q, NULL, OS_MESG_BLOCK);
             Length -= 0x400;
             SrcAddr += 0x400;
             DestAdd += 0x400;
         }
 
         if (Length != 0) {
-            Nas_StartDma(&AG.sync_dma_io_mesg, 1, 0, (u32)SrcAddr, DestAdd, Length, &AG.sync_dma_queue, medium,
-                         (s8*)"FastCopy");
-            Z_osRecvMesg(&AG.sync_dma_queue, NULL, OS_MESG_BLOCK);
+            Nas_StartDma(io, 1, 0, (u32)SrcAddr, DestAdd, Length, q, medium, (s8*)"FastCopy");
+            Z_osRecvMesg(q, NULL, OS_MESG_BLOCK);
         }
     }
 }
