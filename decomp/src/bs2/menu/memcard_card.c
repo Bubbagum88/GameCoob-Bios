@@ -524,7 +524,7 @@ s32 CardThread_Fail(u8 slot, s32 cmd, s32 result) {
     }
     CardThread_MarkConflictsIn();
     {
-        u32 msg = (cmd & 0xFF) | ((result << 8) & 0xFF00) | ((slot << 16) & 0x10000);
+        u32 msg = ((slot << 16) & 0x10000) | ((u8)result << 8) | (cmd & 0xFF);
         OSSendMessage(&sCardReplyQueue, (OSMessage)msg, OS_MESSAGE_BLOCK);
     }
     return 0;
