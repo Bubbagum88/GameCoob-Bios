@@ -265,11 +265,14 @@ static inline void CardBlock_SetBurstMtx(J3DModelInstance* inst, Mtx m) {
     J3D_SetModelMtx(inst, m, *s);
 }
 
+/* y comes first: the args are evaluated right to left, so SinS runs before CosS */
+static inline void CardBurst_Trans(Mtx m, f32 y, f32 x) {
+    PSMTXTrans(m, x, y, 0.0f);
+}
+
 void CardBlock_CalcBurst(s32 i) {
     Mtx m;
     u8 pad[16];
-    f32 x;
-    f32 y;
     f32 t;
 
     if (sBurstFrame[i] > sBurstDelay[i]) {
@@ -281,9 +284,8 @@ void CardBlock_CalcBurst(s32 i) {
     } else {
         t = 0.0f;
     }
-    x = 48.0f * (0.25f + 0.75f * t) * SinS(sBurstAngle[i]);
-    y = 48.0f * (0.25f + 0.75f * t) * CosS(sBurstAngle[i]);
-    PSMTXTrans(m, x, y, 0.0f);
+    CardBurst_Trans(m, 48.0f * (0.25f + 0.75f * t) * CosS(sBurstAngle[i]),
+                    48.0f * (0.25f + 0.75f * t) * SinS(sBurstAngle[i]));
     PSMTXConcat(sFlyMtx, m, m);
     CardBlock_SetBurstMtx(&sBurstInst[i], m);
     J3D_SetViewMtx(&sBurstInst[i], fn_81302F94());
