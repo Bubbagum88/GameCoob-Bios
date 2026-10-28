@@ -2324,22 +2324,27 @@ static inline void CardDraw_SetWhite2(GXColor* out, u8 a) {
     *out = *CardDraw_ColorRef(&c);
 }
 
+/* title and comment lines of the selected file */
+static inline void CardDraw_InfoText(u8 slot, s16 file, u8 alpha) {
+    GXColor c = { 255, 255, 255, 255 };
+
+    c.a = c.a * alpha / 255;
+    Glh_DrawBannerLine('titl', sCardGlh, &c, CardThread_GetComment(slot, file), 31);
+    Glh_DrawBannerLine('info', sCardGlh, &c, CardThread_GetComment(slot, file) + 32, 31);
+}
+
 void CardDraw_FileInfo(u8 alpha) {
     u8 slot = sCardSlot;
     s16 file = sCardSort[slot][sCardCol[slot] + (sCardRow[slot] + sCardTop[slot]) * 4].file;
     GXColor frm;
     CardFile(*files)[CARD_MAX_FILES];
-    u32 pad;
 
     CardDraw_SetWhite2(&frm, alpha);
     files = CardThread_GetFiles();
     GX_Setup2DTex();
     if (files[slot][file].used) {
-        GXColor c = { 255, 255, 255, 255 };
-
-        c.a = c.a * alpha / 255;
-        Glh_DrawBannerLine('titl', sCardGlh, &c, CardThread_GetComment(slot, file), 31);
-        Glh_DrawBannerLine('info', sCardGlh, &c, CardThread_GetComment(slot, file) + 32, 31);
+        CardDraw_InfoText(slot, file, alpha);
+        CardDraw_StackPad();
         Glh_DrawFrame('frmc', sCardGlh, &frm);
         CardDraw_LoadTexture(sCardNameX[2], sCardNameY[2], files[slot][file].blocks);
     }
