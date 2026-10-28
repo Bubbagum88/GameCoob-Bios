@@ -22,9 +22,10 @@ static inline u8 GetU8(u8* tbl, int idx) {
     return tbl[idx];
 }
 
-static inline u8 GetUnk(int idx) {
+static inline u8 GetUnk(s32 idx) {
+    s32 k = idx;
     u8 v[1] = {0xFF};
-    if (idx == 0xFF) {
+    if (k == 0xFF) {
         v[0] = 0xFF;
     }
     return v[0];
@@ -49,17 +50,17 @@ static inline u8 GetUnk(int idx) {
         return &blk->field[idx];                            \
     }
 
-DEF_GET(GetMatColor, GXColor, matColor)
-DEF_GET(GetColorChan, GMRChanCtrl, colorChan)
+DEF_GET_N(GetMatColor, GXColor, matColor)
+DEF_GET_N(GetColorChan, GMRChanCtrl, colorChan)
 DEF_GET_N(GetTevColor, GXColorS10, tevColor)
 DEF_GET_N(GetTexGen, GMRTexGen, texGen)
-DEF_GET(GetTevStage, GMRTevStage, tevStage)
+DEF_GET_N(GetTevStage, GMRTevStage, tevStage)
 DEF_GET_N(GetTevOrder, GMRTevOrder, tevOrder)
-DEF_GET(GetTexMtx, GMRTexMtx, texMtx)
-DEF_GET(GetUnk48, GMRUnk2C, unk48)
+DEF_GET_N(GetTexMtx, GMRTexMtx, texMtx)
+DEF_GET_N(GetUnk48, GMRUnk2C, unk48)
 DEF_GET_N(GetUnk4C, GMRUnk8, unk4C)
 DEF_GET_N(GetUnk50, GMRUnk4, unk50)
-DEF_GET(GetVtxNrm, GMRVtxNrm, vtxNrm)
+DEF_GET_N(GetVtxNrm, GMRVtxNrm, vtxNrm)
 
 static inline u16 GetTexNo(u16* tbl, int idx) {
     if (idx == 0xFFFF) {
@@ -70,37 +71,40 @@ static inline u16 GetTexNo(u16* tbl, int idx) {
 
 /* 0x81305824: build the runtime material table */
 void fn_81305824(GMRMatBlock* blk, GMRMaterial* mat) {
+    // Puts GetUnk's v at 0x14 like the original. Still 2 insns off: the
+    // remap load lands in r6, the original has r0 (lhzx r0 / mulli r6,r0).
+    u8 pad[32];
     int i;
     int j;
 
-    for (i = 0; i < blk->count; i++, mat++) {
-        mat->flag = blk->init[blk->remap[i]].flag;
-        mat->cull = GetU32(blk->cull, blk->init[blk->remap[i]].cull);
-        mat->numChans = GetU8(blk->numChans, blk->init[blk->remap[i]].numChans);
-        mat->numTexGens = GetU8(blk->numTexGens, blk->init[blk->remap[i]].numTexGens);
-        mat->numTevStages = GetU8(blk->numTevStages, blk->init[blk->remap[i]].numTevStages);
-        mat->unk5 = GetU32(blk->unk5C, blk->init[blk->remap[i]].unk7);
-        mat->unk6 = GetU32(blk->unk58, blk->init[blk->remap[i]].unk5);
-        mat->unk7 = GetUnk(blk->init[blk->remap[i]].unk6);
-        mat->matColor[0] = GetMatColor(blk, blk->init[blk->remap[i]].matColor[0]);
-        mat->matColor[1] = GetMatColor(blk, blk->init[blk->remap[i]].matColor[1]);
+    for (i = 0; i < blk->count; i++) {
+        mat[i].flag = blk->init[blk->remap[i]].flag;
+        mat[i].cull = GetU32(blk->cull, blk->init[blk->remap[i]].cull);
+        mat[i].numChans = GetU8(blk->numChans, blk->init[blk->remap[i]].numChans);
+        mat[i].numTexGens = GetU8(blk->numTexGens, blk->init[blk->remap[i]].numTexGens);
+        mat[i].numTevStages = GetU8(blk->numTevStages, blk->init[blk->remap[i]].numTevStages);
+        mat[i].unk5 = GetU32(blk->unk5C, blk->init[blk->remap[i]].unk7);
+        mat[i].unk6 = GetU32(blk->unk58, blk->init[blk->remap[i]].unk5);
+        mat[i].unk7 = GetUnk(blk->init[blk->remap[i]].unk6);
+        mat[i].matColor[0] = GetMatColor(blk, blk->init[blk->remap[i]].matColor[0]);
+        mat[i].matColor[1] = GetMatColor(blk, blk->init[blk->remap[i]].matColor[1]);
         for (j = 0; j < 4; j++) {
-            mat->colorChan[j] = GetColorChan(blk, blk->init[blk->remap[i]].colorChan[j]);
-            mat->tevColor[j] = GetTevColor(blk, blk->init[blk->remap[i]].tevColor[j]);
+            mat[i].colorChan[j] = GetColorChan(blk, blk->init[blk->remap[i]].colorChan[j]);
+            mat[i].tevColor[j] = GetTevColor(blk, blk->init[blk->remap[i]].tevColor[j]);
         }
         for (j = 0; j < 8; j++) {
-            mat->texNo[j] = GetTexNo(blk->texNo, blk->init[blk->remap[i]].texNo[j]);
-            mat->texGen[j] = GetTexGen(blk, blk->init[blk->remap[i]].texGen[j]);
-            mat->tevStage[j] = GetTevStage(blk, blk->init[blk->remap[i]].tevStage[j]);
-            mat->tevOrder[j] = GetTevOrder(blk, blk->init[blk->remap[i]].tevOrder[j]);
+            mat[i].texNo[j] = GetTexNo(blk->texNo, blk->init[blk->remap[i]].texNo[j]);
+            mat[i].texGen[j] = GetTexGen(blk, blk->init[blk->remap[i]].texGen[j]);
+            mat[i].tevStage[j] = GetTevStage(blk, blk->init[blk->remap[i]].tevStage[j]);
+            mat[i].tevOrder[j] = GetTevOrder(blk, blk->init[blk->remap[i]].tevOrder[j]);
         }
         for (j = 0; j < 10; j++) {
-            mat->texMtx[j] = GetTexMtx(blk, blk->init[blk->remap[i]].texMtx[j]);
+            mat[i].texMtx[j] = GetTexMtx(blk, blk->init[blk->remap[i]].texMtx[j]);
         }
-        mat->unkC8 = GetUnk48(blk, blk->init[blk->remap[i]].unk90);
-        mat->unkCC = GetUnk4C(blk, blk->init[blk->remap[i]].unk92);
-        mat->unkD0 = GetUnk50(blk, blk->init[blk->remap[i]].unk94);
-        mat->vtxNrm = GetVtxNrm(blk, blk->init[blk->remap[i]].vtxNrm);
+        mat[i].unkC8 = GetUnk48(blk, blk->init[blk->remap[i]].unk90);
+        mat[i].unkCC = GetUnk4C(blk, blk->init[blk->remap[i]].unk92);
+        mat[i].unkD0 = GetUnk50(blk, blk->init[blk->remap[i]].unk94);
+        mat[i].vtxNrm = GetVtxNrm(blk, blk->init[blk->remap[i]].vtxNrm);
     }
 }
 
@@ -177,17 +181,12 @@ static inline void GXSetTexCoordGen(GXTexCoordID dst, GXTexGenType func, GXTexGe
     GXSetTexCoordGen2(dst, func, src, mtx, GX_FALSE, GX_PTIDENTITY);
 }
 
-static inline GXColor gMR_AlphaColor(u8 a) {
-    GXColor c = {0, 0, 0, 0};
-    c.a = a;
-    return c;
-}
-
 /* 0x813061EC: load all GX state of a material */
 void fn_813061EC(u16 index) {
     GMRMaterial* mat = &lbl_814AD324->materials[index];
-    GXColor kc;
     u8 skipMtx[10];
+    GXColor kc;
+    GXColor w;
     int i;
 
     for (i = 0; i < 10; i++) {
@@ -287,10 +286,10 @@ void fn_813061EC(u16 index) {
         fn_813060B8(mat->vtxNrm);
     }
     if (lbl_814AD320->alpha != 0xFF) {
-        kc = gMR_AlphaColor(lbl_814AD320->alpha);
+        kc = (GXColor){0, 0, 0, lbl_814AD320->alpha};
         if (mat->numTevStages != 0xFF) {
             GXSetNumTevStages(mat->numTevStages + 1);
-            GXSetTevKColor(GX_KCOLOR0, *(GXColor*)&kc);
+            GXSetTevKColor(GX_KCOLOR0, kc);
             GXSetTevKAlphaSel((GXTevStageID)mat->numTevStages, GX_TEV_KASEL_K0_A);
             GXSetTevColorIn((GXTevStageID)mat->numTevStages, GX_CC_ZERO, GX_CC_ONE, GX_CC_CPREV, GX_CC_ZERO);
             GXSetTevColorOp((GXTevStageID)mat->numTevStages, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
@@ -301,8 +300,8 @@ void fn_813061EC(u16 index) {
         GXSetZMode(GX_FALSE, GX_LEQUAL, GX_FALSE);
         GXSetZCompLoc(GX_FALSE);
     } else {
-        GXColor w = {0, 0, 0, 0xFF};
-        GXSetTevKColor(GX_KCOLOR0, *(GXColor*)&w);
+        w = (GXColor){0, 0, 0, 0xFF};
+        GXSetTevKColor(GX_KCOLOR0, w);
         if ((mat->flag & 1) == 1) {
             GXSetZMode(GX_TRUE, GX_LEQUAL, GX_TRUE);
             GXSetZCompLoc(GX_TRUE);
@@ -318,6 +317,7 @@ void fn_81306850(u16 index) {
     GMRMaterial* mat = &lbl_814AD324->materials[index];
     s32 i;
     GXColor kc;
+    GXColor w;
 
     for (i = 0; i < 4; i++) {
         if (mat->tevColor[i] != NULL) {
@@ -325,10 +325,10 @@ void fn_81306850(u16 index) {
         }
     }
     if (lbl_814AD320->alpha != 0xFF) {
-        kc = gMR_AlphaColor(lbl_814AD320->alpha);
+        kc = (GXColor){0, 0, 0, lbl_814AD320->alpha};
         if (mat->numTevStages != 0xFF) {
             GXSetNumTevStages(mat->numTevStages + 1);
-            GXSetTevKColor(GX_KCOLOR0, *(GXColor*)&kc);
+            GXSetTevKColor(GX_KCOLOR0, kc);
             GXSetTevKAlphaSel((GXTevStageID)mat->numTevStages, GX_TEV_KASEL_K0_A);
             GXSetTevColorIn((GXTevStageID)mat->numTevStages, GX_CC_ZERO, GX_CC_ONE, GX_CC_CPREV, GX_CC_ZERO);
             GXSetTevColorOp((GXTevStageID)mat->numTevStages, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
@@ -339,8 +339,8 @@ void fn_81306850(u16 index) {
         GXSetZMode(GX_FALSE, GX_LEQUAL, GX_FALSE);
         GXSetZCompLoc(GX_FALSE);
     } else {
-        GXColor w = {0, 0, 0, 0xFF};
-        GXSetTevKColor(GX_KCOLOR0, *(GXColor*)&w);
+        w = (GXColor){0, 0, 0, 0xFF};
+        GXSetTevKColor(GX_KCOLOR0, w);
         if ((mat->flag & 1) == 1) {
             GXSetZMode(GX_TRUE, GX_LEQUAL, GX_TRUE);
             GXSetZCompLoc(GX_TRUE);
