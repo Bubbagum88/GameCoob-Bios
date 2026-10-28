@@ -545,40 +545,36 @@ void fn_813204B0(void) {
 
 /* 0x8132056C: send every block to its cell (or just off the window) */
 void fn_8132056C(CardOrder (*order)[CARD_MAX_FILES], s8* row) {
-    s16* gridY;
-    s16* gridX;
+    s16 (*gridY)[16];
+    s16 (*gridX)[16];
     CardBlock* b;
-    CardOrder* o;
-    CardBlock* blocks;
     u32 slot;
     u32 i;
 
     for (slot = 0; slot < 2; slot++) {
-        o = order[slot];
-        blocks = sBlocks[slot];
-        gridX = sGridX[slot];
-        gridY = sGridY[slot];
+        gridX = sGridX;
+        gridY = sGridY;
         for (i = 0; i < CARD_MAX_FILES; i++) {
-            b = &blocks[o[i].file];
+            b = &sBlocks[slot][order[slot][i].file];
             CardBlock_Rewind(b);
             if (i >= row[slot] * 4 && i <= row[slot] * 4 + 15) {
                 b->alphaTarget = 255;
                 b->p0 = b->pos;
                 b->v0 = b->vel;
-                b->p1.x = gridX[i - row[slot] * 4];
-                b->p1.y = gridY[i - row[slot] * 4];
+                b->p1.x = gridX[slot][i - row[slot] * 4];
+                b->p1.y = gridY[slot][i - row[slot] * 4];
                 b->p1.z = 0.0f;
             } else {
                 b->alphaTarget = 0;
                 b->p0 = b->pos;
                 b->v0 = b->vel;
                 if (i < row[slot] * 4) {
-                    b->p1.x = gridX[i & 3];
-                    b->p1.y = gridY[i & 3] - 512.0f;
+                    b->p1.x = gridX[slot][i & 3];
+                    b->p1.y = gridY[slot][i & 3] - 512.0f;
                 }
                 if (i > row[slot] * 4 + 15) {
-                    b->p1.x = gridX[(i & 3) + 12];
-                    b->p1.y = 512.0f + gridY[(i & 3) + 12];
+                    b->p1.x = gridX[slot][(i & 3) + 12];
+                    b->p1.y = 512.0f + gridY[slot][(i & 3) + 12];
                 }
                 b->p1.z = 0.0f;
             }
