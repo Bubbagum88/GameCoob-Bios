@@ -177,17 +177,12 @@ static inline void GXSetTexCoordGen(GXTexCoordID dst, GXTexGenType func, GXTexGe
     GXSetTexCoordGen2(dst, func, src, mtx, GX_FALSE, GX_PTIDENTITY);
 }
 
-static inline GXColor gMR_AlphaColor(u8 a) {
-    GXColor c = {0, 0, 0, 0};
-    c.a = a;
-    return c;
-}
-
 /* 0x813061EC: load all GX state of a material */
 void fn_813061EC(u16 index) {
     GMRMaterial* mat = &lbl_814AD324->materials[index];
-    GXColor kc;
     u8 skipMtx[10];
+    GXColor kc;
+    GXColor w;
     int i;
 
     for (i = 0; i < 10; i++) {
@@ -287,10 +282,10 @@ void fn_813061EC(u16 index) {
         fn_813060B8(mat->vtxNrm);
     }
     if (lbl_814AD320->alpha != 0xFF) {
-        kc = gMR_AlphaColor(lbl_814AD320->alpha);
+        kc = (GXColor){0, 0, 0, lbl_814AD320->alpha};
         if (mat->numTevStages != 0xFF) {
             GXSetNumTevStages(mat->numTevStages + 1);
-            GXSetTevKColor(GX_KCOLOR0, *(GXColor*)&kc);
+            GXSetTevKColor(GX_KCOLOR0, kc);
             GXSetTevKAlphaSel((GXTevStageID)mat->numTevStages, GX_TEV_KASEL_K0_A);
             GXSetTevColorIn((GXTevStageID)mat->numTevStages, GX_CC_ZERO, GX_CC_ONE, GX_CC_CPREV, GX_CC_ZERO);
             GXSetTevColorOp((GXTevStageID)mat->numTevStages, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
@@ -301,8 +296,8 @@ void fn_813061EC(u16 index) {
         GXSetZMode(GX_FALSE, GX_LEQUAL, GX_FALSE);
         GXSetZCompLoc(GX_FALSE);
     } else {
-        GXColor w = {0, 0, 0, 0xFF};
-        GXSetTevKColor(GX_KCOLOR0, *(GXColor*)&w);
+        w = (GXColor){0, 0, 0, 0xFF};
+        GXSetTevKColor(GX_KCOLOR0, w);
         if ((mat->flag & 1) == 1) {
             GXSetZMode(GX_TRUE, GX_LEQUAL, GX_TRUE);
             GXSetZCompLoc(GX_TRUE);
@@ -318,6 +313,7 @@ void fn_81306850(u16 index) {
     GMRMaterial* mat = &lbl_814AD324->materials[index];
     s32 i;
     GXColor kc;
+    GXColor w;
 
     for (i = 0; i < 4; i++) {
         if (mat->tevColor[i] != NULL) {
@@ -325,10 +321,10 @@ void fn_81306850(u16 index) {
         }
     }
     if (lbl_814AD320->alpha != 0xFF) {
-        kc = gMR_AlphaColor(lbl_814AD320->alpha);
+        kc = (GXColor){0, 0, 0, lbl_814AD320->alpha};
         if (mat->numTevStages != 0xFF) {
             GXSetNumTevStages(mat->numTevStages + 1);
-            GXSetTevKColor(GX_KCOLOR0, *(GXColor*)&kc);
+            GXSetTevKColor(GX_KCOLOR0, kc);
             GXSetTevKAlphaSel((GXTevStageID)mat->numTevStages, GX_TEV_KASEL_K0_A);
             GXSetTevColorIn((GXTevStageID)mat->numTevStages, GX_CC_ZERO, GX_CC_ONE, GX_CC_CPREV, GX_CC_ZERO);
             GXSetTevColorOp((GXTevStageID)mat->numTevStages, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
@@ -339,8 +335,8 @@ void fn_81306850(u16 index) {
         GXSetZMode(GX_FALSE, GX_LEQUAL, GX_FALSE);
         GXSetZCompLoc(GX_FALSE);
     } else {
-        GXColor w = {0, 0, 0, 0xFF};
-        GXSetTevKColor(GX_KCOLOR0, *(GXColor*)&w);
+        w = (GXColor){0, 0, 0, 0xFF};
+        GXSetTevKColor(GX_KCOLOR0, w);
         if ((mat->flag & 1) == 1) {
             GXSetZMode(GX_TRUE, GX_LEQUAL, GX_TRUE);
             GXSetZCompLoc(GX_TRUE);
