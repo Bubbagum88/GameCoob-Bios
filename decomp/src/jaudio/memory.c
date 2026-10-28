@@ -392,11 +392,11 @@ void Nas_SzDataDivide(DataHeapstrc* param_1) {
  */
 void Nas_SzStayDivide(StayHeapstrc* param_1) {
     AG.data_heap.current = AG.data_heap.base;
-    Nas_HeapInit(&AG.wave_heap.stay_heap.heap, (u8*)Nas_HeapAlloc(&AG.misc_heap, param_1->wave_heap_size),
+    Nas_HeapInit(&AG.wave_heap.stay_heap.heap, (u8*)Nas_2ndHeapAlloc(&AG.misc_heap, param_1->wave_heap_size),
                  param_1->wave_heap_size);
-    Nas_HeapInit(&AG.bank_heap.stay_heap.heap, (u8*)Nas_HeapAlloc(&AG.misc_heap, param_1->bank_heap_size),
+    Nas_HeapInit(&AG.bank_heap.stay_heap.heap, (u8*)Nas_2ndHeapAlloc(&AG.misc_heap, param_1->bank_heap_size),
                  param_1->bank_heap_size);
-    Nas_HeapInit(&AG.seq_heap.stay_heap.heap, (u8*)Nas_HeapAlloc(&AG.misc_heap, param_1->seq_heap_size),
+    Nas_HeapInit(&AG.seq_heap.stay_heap.heap, (u8*)Nas_2ndHeapAlloc(&AG.misc_heap, param_1->seq_heap_size),
                  param_1->seq_heap_size);
     Nas_SzStayClear(&AG.seq_heap.stay_heap);
     Nas_SzStayClear(&AG.bank_heap.stay_heap);
@@ -410,11 +410,11 @@ void Nas_SzStayDivide(StayHeapstrc* param_1) {
  */
 void Nas_SzAutoDivide(AutoHeapstrc* param_1) {
     AG.sz_auto_heap.current = AG.sz_auto_heap.base;
-    Nas_HeapInit(&AG.wave_heap.auto_heap.heap, (u8*)Nas_HeapAlloc(&AG.misc_heap, param_1->waveLen),
+    Nas_HeapInit(&AG.wave_heap.auto_heap.heap, (u8*)Nas_2ndHeapAlloc(&AG.misc_heap, param_1->waveLen),
                  param_1->waveLen);
-    Nas_HeapInit(&AG.bank_heap.auto_heap.heap, (u8*)Nas_HeapAlloc(&AG.misc_heap, param_1->bankLen),
+    Nas_HeapInit(&AG.bank_heap.auto_heap.heap, (u8*)Nas_2ndHeapAlloc(&AG.misc_heap, param_1->bankLen),
                  param_1->bankLen);
-    Nas_HeapInit(&AG.seq_heap.auto_heap.heap, (u8*)Nas_HeapAlloc(&AG.misc_heap, param_1->seqLen), param_1->seqLen);
+    Nas_HeapInit(&AG.seq_heap.auto_heap.heap, (u8*)Nas_2ndHeapAlloc(&AG.misc_heap, param_1->seqLen), param_1->seqLen);
     Nas_SzAutoClear(&AG.seq_heap.auto_heap);
     Nas_SzAutoClear(&AG.bank_heap.auto_heap);
     Nas_SzAutoClear(&AG.wave_heap.auto_heap);
@@ -995,7 +995,7 @@ void __Nas_MemoryReconfig() {
 
     /*0x287C*/ AG.audio_params.num_samples_per_update_max = AG.audio_params.num_samples_per_update + 8;
     /*0x287E*/ AG.audio_params.num_samples_per_update_min = AG.audio_params.num_samples_per_update - 8;
-    /*0x2884*/ AG.audio_params.resample_rate = 33476.156f / (s32)AG.audio_params.sampling_frequency;
+    /*0x2884*/ AG.audio_params.resample_rate = 32000.0f / (s32)AG.audio_params.sampling_frequency;
     /*0x288C*/ AG.audio_params.updates_per_frame_inverse_scaled = (1.f / 256.f) / AG.audio_params.updates_per_frame;
     /*0x2890*/ AG.audio_params.updates_per_frame_scaled = AG.audio_params.updates_per_frame / 4.0f;
     /*0x2888*/ AG.audio_params.updates_per_frame_inverse = 1.f / AG.audio_params.updates_per_frame;
@@ -1464,6 +1464,7 @@ void EntryWave(s32 id) {
 void __ExchangeWave(s32 a, s32 b) {
     s32* REF_b = &b;
     s32 i;
+    s32 j;
     STACK_PAD_VAR(1);
     s32 bVar1;
     s32 bVar2;
@@ -1498,7 +1499,7 @@ void __ExchangeWave(s32 a, s32 b) {
             bVar2 = voiceinfo->wave_bank_id1;
             if ((bVar1 != 0xff || bVar2 != 0xff) && Nas_CheckIDbank(i) && Nas_SzCacheCheck(1, 2, i) &&
                 (bVar1 == b || bVar2 == b)) {
-                for (int j = 0; j < AG.voice_info[i].num_instruments; j++) {
+                for (j = 0; j < AG.voice_info[i].num_instruments; j++) {
                     voicetable* voicetable = ProgToVp(i, j);
                     if (voicetable) {
                         if (voicetable->normal_range_low) {

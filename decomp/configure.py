@@ -663,7 +663,7 @@ config.libs = [
             Object(Matching, "jaudio/dvdthread.c"),
             Object(Matching, "jaudio/rate.c"),  # data only
             Object(NonMatching, "jaudio/driver.c", extra_cflags=["-i include/neos", "-D_LANGUAGE_C"]),  # NEOS (N64 audio on CPU), from AC jaudio_NES
-            Object(NonMatching, "jaudio/memory.c", extra_cflags=["-i include/neos", "-D_LANGUAGE_C"]),
+            Object(Matching, "jaudio/memory.c", extra_cflags=["-i include/neos", "-D_LANGUAGE_C"]),
             Object(NonMatching, "jaudio/system.c", extra_cflags=["-i include/neos", "-D_LANGUAGE_C"]),
             Object(Matching, "jaudio/sub_sys.c", extra_cflags=["-i include/neos", "-D_LANGUAGE_C"]),
             Object(Matching, "jaudio/audiotable.c", extra_cflags=["-i include/neos", "-D_LANGUAGE_C"]),  # data only
