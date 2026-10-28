@@ -2301,12 +2301,25 @@ u32 CardDraw_LoadFileIcon(void) {
 }
 
 /* 0x8131B56C: title, comment and block count of the selected file. */
+static inline GXColor* CardDraw_ColorRef(GXColor* c) {
+    return c;
+}
+
+static inline void CardDraw_SetWhite(GXColor* out, u8 a) {
+    GXColor c = { 255, 255, 255, 0 };
+
+    c.a = a;
+    *out = *CardDraw_ColorRef(&c);
+}
+
 void CardDraw_FileInfo(u8 alpha) {
     u8 slot = sCardSlot;
     s16 file = sCardSort[slot][sCardCol[slot] + (sCardRow[slot] + sCardTop[slot]) * 4].file;
-    GXColor frm = CardDraw_White(alpha);
+    GXColor frm;
     CardFile(*files)[CARD_MAX_FILES];
+    u32 pad;
 
+    CardDraw_SetWhite(&frm, alpha);
     files = CardThread_GetFiles();
     GX_Setup2DTex();
     if (files[slot][file].used) {

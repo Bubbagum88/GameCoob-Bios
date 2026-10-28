@@ -123,6 +123,7 @@ void CardBlock_Init(CardBlock* b) {
 void fn_8131EEC4(BOOL first, s16 (*gridX)[16], s16 (*gridY)[16]) {
     int slot;
     int i;
+    int j;
 
     if (first) {
         sFileModel.data = ResGet(0x57);
@@ -139,9 +140,9 @@ void fn_8131EEC4(BOOL first, s16 (*gridX)[16], s16 (*gridY)[16]) {
         }
         sFlyInst.model = &sEmptyModel;
         J3D_InitModel(&sFlyInst, 0);
-        for (i = 0; i < CARD_BLOCK_BURST; i++) {
-            sBurstInst[i].model = &sEmptyModel;
-            J3D_InitModel(&sBurstInst[i], 0);
+        for (j = 0; j < CARD_BLOCK_BURST; j++) {
+            sBurstInst[j].model = &sEmptyModel;
+            J3D_InitModel(&sBurstInst[j], 0);
         }
     }
     sGridX = gridX;
