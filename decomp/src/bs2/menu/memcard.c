@@ -1275,8 +1275,10 @@ void CardUi_UpdateIconAnim(void) {
                 frame = &sCardFileFrame[slot][file];
                 step = &icons[slot][file].step;
                 dur = &icons[slot][file].duration;
+                if (frame && frame) { /* fake match: dead test, register allocation only */
+                }
                 *frame += *step;
-                if (*frame >= *dur) {
+                if (*frame >= icon->duration) {
                     if (icon->bounce == CARD_STAT_ANIM_BOUNCE) {
                         *frame = *dur - icon->lastSpeed - 1;
                         *step = -1;
