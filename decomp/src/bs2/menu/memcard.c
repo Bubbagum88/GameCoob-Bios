@@ -253,8 +253,10 @@ void CardParams_SetColors(GlhHeader* glh) {
         }
     }
     for (i = 0; i < 2; i++) {
+        u32 tag2 = 'fnma' + i;
+
         for (a = tbl, j = 0; j < ((GlhHeader*)sCardGlh)->anchorCount; a++, j++) {
-            if ('fnma' + i == a->tag) {
+            if (tag2 == a->tag) {
                 sCardNameX[i] = a->y;
                 sCardNameY[i] = a->x;
             }
