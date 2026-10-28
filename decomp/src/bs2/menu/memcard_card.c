@@ -1030,6 +1030,7 @@ s32 CardThread_CopyFile(u8 slot, s16 file, s16 dst, BOOL* done) {
    be mistaken for the moved file), give its entry to the copy, then delete
    the source. */
 s32 CardThread_MoveFile(u8 slot, s16 file, s16 dst, BOOL* done) {
+    int o;
     CARDDir dir;
     CARDDir hidden;
     s16 d;
@@ -1089,15 +1090,12 @@ s32 CardThread_MoveFile(u8 slot, s16 file, s16 dst, BOOL* done) {
         sCardIcons[slot][file].hasBanner = FALSE;
         OSRestoreInterrupts(enabled);
         d = dst;
-        {
-            u8 o = slot ^ 1;
-
-            result = __CARDGetStatusEx(o, d, &dir);
+        o = slot ^ 1;
+        result = __CARDGetStatusEx((u8)o, d, &dir);
+        if (result >= 0) {
+            result = CardThread_ReadEntry((u8)o, dst, &dir);
             if (result >= 0) {
-                result = CardThread_ReadEntry(o, dst, &dir);
-                if (result >= 0) {
-                    return 0;
-                }
+                return 0;
             }
         }
     }
