@@ -384,6 +384,9 @@ jaudio/driver.c:
 
 jaudio/memory.c:
 	.text       start:0x8133E860 end:0x813419E0 align:32
+	.data       start:0x813F1378 end:0x813F13A0
+	.sbss       start:0x814AD748 end:0x814AD750
+	.sdata2     start:0x814AE210 end:0x814AE250
 
 jaudio/system.c:
 	.text       start:0x813419E0 end:0x81345900 align:32
