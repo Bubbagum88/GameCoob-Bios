@@ -28,7 +28,9 @@
 //! |           |        | much a calendar field being edited is enlarged    |
 //! | `sway`    | 10     | how much of its group's sway the cube follows     |
 
-use super::mtx::{self, SinTable};
+use super::gbase;
+use super::mtx;
+use crate::sdk::mtx::self as psmtx;
 use super::raster::Prim;
 use super::render::{self, DrawOpts, Prepared, View};
 use super::shader::Shader;
@@ -287,7 +289,7 @@ impl Mosaic {
 
     /// One frame of screen `set` (a [`set`] id) in language `lang`:
     /// `build` marks the cells, then the cubes move, sway and get coloured.
-    pub fn frame(&mut self, data: &MosaicData, set: usize, lang: usize, colors: &[Pair; 3], s: &SinTable, build: impl FnOnce(&mut Build)) {
+    pub fn frame(&mut self, data: &MosaicData, set: usize, lang: usize, colors: &[Pair; 3], build: impl FnOnce(&mut Build)) {
         let Some(paths) = data.paths.sets.get(set) else { return };
         let n = paths.paths.len();
         if self.cells.len() < n {
@@ -321,7 +323,7 @@ impl Mosaic {
         }
         self.place(&places, n);
         if t > SWAY_FROM {
-            self.sway(&groups, n, s);
+            self.sway(&groups, n);
         }
         for c in &mut self.cells[..n] {
             c.alpha = (255.0 * t * c.vis.k()) as u8;
@@ -381,14 +383,14 @@ impl Mosaic {
 
     /// fn_8133498C + fn_8132C750: each group turns about its centre and
     /// drifts; a cube follows by its `sway` ramp.
-    fn sway(&mut self, groups: &[Vec<u16>], n: usize, s: &SinTable) {
+    fn sway(&mut self, groups: &[Vec<u16>], n: usize) {
         let u = self.wave as f32 / SWAY_PERIOD as f32;
         let dx = swing(SWAY_X_SPLIT, fract(u + SWAY_X_SPLIT * 0.5), SWAY_X);
         let dy = swing(0.5, fract(0.25 + 2.0 * u), SWAY_Y);
         let ph = fract(0.25 + u);
         let yaw = deg(swing(0.5, ph, SWAY_YAW));
         let roll = deg(swing(0.5, ph, SWAY_ROLL));
-        let r = mtx::rot_trans(s, 0, yaw, roll, [0.0; 3]);
+        let r = mtx::rot_trans(0, yaw, roll, [0.0; 3]);
         for g in groups {
             let mut ctr = [0.0f32; 3];
             let mut k = 0.0;
@@ -408,7 +410,7 @@ impl Mosaic {
                     continue;
                 }
                 let d = [c.pos[0] - ctr[0], c.pos[1] - ctr[1], c.pos[2] - ctr[2]];
-                let q = mtx::apply(&r, d);
+                let q = psmtx::mult_vec(&r, d);
                 c.pos[0] += (q[0] - d[0] + dx) * w;
                 c.pos[1] += (q[1] - d[1] + dy) * w;
                 c.pos[2] += (q[2] - d[2]) * w;
@@ -419,7 +421,7 @@ impl Mosaic {
 
     /// Fx_Draw: queue the visible cubes. `view` is the submenu camera
     /// (one unit per pixel at z = 0), `alpha` the submenu's fx fader.
-    pub fn draw<'a>(&'a self, list: &mut Vec<Prim<'a>>, data: &'a MosaicData, view: &View, alpha: u8, s: &SinTable) {
+    pub fn draw<'a>(&'a self, list: &mut Vec<Prim<'a>>, data: &'a MosaicData, view: &View, alpha: u8) {
         let Some(set) = self.screen else { return };
         let n = data.paths.sets[set].paths.len().min(self.shaders.len());
         for (c, sh) in self.cells[..n].iter().zip(&self.shaders) {
@@ -428,7 +430,7 @@ impl Mosaic {
                 continue;
             }
             let k = CUBE_SCALE * c.scale;
-            let m = mtx::concat(&mtx::rot_trans(s, c.rot[0], c.rot[1], c.rot[2], c.pos), &mtx::scale(k, k, k));
+            let m = psmtx::concat(&mtx::rot_trans(c.rot[0], c.rot[1], c.rot[2], c.pos), &psmtx::scale(k, k, k));
             let o = DrawOpts { alpha: a, ..Default::default() };
             render::draw_model_with(list, &data.model, Some(sh), &m, view, &o);
         }
@@ -447,9 +449,9 @@ fn deg(d: f32) -> i32 {
 /// [split, 1].
 fn swing(split: f32, x: f32, amp: f32) -> f32 {
     if x < split {
-        mtx::hermite(x, 0.0, -amp, 0.0, split, amp, 0.0)
+        gbase::hermite(x, 0.0, -amp, 0.0, split, amp, 0.0)
     } else {
-        mtx::hermite(x, split, amp, 0.0, 1.0, -amp, 0.0)
+        gbase::hermite(x, split, amp, 0.0, 1.0, -amp, 0.0)
     }
 }
 

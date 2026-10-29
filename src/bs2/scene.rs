@@ -2,7 +2,9 @@
 //! the impact shake, and the world matrix every intro model hangs from.
 //! Reimplemented from the IPL's behavior; constants are its own defaults.
 
-use super::mtx::{self, Mtx, SinTable, to_s16};
+use super::gbase;
+use super::mtx::{self, sin_s, to_s16};
+use crate::sdk::mtx::{self as psmtx, Mtx};
 
 pub struct Scene {
     pub spin: i16,
@@ -88,7 +90,7 @@ impl Scene {
             if self.spin_speed < 0.01 {
                 self.spin_speed = 0.0;
             }
-            self.spin = to_s16(mtx::hermite(
+            self.spin = to_s16(gbase::hermite(
                 self.ease_frame as f32,
                 0.0,
                 self.ease_from as f32,
@@ -138,28 +140,27 @@ impl Scene {
     }
 
     /// `RotY(spin) · Shake · Wobble · Iso · T(15,15,15)`, then squash/stretch.
-    pub fn world_mtx(&self, s: &SinTable) -> Mtx {
+    pub fn world_mtx(&self) -> Mtx {
         let f = self.spin_tilt * self.spin_speed / self.spin_threshold;
         let amp = self.wobble_amp as f32;
         let ph = self.wobble_phase as i32;
         let base = 1000.0 * f;
-        let w = |k: i32| to_s16(base + (1.0 - f) * amp * s.sin(ph * k)) as i32;
+        let w = |k: i32| to_s16(base + (1.0 - f) * amp * sin_s(ph * k)) as i32;
 
-        let mut m = mtx::concat(&mtx::rot_trans(s, self.iso[0], self.iso[1], self.iso[2], [0.0; 3]), &mtx::trans(15.0, 15.0, 15.0));
-        m = mtx::concat(&mtx::rot_trans(s, w(0x5A), w(0x3C), w(0x46), [0.0; 3]), &m);
+        let mut m = psmtx::concat(&mtx::rot_trans(self.iso[0], self.iso[1], self.iso[2], [0.0; 3]), &psmtx::trans(15.0, 15.0, 15.0));
+        m = psmtx::concat(&mtx::rot_trans(w(0x5A), w(0x3C), w(0x46), [0.0; 3]), &m);
 
         let land = self.land_impulse as f32;
         let drop = self.drop_impulse as f32;
-        let sn = s.sin(self.shake_phase as i32);
+        let sn = sin_s(self.shake_phase as i32);
         let shake = mtx::rot_trans(
-            s,
             to_s16(-drop * sn) as i32,
             0,
             to_s16(land * sn) as i32,
             [0.0, self.land_lift * land * sn + self.drop_lift * drop * sn, 0.0],
         );
-        m = mtx::concat(&shake, &m);
-        m = mtx::concat(&mtx::rot_trans(s, 0, self.spin as i32, 0, [0.0; 3]), &m);
+        m = psmtx::concat(&shake, &m);
+        m = psmtx::concat(&mtx::rot_trans(0, self.spin as i32, 0, [0.0; 3]), &m);
 
         let k = self.spin_speed / self.spin_threshold;
         mtx::scale_cols(&mut m, [1.0 - (1.0 - self.squash_xz) * k, 1.0 + self.stretch_y * k, 1.0 - (1.0 - self.squash_xz) * k]);

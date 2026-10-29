@@ -6,8 +6,11 @@
 //! * [`Assets::load`] pulls every model, texture and animation out of the dump.
 
 pub mod anim;
+pub mod bs2main;
+pub mod camera;
 pub mod cube;
 pub mod fx;
+pub mod gbase;
 pub mod menu;
 pub mod mtx;
 pub mod raster;
@@ -20,7 +23,8 @@ use crate::ipl::{bti, j3d::Model, Ipl};
 use alloc::vec::Vec;
 use anim::{Bck, Ipk};
 use cube::{Cube, Jingle, Phase, GRID};
-use mtx::{Mtx, SinTable};
+use mtx::sin_s;
+use crate::sdk::mtx::{self as psmtx, Mtx};
 use raster::{BlendMode, Prim, SVert, Sh, State, Target};
 use render::{DrawOpts, Prepared, View};
 use scene::Scene;
@@ -103,7 +107,6 @@ pub enum State0 {
 }
 
 pub struct Intro {
-    pub sin: SinTable,
     pub cube: Cube,
     pub scene: Scene,
     pub state: State0,
@@ -118,8 +121,8 @@ pub struct Intro {
 
 impl Intro {
     pub fn new(a: &Assets) -> Intro {
+        mtx::sin_table_init(12);
         Intro {
-            sin: SinTable::new(),
             cube: Cube::new(a.path.clone()),
             scene: Scene::new(),
             state: State0::Intro,
@@ -196,12 +199,12 @@ impl Intro {
             self.spin_start = sc.spin;
         } else if t < k1 {
             let from = -(self.spin_start as i32 + (SPINOUT_TURNS << 16)) as f32;
-            sc.spin = mtx::to_s16(mtx::hermite(t as f32, k0 as f32, from, sc.spin_threshold, k1 as f32, 5000.0, 0.0));
+            sc.spin = mtx::to_s16(gbase::hermite(t as f32, k0 as f32, from, sc.spin_threshold, k1 as f32, 5000.0, 0.0));
             if t > k0 {
                 sc.spin_speed = sc.spin.wrapping_sub(prev) as f32;
             }
         } else if t < k2 {
-            sc.spin = mtx::to_s16(mtx::hermite(t as f32, k1 as f32, 5000.0, 0.0, k2 as f32, 0.0, 0.0));
+            sc.spin = mtx::to_s16(gbase::hermite(t as f32, k1 as f32, 5000.0, 0.0, k2 as f32, 0.0, 0.0));
             sc.spin_speed = sc.spin.wrapping_sub(prev) as f32;
         } else if t == k2 {
             sc.spin = 0;
@@ -228,7 +231,7 @@ impl Intro {
         let mut list = Vec::new();
         let vp = [t.w as f32, t.h as f32];
         match m {
-            Some(m) => m.draw(&mut list, a, ma, &self.spin_out_view(vp), &self.sin),
+            Some(m) => m.draw(&mut list, a, ma, &self.spin_out_view(vp)),
             None => {
                 self.draw(&mut list, a, vp);
                 // Scene_Draw2DSpinOut: the front face fades in over the
@@ -236,7 +239,7 @@ impl Intro {
                 let f = self.spin_frame - (SPINOUT_END - SPINOUT_FACE);
                 if self.state != State0::Intro && f >= 0 {
                     let alpha = (255 * f.min(SPINOUT_FACE) / SPINOUT_FACE) as u8;
-                    menu::Menu::draw_spin_out_face(&mut list, ma, &self.spin_out_view(vp), &self.spin_out_mtx(), alpha, &self.sin);
+                    menu::Menu::draw_spin_out_face(&mut list, ma, &self.spin_out_view(vp), &self.spin_out_mtx(), alpha);
                 }
             }
         }
@@ -250,13 +253,12 @@ impl Intro {
         if self.state != State0::Intro {
             return self.draw_spin_out(t, a, vp);
         }
-        let s = &self.sin;
         let sc = &self.scene;
-        let mut view = View::intro(-55.0, true);
+        let mut view = View::intro(camera::cam_y(bs2main::disp_settings(), camera::CamState::Intro), true);
         view.vp = vp;
-        let world = sc.world_mtx(s);
+        let world = sc.world_mtx();
         let master: i32 = 255;
-        let scaled = |m: &Mtx, k: f32| mtx::concat(m, &mtx::scale(k, k, k));
+        let scaled = |m: &Mtx, k: f32| psmtx::concat(m, &psmtx::scale(k, k, k));
 
         // 1. The "NINTENDO GAMECUBE" wordmark, fixed to the screen.
         self.draw_text(t, a, &view, master as u8);
@@ -275,7 +277,7 @@ impl Intro {
         // 4. Trail tiles and the small cube, fading out as the logo fades in.
         let cube_a = ((255 - sc.logo_alpha as i32) * master / 255) as u8;
         self.draw_tiles(t, a, &world, &view, cube_a);
-        let small = self.cube.small_cube_mtx(s, &world);
+        let small = self.cube.small_cube_mtx(&world);
         let small_a = (self.cube.alpha as i32 * cube_a as i32 / 255) as u8;
         render::draw_model(t, &a.small_cube, &small, &view, &DrawOpts { alpha: small_a, ..Default::default() });
 
@@ -302,7 +304,7 @@ impl Intro {
         render::draw_model(
             t,
             &a.text,
-            &mtx::IDENTITY,
+            &psmtx::IDENTITY,
             view,
             &DrawOpts { alpha, joints: Some(&joints), mat_colors: &colors, only: None },
         );
@@ -312,21 +314,18 @@ impl Intro {
     /// Scene_SpinOut + Scene_Draw2DSpinOut: perspective camera rising to the
     /// menu height, the logo scene fading out and the glass menu cube in.
     fn draw_spin_out<'a>(&self, t: &mut Vec<Prim<'a>>, a: &'a Assets, vp: [f32; 2]) {
-        let s = &self.sin;
         let sc = &self.scene;
         let f = self.spin_frame.min(SPINOUT_END);
         let fade = SPINOUT_FADE;
-        let yoff = if f <= fade { -55.0 + 45.0 * f as f32 / fade as f32 } else { -10.0 };
-        let mut view = View::intro(yoff, false);
-        view.vp = vp;
-        let mut text_view = View::intro(-55.0, true);
+        let mut view = self.spin_out_view(vp);
+        let mut text_view = View::intro(bs2main::disp_settings().cam_y_far, true);
         text_view.vp = view.vp;
         let k = sc.spin_speed / sc.spin_threshold;
         if f < fade {
             // The logo scene (inner background and wordmark) fades out.
             let shake = (sc.land_impulse as i32 + sc.drop_impulse as i32 + sc.wobble_amp as i32).min(3000);
             let a_in = ((fade - f) * 255 * shake / (fade * 3000)) as u8;
-            let world = sc.world_mtx(s);
+            let world = sc.world_mtx();
             render::draw_model(t, &a.bg_inner, &world, &view, &DrawOpts { alpha: a_in, ..Default::default() });
             self.draw_text(t, a, &text_view, a_in);
         }
@@ -336,7 +335,7 @@ impl Intro {
         let base = 1.1 * (1.0 - k);
         let sxz = base + sc.squash_xz * k;
         let sy = base + (1.0 + sc.stretch_y) * k;
-        let m = mtx::concat(&m, &mtx::scale(sxz, sy, sxz));
+        let m = psmtx::concat(&m, &psmtx::scale(sxz, sy, sxz));
         let cube_a = if f < fade { (255 * f / fade) as u8 } else { 255 };
         view.ambient = [40.0 / 255.0, 40.0 / 255.0, 40.0 / 255.0, 1.0];
         render::draw_model(t, &a.big_cube, &m, &view, &DrawOpts { alpha: cube_a, ..Default::default() });
@@ -344,9 +343,8 @@ impl Intro {
 
     /// The camera of the spin-out and the menu (perspective, rising to y -10).
     pub fn spin_out_view(&self, vp: [f32; 2]) -> View {
-        let f = self.spin_frame.min(SPINOUT_END);
-        let yoff = if f <= SPINOUT_FADE { -55.0 + 45.0 * f as f32 / SPINOUT_FADE as f32 } else { -10.0 };
-        let mut view = View::intro(yoff, false);
+        let state = camera::CamState::SpinOut { frame: self.spin_frame.min(SPINOUT_END), fade: SPINOUT_FADE };
+        let mut view = View::intro(camera::cam_y(bs2main::disp_settings(), state), false);
         view.vp = vp;
         view
     }
@@ -357,23 +355,21 @@ impl Intro {
     /// `f = (1 - spinTilt) · spinSpeed / threshold`, so as the spin brakes
     /// the cube settles into exactly the matrix the menu starts from.
     pub fn spin_out_mtx(&self) -> Mtx {
-        let s = &self.sin;
         let sc = &self.scene;
         let k = sc.spin_speed / sc.spin_threshold;
         let f = (1.0 - sc.spin_tilt_k()) * k;
         let amp = sc.wobble_amp as f32;
         let ph = sc.wobble_phase as i32;
         // Drawn from the matrix computed before this frame's +7.
-        let w = menu::Wobble::at(s, self.wobble_frame.wrapping_sub(7));
-        let blend = |tilt: f32, speed: i32, menu: f32| mtx::to_s16(f * (tilt + amp * s.sin(ph * speed)) + (1.0 - f) * menu) as i32;
+        let w = menu::Wobble::at(self.wobble_frame.wrapping_sub(7));
+        let blend = |tilt: f32, speed: i32, menu: f32| mtx::to_s16(f * (tilt + amp * sin_s(ph * speed)) + (1.0 - f) * menu) as i32;
         let rot = mtx::rot_trans(
-            s,
             blend(8191.0, 90, w.rx),
             blend(-6371.0, 60, w.ry),
             blend(-5461.0, 70, w.rz),
             [w.tx, w.ty, 0.0],
         );
-        mtx::concat(&mtx::rot_trans(s, 0, sc.spin as i32, 0, [0.0; 3]), &rot)
+        psmtx::concat(&mtx::rot_trans(0, sc.spin as i32, 0, [0.0; 3]), &rot)
     }
 
     /// Cube_DrawTiles: one textured quad per live cell on the three faces.
@@ -383,7 +379,7 @@ impl Intro {
         }
         let c = &self.cube;
         let c3 = (c.size * 3 / 2) as f32;
-        let mv = mtx::concat(&view.view, &mtx::concat(world, &mtx::trans(c3, c3, c3)));
+        let mv = psmtx::concat(&view.view, &psmtx::concat(world, &psmtx::trans(c3, c3, c3)));
         let size = c.size as f32;
         let inset = c.tile_inset as f32 / 16.0;
         let rgb = c.tile_rgb.map(|x| x as f32 / 255.0);
@@ -412,7 +408,7 @@ impl Intro {
                             1 => [v, u, 0.0],
                             _ => [0.0, v, u],
                         };
-                        let Some(s) = view.project(mtx::apply(&mv, p)) else {
+                        let Some(s) = view.project(psmtx::mult_vec(&mv, p)) else {
                             ok = false;
                             break;
                         };

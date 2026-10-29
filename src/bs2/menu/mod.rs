@@ -21,7 +21,9 @@ pub mod icons;
 mod system;
 
 use super::fx::{self, screen, Mosaic, MosaicData};
-use super::mtx::{self, Mtx, SinTable};
+use crate::bs2::{bs2main, camera};
+use crate::bs2::mtx::{self, cos_s, sin_s};
+use crate::sdk::mtx::{self as psmtx, Mtx};
 use super::raster::Prim;
 use super::render::{self, DrawOpts, View};
 use super::shader::FastTex;
@@ -237,19 +239,19 @@ pub struct Wobble {
 }
 
 impl Wobble {
-    pub fn at(s: &SinTable, t: i16) -> Wobble {
+    pub fn at(t: i16) -> Wobble {
         let t = t as i32;
         Wobble {
-            tx: 15.0 * s.sin(-0x4000 + 25 * t),
-            ty: 6.0 * s.sin(50 * t),
-            rx: 350.0 * s.cos(50 * t),
-            ry: 1000.0 * s.cos(-15000 + 25 * t),
-            rz: 1000.0 * s.cos(25 * t),
+            tx: 15.0 * sin_s(-0x4000 + 25 * t),
+            ty: 6.0 * sin_s(50 * t),
+            rx: 350.0 * cos_s(50 * t),
+            ry: 1000.0 * cos_s(-15000 + 25 * t),
+            rz: 1000.0 * cos_s(25 * t),
         }
     }
 
-    pub fn mtx(&self, s: &SinTable) -> Mtx {
-        mtx::rot_trans(s, self.rx as i32, self.ry as i16 as i32, self.rz as i32, [self.tx, self.ty, 0.0])
+    pub fn mtx(&self) -> Mtx {
+        mtx::rot_trans(self.rx as i32, self.ry as i16 as i32, self.rz as i32, [self.tx, self.ty, 0.0])
     }
 }
 
@@ -464,7 +466,7 @@ const SUB_GAME: usize = 3;
 
 impl Menu {
     /// Menu_Init, continuing the wobble clock of the spin-out.
-    pub fn new(info: SysInfo, ma: &MenuAssets, drive: Box<dyn DiscDrive>, cards: Box<dyn MemCards>, wobble_frame: i16, s: &SinTable) -> Menu {
+    pub fn new(info: SysInfo, ma: &MenuAssets, drive: Box<dyn DiscDrive>, cards: Box<dyn MemCards>, wobble_frame: i16) -> Menu {
         let card = card::Card::new(ma, &*cards);
         let mut m = Menu {
             state: St::Top,
@@ -473,7 +475,7 @@ impl Menu {
             rot_x: 0,
             rot_y: 0,
             zoom: 0,
-            cube: mtx::IDENTITY,
+            cube: psmtx::IDENTITY,
             guide_icon: [Fader::default(); 6],
             guide_text: [Fader::default(); 8],
             sub: [[0, 1, 2].map(|i| Fader::with_delay(SUB_DELAY[i])); 4],
@@ -509,7 +511,7 @@ impl Menu {
             clock_icon: icons::ClockIcon::new(),
             option_icon: icons::OptionIcon::new(),
         };
-        m.calc_cube(s);
+        m.calc_cube();
         m
     }
 
@@ -609,12 +611,12 @@ impl Menu {
     }
 
     /// Menu_CalcCubeMtx: rotation, idle wobble, then the zoom push.
-    fn calc_cube(&mut self, s: &SinTable) {
-        let rot = mtx::rot_trans(s, self.rot_x as i32, self.rot_y as i32, 0, [0.0; 3]);
-        let m = mtx::concat(&Wobble::at(s, self.wobble_frame).mtx(s), &rot);
+    fn calc_cube(&mut self) {
+        let rot = mtx::rot_trans(self.rot_x as i32, self.rot_y as i32, 0, [0.0; 3]);
+        let m = psmtx::concat(&Wobble::at(self.wobble_frame).mtx(), &rot);
         self.cube = if self.zoom != 0 {
-            let z = ZOOM_DEPTH * (1.0 - s.cos(self.zoom as i32));
-            mtx::concat(&mtx::trans(0.0, 0.0, z), &m)
+            let z = ZOOM_DEPTH * (1.0 - cos_s(self.zoom as i32));
+            psmtx::concat(&psmtx::trans(0.0, 0.0, z), &m)
         } else {
             m
         };
@@ -663,7 +665,7 @@ impl Menu {
     }
 
     /// One menu frame (Menu_Update). Returns an action for the firmware.
-    pub fn update(&mut self, pad: &Pad, s: &SinTable) -> core::option::Option<Action> {
+    pub fn update(&mut self, pad: &Pad) -> core::option::Option<Action> {
         self.frame += 1;
         if pad.eject {
             self.drive.toggle_tray();
@@ -721,7 +723,7 @@ impl Menu {
             }
             self.handle_input(p);
             self.wobble_frame = self.wobble_frame.wrapping_add(7);
-            self.calc_cube(s);
+            self.calc_cube();
             self.update_disc_faders();
         } else {
             if self.zoom < 0x7FFF - ZOOM_IN {
@@ -731,7 +733,7 @@ impl Menu {
                 self.zoom = 0x7FFF;
             }
             self.wobble_frame = self.wobble_frame.wrapping_add(7);
-            self.calc_cube(s);
+            self.calc_cube();
             let (next, act) = self.update_sub(p);
             self.next = next;
             action = act;
@@ -747,18 +749,18 @@ impl Menu {
     }
 
     /// Menu_UpdateIcons: face, enter or hide for each submenu's icon.
-    fn update_icons(&mut self, d: &icons::IconData, s: &SinTable) {
+    fn update_icons(&mut self, d: &icons::IconData) {
         let phase = |face: St, sub: St| match self.state {
             st if st == face => icons::Phase::Face,
             st if st == sub => icons::Phase::Enter,
             _ => icons::Phase::Hide,
         };
         let p = phase(St::GameFace, St::Game);
-        self.game_icon.update(p, s);
+        self.game_icon.update(p);
         let p = phase(St::CardFace, St::Card);
         self.card_icon.update(p);
         let p = phase(St::ClockFace, St::Clock);
-        self.clock_icon.update(p, s, &self.info.time);
+        self.clock_icon.update(p, &self.info.time);
         let p = phase(St::OptionFace, St::Option);
         self.option_icon.update(p, d);
     }
@@ -940,50 +942,50 @@ impl Menu {
     // -----------------------------------------------------------------
 
     /// Scene_Draw2DSpinOut's face: the front layout on the spinning cube.
-    pub fn draw_spin_out_face<'a>(list: &mut Vec<Prim<'a>>, ma: &'a MenuAssets, view: &View, cube: &Mtx, alpha: u8, s: &SinTable) {
-        let mut ui = Ui { list, view, mv: mtx::IDENTITY };
-        draw_front(&mut ui, ma, 0, view, cube, alpha, s);
+    pub fn draw_spin_out_face<'a>(list: &mut Vec<Prim<'a>>, ma: &'a MenuAssets, view: &View, cube: &Mtx, alpha: u8) {
+        let mut ui = Ui { list, view, mv: psmtx::IDENTITY };
+        draw_front(&mut ui, ma, 0, view, cube, alpha);
     }
 
     /// Scene_Draw2DMenu + Menu_Draw2D.
-    pub fn draw<'a>(&'a self, list: &mut Vec<Prim<'a>>, a: &'a Assets, ma: &'a MenuAssets, view: &View, s: &SinTable) {
+    pub fn draw<'a>(&'a self, list: &mut Vec<Prim<'a>>, a: &'a Assets, ma: &'a MenuAssets, view: &View) {
         let bg = (255 * (0x7FFF - self.zoom as i32) / 0x7FFF) as u8;
         // The glass cube, translucent as it zooms away.
         let mut v = View { ambient: [40.0 / 255.0, 40.0 / 255.0, 40.0 / 255.0, 1.0], ..clone_view(view) };
         v.vp = view.vp;
         // The icon cubes sit inside the glass cube.
-        self.game_icon.draw(list, &ma.icons, view, &self.cube, s);
-        self.card_icon.draw(list, &ma.icons, view, &self.cube, s);
-        self.clock_icon.draw(list, &ma.icons, view, &self.cube, s);
-        self.option_icon.draw(list, &ma.icons, view, &self.cube, s);
+        self.game_icon.draw(list, &ma.icons, view, &self.cube);
+        self.card_icon.draw(list, &ma.icons, view, &self.cube);
+        self.clock_icon.draw(list, &ma.icons, view, &self.cube);
+        self.option_icon.draw(list, &ma.icons, view, &self.cube);
         if bg > 0 {
-            let m = mtx::concat(&self.cube, &mtx::scale(1.1, 1.1, 1.1));
+            let m = psmtx::concat(&self.cube, &psmtx::scale(1.1, 1.1, 1.1));
             render::draw_model(list, &a.big_cube, &m, &v, &DrawOpts { alpha: bg, ..Default::default() });
         }
-        let mut ui = Ui { list, view, mv: mtx::IDENTITY };
-        self.draw_faces(&mut ui, ma, view, bg, s);
+        let mut ui = Ui { list, view, mv: psmtx::IDENTITY };
+        self.draw_faces(&mut ui, ma, view, bg);
         let mut v2 = View::intro(0.0, false);
         v2.vp = view.vp;
         let mut ui = Ui { list: ui.list, view: &v2, mv: screen_2d() };
-        self.draw_submenus(&mut ui, ma, s);
+        self.draw_submenus(&mut ui, ma);
         self.draw_guide(&mut ui, ma, 255);
         let pulse = (self.highlight - 50) as f32 / 70.0;
         self.sys.draw(&mut ui, ma, self.lang, pulse);
     }
 
-    fn face_mtx(&self, view: &View, rot: (i32, i32), t: [f32; 3], s: &SinTable) -> Mtx {
-        face_mtx(view, &self.cube, rot, t, s)
+    fn face_mtx(&self, view: &View, rot: (i32, i32), t: [f32; 3]) -> Mtx {
+        face_mtx(view, &self.cube, rot, t)
     }
 
     /// Menu_DrawFaces.
-    fn draw_faces<'a>(&'a self, ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, view: &View, alpha: u8, s: &SinTable) {
+    fn draw_faces<'a>(&'a self, ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, view: &View, alpha: u8) {
         let clampf = |r: i16| (r as i32).abs().min(FACE_FADE);
         let (ax, ay) = (clampf(self.rot_x), clampf(self.rot_y));
         let front = if ax != ay { Some(ax.max(ay)) } else if ax == 0 { Some(0) } else { None };
         if let Some(m) = front {
             // Menu_DrawTopFace ignores the menu alpha.
             let fa = (255 - m * 255 / FACE_FADE) as u8;
-            draw_front(ui, ma, self.lang, view, &self.cube, fa, s);
+            draw_front(ui, ma, self.lang, view, &self.cube, fa);
         }
         let face_a = |r: i16| ((alpha as i32) * (255 - (0x4000 - (r as i32).abs()) * 255 / FACE_FADE) / 255).clamp(0, 255) as f32 / 255.0;
         let l = self.lang;
@@ -991,7 +993,7 @@ impl Menu {
         // Bottom: Memory Card.
         if self.rot_x <= -FACE_SHOW {
             let a = face_a(self.rot_x);
-            ui.mv = self.face_mtx(view, (0x4000, 0), [-FACE_HALF, -FACE_HALF, FACE_HALF], s);
+            ui.mv = self.face_mtx(view, (0x4000, 0), [-FACE_HALF, -FACE_HALF, FACE_HALF]);
             let g = &ma.card_face[l];
             let c = with_a(WHITE, a * a);
             for f in g.frame(tag(b"fram")) {
@@ -1005,19 +1007,19 @@ impl Menu {
         // Top: Game Play.
         if self.rot_x >= FACE_SHOW {
             let a = face_a(self.rot_x);
-            ui.mv = self.face_mtx(view, (-0x4000, 0), [-FACE_HALF, FACE_HALF, -FACE_HALF], s);
+            ui.mv = self.face_mtx(view, (-0x4000, 0), [-FACE_HALF, FACE_HALF, -FACE_HALF]);
             self.draw_game_face(ui, ma, a);
         }
         // Right: Calendar.
         if self.rot_y <= -FACE_SHOW {
             let a = face_a(self.rot_y);
-            ui.mv = self.face_mtx(view, (0, 0x4000), [FACE_HALF, FACE_HALF, FACE_HALF], s);
+            ui.mv = self.face_mtx(view, (0, 0x4000), [FACE_HALF, FACE_HALF, FACE_HALF]);
             self.draw_clock_face(ui, ma, a);
         }
         // Left: Options.
         if self.rot_y >= FACE_SHOW {
             let a = face_a(self.rot_y);
-            ui.mv = self.face_mtx(view, (0, -0x4000), [-FACE_HALF, FACE_HALF, -FACE_HALF], s);
+            ui.mv = self.face_mtx(view, (0, -0x4000), [-FACE_HALF, FACE_HALF, -FACE_HALF]);
             self.draw_option_face(ui, ma, a);
         }
     }
@@ -1153,7 +1155,7 @@ impl Menu {
     }
 
     /// Menu_DrawSubmenus: each is drawn while its first fader is above 0.
-    fn draw_submenus<'a>(&'a self, ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, s: &SinTable) {
+    fn draw_submenus<'a>(&'a self, ui: &mut Ui<'a, '_>, ma: &'a MenuAssets) {
         for k in [SUB_CARD, SUB_GAME, SUB_OPTION, SUB_CLOCK] {
             let f = &self.sub[k];
             let al = [f[0].alpha(), f[1].alpha(), f[2].alpha()].map(|v| v as f32 / 255.0);
@@ -1163,7 +1165,7 @@ impl Menu {
             let fx_alpha = f[0].alpha() as u8;
             match k {
                 SUB_GAME => self.draw_game(ui, ma, al),
-                SUB_CARD => self.card.draw(ui, ma, &*self.cards, self.lang, al, s),
+                SUB_CARD => self.card.draw(ui, ma, &*self.cards, self.lang, al),
                 SUB_OPTION => {
                     draw_backdrop(ui, ma, al[1]);
                     self.draw_options(ui, ma, al);
@@ -1180,7 +1182,7 @@ impl Menu {
                 _ => None,
             };
             if set.is_some() && set == self.fx.screen() {
-                self.fx.draw(ui.list, &ma.fx, ui.view, fx_alpha, s);
+                self.fx.draw(ui.list, &ma.fx, ui.view, fx_alpha);
             }
             self.draw_message(ui, ma, al[2]);
         }
@@ -1325,13 +1327,13 @@ impl Menu {
     /// The icon cubes' and the mosaic's frame (Menu_UpdateIcons, the
     /// submenus' Fx*_Update + Fx_Update). Call once per frame after
     /// [`Menu::update`].
-    pub fn update_fx(&mut self, ma: &MenuAssets, s: &SinTable) {
-        self.update_icons(&ma.icons, s);
+    pub fn update_fx(&mut self, ma: &MenuAssets) {
+        self.update_icons(&ma.icons);
         let d = &ma.fx;
         match self.state {
             St::Game if !self.game.starting() && self.game_icon.settled() => {
                 let msg = game::Game::fx_message(&*self.drive);
-                self.fx.frame(d, fx::set::GAME, self.lang, &fx::GAME_COLORS, s, |b| screen::game(b, msg));
+                self.fx.frame(d, fx::set::GAME, self.lang, &fx::GAME_COLORS, |b| screen::game(b, msg));
             }
             St::Option if self.option_icon.settled() => {
                 // Ours has two rows: the boot timeout sits in the IPL's
@@ -1339,7 +1341,7 @@ impl Menu {
                 let row = self.opt_row as u8 + 1;
                 let t = if self.opt_edit && self.opt_row == 0 { self.opt_timeout } else { self.info.timeout };
                 let o = screen::Options { sub: if self.opt_edit { row + 1 } else { 0 }, row, stereo: None, offset: Some(t as i32), lang: true };
-                self.fx.frame(d, fx::set::OPTION, self.lang, &fx::OPTION_COLORS, s, |b| screen::options(b, &o));
+                self.fx.frame(d, fx::set::OPTION, self.lang, &fx::OPTION_COLORS, |b| screen::options(b, &o));
             }
             St::Clock if self.clock_icon.settled() => {
                 let k = &mut self.clock;
@@ -1353,7 +1355,7 @@ impl Menu {
                     keep_sway: true,
                 };
                 k.shown_sub = k.sub;
-                self.fx.frame(d, fx::set::CLOCK, self.lang, &fx::CLOCK_COLORS, s, |b| screen::clock(b, &c));
+                self.fx.frame(d, fx::set::CLOCK, self.lang, &fx::CLOCK_COLORS, |b| screen::clock(b, &c));
             }
             st if st.on_cube() => self.fx.clear(),
             _ => {}
@@ -1381,24 +1383,23 @@ fn clone_view(v: &View) -> View {
 /// The 2D screen of Setup2DView: 584 x 448 layout units, y down, at z 0
 /// in front of a camera 224 / tan(fovy / 2) away.
 pub fn screen_2d() -> Mtx {
-    let s = mtx::scale(1.0, -1.0, 1.0);
-    mtx::concat(&mtx::concat(&View::intro(0.0, false).view, &mtx::trans(-292.0, 224.0, 0.0)), &s)
+    camera::setup_2d_view(bs2main::disp_settings())
 }
 
 /// `view · cube · SRT` of a face layout (scale (1, -1, 1)).
-fn face_mtx(view: &View, cube: &Mtx, rot: (i32, i32), t: [f32; 3], s: &SinTable) -> Mtx {
-    let srt = mtx::concat(&mtx::rot_trans(s, rot.0, rot.1, 0, t), &mtx::scale(1.0, -1.0, 1.0));
-    mtx::concat(&mtx::concat(&view.view, cube), &srt)
+fn face_mtx(view: &View, cube: &Mtx, rot: (i32, i32), t: [f32; 3]) -> Mtx {
+    let srt = psmtx::concat(&mtx::rot_trans(rot.0, rot.1, 0, t), &psmtx::scale(1.0, -1.0, 1.0));
+    psmtx::concat(&psmtx::concat(&view.view, cube), &srt)
 }
 
 /// The front face (Menu_DrawTopFace / Menu_DrawSpinOutFace); its alpha is
 /// applied twice.
-fn draw_front<'a>(ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, lang: usize, view: &View, cube: &Mtx, alpha: u8, s: &SinTable) {
+fn draw_front<'a>(ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, lang: usize, view: &View, cube: &Mtx, alpha: u8) {
     if alpha == 0 {
         return;
     }
     let a = alpha as f32 / 255.0;
-    ui.mv = face_mtx(view, cube, (0, 0), [-FACE_HALF, FACE_HALF, FACE_HALF], s);
+    ui.mv = face_mtx(view, cube, (0, 0), [-FACE_HALF, FACE_HALF, FACE_HALF]);
     let g = &ma.front[lang];
     for p in g.pics.iter() {
         if let Some(t) = ma.bank.get(p.tex as usize) {
