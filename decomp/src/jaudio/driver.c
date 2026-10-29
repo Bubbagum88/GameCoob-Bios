@@ -1480,9 +1480,9 @@ extern Acmd* Nas_Synth_Envelope(Acmd* cmd, commonch* common, driverch* driver, s
     targetVolRight = common->target_volume_right << 4;
 
     if (AG.sound_mode == SOUND_OUTPUT_DOLBY_SURROUND) {
-        s32 idx = common->surround_effect_idx;
+        u32 idx;
 
-        if (idx != 0xFF) {
+        if ((idx = common->surround_effect_idx) != 0xFF) {
             defaultPanVolume = StereoLeft[idx];
             targetVolLeft *= defaultPanVolume;
             targetVolRight *= defaultPanVolume;
@@ -1531,7 +1531,7 @@ extern Acmd* Nas_Synth_Envelope(Acmd* cmd, commonch* common, driverch* driver, s
                 break;
         }
     } else {
-        aSetEnvParam(cmd++, (sourceReverbVol & 0x7F) * 2, rampReverb, rampLeft, rampRight);
+        aSetEnvParam(cmd++, (sourceReverbVol & 0x7F) << 1, rampReverb, rampLeft, rampRight);
         aSetEnvParam2(cmd++, (u16)curVolLeft, (u16)curVolRight);
         dmemDests = Env_Data_L3;
     }

@@ -2037,8 +2037,9 @@ static void Nas_GroupSeq(group* grp) {
                                 grp->counter = Nas_ReadWordData(m);
                                 break;
                             case GRP_CMD_EF: //
-                                Nas_ReadWordData(m);
-                                Nas_ReadByteData(m);
+                                // discarded expression: CW evaluates the right operand first and
+                                // keeps the word result live, so m is copied with addi, not mr
+                                Nas_ReadByteData(m) | Nas_ReadWordData(m);
                                 break;
                             case GRP_CMD_START_SEQ: // start sequence script
                                 /* Get sequence group index */
