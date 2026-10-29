@@ -524,7 +524,7 @@ s32 CardThread_Fail(u8 slot, s32 cmd, s32 result) {
     }
     CardThread_MarkConflictsIn();
     {
-        u32 msg = (cmd & 0xFF) | ((result << 8) & 0xFF00) | ((slot << 16) & 0x10000);
+        u32 msg = ((slot << 16) & 0x10000) | ((u8)result << 8) | (cmd & 0xFF);
         OSSendMessage(&sCardReplyQueue, (OSMessage)msg, OS_MESSAGE_BLOCK);
     }
     return 0;
@@ -1030,6 +1030,7 @@ s32 CardThread_CopyFile(u8 slot, s16 file, s16 dst, BOOL* done) {
    be mistaken for the moved file), give its entry to the copy, then delete
    the source. */
 s32 CardThread_MoveFile(u8 slot, s16 file, s16 dst, BOOL* done) {
+    int o;
     CARDDir dir;
     CARDDir hidden;
     s16 d;
@@ -1089,15 +1090,12 @@ s32 CardThread_MoveFile(u8 slot, s16 file, s16 dst, BOOL* done) {
         sCardIcons[slot][file].hasBanner = FALSE;
         OSRestoreInterrupts(enabled);
         d = dst;
-        {
-            u8 o = slot ^ 1;
-
-            result = __CARDGetStatusEx(o, d, &dir);
+        o = slot ^ 1;
+        result = __CARDGetStatusEx((u8)o, d, &dir);
+        if (result >= 0) {
+            result = CardThread_ReadEntry((u8)o, dst, &dir);
             if (result >= 0) {
-                result = CardThread_ReadEntry(o, dst, &dir);
-                if (result >= 0) {
-                    return 0;
-                }
+                return 0;
             }
         }
     }
@@ -1171,18 +1169,20 @@ inline s16 CardThread_CreateTmp(u8 slot, u32 size) {
 
 void CardThread_DoCopyMove(u8 slot, s16 file, s32 cmd) {
     CARDDir dir2;
-    BOOL done = FALSE;
+    BOOL done;
     u32 sector1;
     u32 sector0;
     CARDDir dir;
-    u32 sector;
-    s16 dst = -1;
-    BOOL created = FALSE;
-    s32 error = 0;
-    int other;
     s32 result;
+    u16 tmp;
+    int other;
+    s32 error;
+    BOOL created = FALSE;
+    s16 dst = -1;
+    u32 sector;
 
-    result = CardThread_FindInOther(slot, file);
+    done = error = 0;
+    result = sector = CardThread_FindInOther(slot, file); /* fake match: sector as scratch, regalloc only */
     if (result < 0) {
         CardThread_Error(slot, cmd, result);
         return;
@@ -1231,7 +1231,8 @@ void CardThread_DoCopyMove(u8 slot, s16 file, s32 cmd) {
 
     if (__CARDGetStatusEx(slot, file, &dir2) >= 0) {
         other = slot ^ 1;
-        if ((dst = CardThread_CreateTmp(other, dir2.length * sector)) < 0) {
+        tmp = CardThread_CreateTmp(other, dir2.length * sector);
+        if ((dst = tmp) < 0) {
             CardThread_Error(other, cmd, dst);
             return;
         }
@@ -1249,7 +1250,7 @@ void CardThread_DoCopyMove(u8 slot, s16 file, s32 cmd) {
             CardThread_MarkConflicts();
             OSSendMessage(&sCardReplyQueue, CardThread_Msg(((u8)file << 24) | ((slot << 16) & 0x10000)), OS_MESSAGE_BLOCK);
             CardThread_MarkConflicts();
-            OSSendMessage(&sCardReplyQueue, CardThread_Msg((dst << 24) | ((other << 16) & 0x10000) | (cmd & 0xFF)), OS_MESSAGE_BLOCK);
+            OSSendMessage(&sCardReplyQueue, CardThread_Msg((tmp << 24) | ((other << 16) & 0x10000) | (cmd & 0xFF)), OS_MESSAGE_BLOCK);
             return;
         }
     }
@@ -1277,7 +1278,7 @@ cleanup:
     }
     CardThread_UpdateSlot(slot);
     CardThread_MarkConflicts();
-    OSSendMessage(&sCardReplyQueue, CardThread_Msg(((u8)file << 24) | ((slot << 16) & 0x10000)), OS_MESSAGE_BLOCK);
+    OSSendMessage(&sCardReplyQueue, CardThread_Msg(((u8)file << 24) | (((u8)slot << 16) & 0x10000)), OS_MESSAGE_BLOCK);
 }
 
 /* 0x8131E994 */
