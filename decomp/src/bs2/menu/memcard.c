@@ -2054,7 +2054,7 @@ void CardDraw_MeasureLines(CardSlotFade* f, void* sth, void* glh, u16* outW) {
     u16 max = 0;
     u16 w;
     u16 step;
-    u16 str;
+    int str;
     SthEntry* e;
     SthEntry* ent;
 
