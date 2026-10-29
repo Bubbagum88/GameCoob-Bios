@@ -2,7 +2,7 @@
 //! lighting, texgens, the material's TEV stages, alpha test, blending and
 //! z mode, into a 640x448 GX-sized target.
 
-use crate::sdk::mtx::{self as psmtx, Mtx};
+use crate::sdk::mtx::{self as psmtx, Mtx, Mtx44};
 use super::bs2main::{self, Projection};
 use super::camera;
 use super::raster::{BlendMode, Prim, SVert, Sh, State, MAX_TC};
@@ -50,6 +50,14 @@ impl View {
             light,
             ambient: [0.0, 0.0, 0.0, 0.0],
             vp: [EFB_W as f32, EFB_H as f32],
+        }
+    }
+
+    /// The projection as `GXSetProjection` takes it.
+    pub fn projection(&self) -> Mtx44 {
+        match self.ortho {
+            Some([t, b, l, r]) => psmtx::ortho(t, b, l, r, self.near, self.far),
+            None => psmtx::perspective(self.fovy, self.aspect, self.near, self.far),
         }
     }
 

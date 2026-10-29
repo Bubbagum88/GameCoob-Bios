@@ -63,3 +63,31 @@ pub fn look_at(eye: Vec3, up: Vec3, at: Vec3) -> Mtx {
         [look[0], look[1], look[2], -dot(eye, look)],
     ]
 }
+
+/// A 4x4 projection matrix (`Mtx44`).
+pub type Mtx44 = [[f32; 4]; 4];
+
+/// `C_MTXPerspective`: `fovy` in degrees; clip-space z runs from -w at the
+/// near plane to 0 at the far plane, as GX expects.
+pub fn perspective(fovy: f32, aspect: f32, n: f32, f: f32) -> Mtx44 {
+    let angle = fovy * 0.5 * 0.017_453_292;
+    let cot = 1.0 / libm::tanf(angle);
+    let tmp = 1.0 / (f - n);
+    [
+        [cot / aspect, 0.0, 0.0, 0.0],
+        [0.0, cot, 0.0, 0.0],
+        [0.0, 0.0, -n * tmp, -(f * n) * tmp],
+        [0.0, 0.0, -1.0, 0.0],
+    ]
+}
+
+/// `C_MTXOrtho`
+pub fn ortho(t: f32, b: f32, l: f32, r: f32, n: f32, f: f32) -> Mtx44 {
+    let (x, y, z) = (1.0 / (r - l), 1.0 / (t - b), 1.0 / (f - n));
+    [
+        [2.0 * x, 0.0, 0.0, -(r + l) * x],
+        [0.0, 2.0 * y, 0.0, -(t + b) * y],
+        [0.0, 0.0, -z, -f * z],
+        [0.0, 0.0, 0.0, 1.0],
+    ]
+}

@@ -118,6 +118,25 @@ impl FastTex {
     }
 }
 
+/// Textures a [`Shader`] reads by index.
+pub trait Texs {
+    fn tex(&self, i: usize) -> Option<&FastTex>;
+}
+
+impl Texs for [FastTex] {
+    #[inline]
+    fn tex(&self, i: usize) -> Option<&FastTex> {
+        self.get(i)
+    }
+}
+
+impl Texs for [Option<&FastTex>] {
+    #[inline]
+    fn tex(&self, i: usize) -> Option<&FastTex> {
+        self.get(i).copied().flatten()
+    }
+}
+
 #[derive(Clone)]
 struct Stage {
     tex: Option<(usize, usize)>, // (texture index in model, texcoord)
@@ -211,14 +230,15 @@ impl Shader {
         }
     }
 
-    /// Run the stages. `tex(index, texcoord)` samples a model texture.
+    /// Run the stages over the textures in `texs` (a model's, or GX's
+    /// loaded maps).
     #[inline]
-    pub fn eval(&self, ras0: [f32; 4], uv: &[[f32; 2]], texs: &[FastTex]) -> Option<[f32; 4]> {
+    pub fn eval<T: Texs + ?Sized>(&self, ras0: [f32; 4], uv: &[[f32; 2]], texs: &T) -> Option<[f32; 4]> {
         let mut regs = self.regs;
         let mut last = 0usize;
         for s in &self.stages {
             let t = match s.tex {
-                Some((ti, tc)) => match (texs.get(ti), uv.get(tc)) {
+                Some((ti, tc)) => match (texs.tex(ti), uv.get(tc)) {
                     (Some(tx), Some(c)) => tx.sample(c[0], c[1]),
                     _ => [1.0; 4],
                 },

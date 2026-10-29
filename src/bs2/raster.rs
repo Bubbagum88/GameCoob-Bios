@@ -4,6 +4,7 @@
 //! and rasterized in bands, possibly on several.
 
 use super::shader::{FastTex, Shader};
+use crate::sdk::gx::GxDraw;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::sync::atomic::{AtomicUsize, Ordering};
@@ -75,6 +76,8 @@ pub enum Sh<'a> {
     Modulate { tex: &'a FastTex },
     /// Vertex color only (untextured 2D boxes).
     Flat,
+    /// Drawn through [`crate::sdk::gx`]: its TEV stages and loaded maps.
+    Gx(&'a GxDraw<'a>),
 }
 
 /// One triangle ready to rasterize.
@@ -90,7 +93,7 @@ impl Sh<'_> {
     #[inline]
     fn texcoords(&self) -> usize {
         match self {
-            Sh::Mat { .. } => MAX_TC,
+            Sh::Mat { .. } | Sh::Gx(_) => MAX_TC,
             Sh::Modulate { .. } => 1,
             Sh::Flat => 0,
         }
@@ -109,6 +112,7 @@ impl Sh<'_> {
                 Some([f.color[0] * t[0], f.color[1] * t[1], f.color[2] * t[2], f.color[3] * t[3]])
             }
             Sh::Flat => Some(f.color),
+            Sh::Gx(d) => d.shader.eval(f.color, &f.uv, &d.maps[..]),
         }
     }
 }

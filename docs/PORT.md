@@ -17,7 +17,7 @@ more closely (float evaluation order, constants), and are noted in the PR.
 
 | layer | what it is | where |
 |-------|------------|-------|
-| `src/sdk/` | PC stand-ins for the Dolphin SDK: `mtx` now; `gx` (GX state and immediate-mode vertices on the CPU rasterizer), `vi` (GOP present and frame pacing), `os` (time, calendar, heap), `pad` (keyboard, later HID), `dvd` and `card` (dummies) as their callers are ported | new |
+| `src/sdk/` | PC stand-ins for the Dolphin SDK: `mtx`, `gx` (GX state, immediate-mode vertices, XF lighting and texgen, TEV, on the CPU rasterizer); later `vi` (GOP present and frame pacing), `os` (time, calendar, heap), `pad` (keyboard, later HID), `dvd` and `card` (dummies) as their callers are ported | new |
 | `src/bs2/` | the BS2 units, one module per C file | being aligned |
 | `src/ipl/` | reading the user's `ipl.bin`: descramble, archive, Yay0, J3D, GLH0/STH0/TXH0, textures | stays (BS2 reads the same data from RAM) |
 | `src/vars.rs`, `src/firmware.rs` | UEFI variables and firmware actions behind the menu | stays; the PC side of Options, Calendar and Game Play |
@@ -35,13 +35,15 @@ app counterpart yet.
 | `gBase.c` (Hermite) | `bs2/gbase.rs` | ported; heap is Rust's allocator |
 | `bs2main.c` (DispSettings, projection) | `bs2/bs2main.rs` | ported; the loop itself is still `boot_intro.rs` |
 | `camera.c` | `bs2/camera.rs` | ported |
-| `gInit.c` (DEMO init, frame begin/end, GX_Setup2D, disc state) | `boot_intro.rs`, `gfx.rs` | behavioral |
+| `gInit.c` `GX_Setup2D` | `bs2/ginit.rs` | ported |
+| `gInit.c` (DEMO init, frame begin/end, Screen_Dim, disc state) | `boot_intro.rs`, `gfx.rs` | behavioral |
 | `gMRbuild.c`, `gMRshape.c` (model load) | `ipl/j3d.rs` | close (parses the same J3D1 data) |
 | `gMRdraw.c`, `gMRtexture.c` (joint calc, material and shape draw) | `bs2/render.rs`, `bs2/shader.rs`, `bs2/raster.rs` | behavioral |
 | `gMRanim.c` | `bs2/anim.rs` | close |
 | `glh.c`, `font.c`, `fader.c` | `bs2/ui.rs`, `ipl/glh.rs` | behavioral |
 | `lang.c`, `res_archive.c` | `ipl/mod.rs` | close |
-| `cube.c`, `cube_draw.c` | `bs2/cube.rs` | close |
+| `cube_draw.c` (trail tiles) | `bs2/cube_draw.rs` | ported, on `sdk::gx`; the small cube model still goes through `render.rs` |
+| `cube.c` | `bs2/cube.rs` | close |
 | `scene.c`, `scene_intro.c`, `scene_spinout.c` | `bs2/scene.rs`, `bs2/mod.rs` | close |
 | `backdrop.c` | `bs2/menu/mod.rs`, `bs2/menu/card.rs` | behavioral |
 | `pad.c` | `boot_intro.rs` (keyboard to pad) | behavioral |
@@ -60,8 +62,10 @@ app counterpart yet.
 
 1. `sdk::mtx`, `mtx.c`, `gBase.c`, `bs2main.c` settings and projection, `camera.c`.
 2. `sdk::gx`: GX state and immediate-mode vertex calls feeding the existing
-   rasterizer, with the projection as a real `Mtx44`. Then `gMRdraw.c` and
-   `gMRtexture.c` on top of it, replacing the J3D path in `render.rs`.
+   rasterizer, with the projection as a real `Mtx44`; `GX_Setup2D` and
+   `cube_draw.c` as its first users.
+2b. `gMRdraw.c` and `gMRtexture.c` on `sdk::gx`, replacing the J3D path in
+   `render.rs`.
 3. `glh.c`, `font.c`, `fader.c` on `sdk::gx`, replacing `ui.rs`.
 4. The intro: `cube.c`, `cube_draw.c`, `backdrop.c`, `scene*.c`.
 5. The menu core, `menu_fx*.c` and the icon units.
