@@ -198,14 +198,13 @@ void Glh_DrawFrame(u32 tag, void *glh, GXColor *c) {
     u16 i;
     GlhFrame *f;
     u32 g;
-    u8 pad[8];
 
     g = (u32)glh;
     f = GLH_FRAMES(g);
 
-    for (i = 0; i < ((Glh *)g)->nFrames; f++, i++) {
-        if (tag == f->tag) {
-            Glh_DrawTextBg(i, (void *)g, c, 0, 0, f->innerW, f->innerH);
+    for (i = 0; i < ((Glh *)g)->nFrames; i++) {
+        if (tag == f[i].tag) {
+            Glh_DrawTextBg(i, glh, c, 0, 0, f[i].innerW, f[i].innerH);
         }
     }
 }

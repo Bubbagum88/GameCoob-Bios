@@ -79,26 +79,6 @@ void CardBlock_DrawEmpty(J3DModelInstance* inst, u8 slot, s32 file);
 void CardBlock_DrawBurst(J3DModelInstance* inst);
 void CardBlock_DrawSlot(u8 slot, u8 alpha);
 
-#define VEC_SET(dst, X, Y, Z)              \
-    do {                                   \
-        Vec v_ = {0.0f, 0.0f, 0.0f};       \
-        v_.x = X;                          \
-        v_.y = Y;                          \
-        v_.z = Z;                          \
-        dst = v_;                          \
-    } while (0)
-
-/* same, but the result goes through a pointer (keeps the extra copy) */
-#define VEC_SETP(dst, X, Y, Z)             \
-    do {                                   \
-        Vec v_ = {0.0f, 0.0f, 0.0f};       \
-        Vec* d_ = &v_;                     \
-        d_->x = X;                         \
-        d_->y = Y;                         \
-        d_->z = Z;                         \
-        dst = *d_;                         \
-    } while (0)
-
 /* a by-value copy through this keeps the temp -> arg copy pair */
 static inline Vec* CardVecRef(Vec* v) { (void)v; return v; }
 
@@ -164,6 +144,19 @@ void fn_8131EEC4(BOOL first, s16 (*gridX)[16], s16 (*gridY)[16]) {
 }
 
 /* 0x8131F048 */
+/* "if (v) {}" keeps the param slot at the frame bottom without losing alias info */
+static inline Vec* CardVecId(Vec* v) { if (v) {} return v; }
+static inline SRT* CardSRTId(SRT* s) { if (s) {} return s; }
+#define VEC_SETQ(dst, X, Y, Z)             \
+    do {                                   \
+        Vec v_ = {0.0f, 0.0f, 0.0f};       \
+        CardVecId(&v_)->x = X;             \
+        v_.y = Y;                          \
+        v_.z = Z;                          \
+        dst = v_;                          \
+    } while (0)
+/* the inline return gives the f2 -> f28 copy of t */
+static inline f32 CardBlockT(CardBlock* b) { return (b->zoom - b->zoomMin) / (b->zoomMax - b->zoomMin); }
 void CardBlock_CalcMtx(void) {
     Mtx m;
     Mtx base;
@@ -175,7 +168,6 @@ void CardBlock_CalcMtx(void) {
     MenuWork* menu;
     CardParams* params;
     CardFile (*files)[CARD_MAX_FILES];
-    CardBlock* b;
     int slot;
     int i;
     s16 w;
@@ -184,25 +176,22 @@ void CardBlock_CalcMtx(void) {
     params = Card_GetParams();
     {
         SRT s_ = {1.0f, 1.0f, 1.0f, 0, 0, 0, 0, -292.0f, 224.0f, 0.0f};
-        SRT* d_;
-        d_ = &s_;
-        srt = *d_;
+        srt = *CardSRTId(&s_);
     }
     files = CardThread_GetFiles();
     w = sWobble;
     MtxFromSRT(&srt, base);
     for (slot = 0; slot < 2; slot++) {
         for (i = 0; i < CARD_MAX_FILES; i++) {
-            b = &sBlocks[slot][i];
-            VEC_SETP(scale, b->zoom, b->zoom, b->zoom);
+            VEC_SETQ(scale, sBlocks[slot][i].zoom, sBlocks[slot][i].zoom, sBlocks[slot][i].zoom);
             if (slot == sOpSlot && i == sOpFile && sFlying) {
                 if (!sErasing) {
                     t = (sFly.zoom - sFly.zoomMin) / (sFly.zoomMax - sFly.zoomMin);
-                    VEC_SETP(pos, sFly.pos.x / 16.0f, -sFly.pos.y / 16.0f, 2.0f * t);
+                    VEC_SETQ(pos, sFly.pos.x / 16.0f, -sFly.pos.y / 16.0f, 2.0f * t);
                 }
             } else {
-                t = (b->zoom - b->zoomMin) / (b->zoomMax - b->zoomMin);
-                VEC_SET(pos, b->pos.x / 16.0f, -b->pos.y / 16.0f, 2.0f * t);
+                t = CardBlockT(&sBlocks[slot][i]);
+                VEC_SETQ(pos, sBlocks[slot][i].pos.x / 16.0f, -sBlocks[slot][i].pos.y / 16.0f, 2.0f * t);
             }
             MtxRot(t * menu->wobbleAmp[0] * CosS(w * 70), t * menu->wobbleAmp[1] * CosS(menu->wobblePhaseRY + w * 35),
                    t * menu->wobbleAmp[2] * CosS(w * 35), rot);
@@ -222,9 +211,9 @@ void CardBlock_CalcMtx(void) {
         }
     }
     if (sErasing) {
-        VEC_SETP(scale, sFly.zoom, sFly.zoom, sFly.zoom);
+        scale = (Vec){sFly.zoom, sFly.zoom, sFly.zoom};
         t = (sFly.zoom - sFly.zoomMin) / (sFly.zoomMax - sFly.zoomMin);
-        VEC_SETP(pos, sFly.pos.x / 16.0f, -sFly.pos.y / 16.0f, 2.0f * t);
+        pos = (Vec){sFly.pos.x / 16.0f, -sFly.pos.y / 16.0f, 2.0f * t};
         MtxRot(t * menu->wobbleAmp[0] * CosS(w * 70), t * menu->wobbleAmp[1] * CosS(menu->wobblePhaseRY + w * 35),
                t * menu->wobbleAmp[2] * CosS(w * 35), rot);
         PSMTXTrans(m, pos.x + t * params->f64_ * SinS(menu->wobblePhaseTX + w * 35),
@@ -255,6 +244,18 @@ static inline void CardBlock_Move(CardBlock* b) {
     b->frame++;
     if (b->frame > b->end) {
         b->frame = b->end;
+    }
+}
+
+/* Unreferenced, so the linker strips it from the IPL. It sits here because the
+ * 0.0f/4672.0f/3200.0f it uses come before CalcBurst's 48/.25/.75 in .sdata2. */
+static void CardFly_Bounce(void) {
+    sFly.p1.z = 0.0f;
+    if (sFly.p1.x >= 4672.0f) {
+        sFly.p1.x = 4672.0f;
+    }
+    if (sFly.p1.y >= 3200.0f) {
+        sFly.p1.y = 3200.0f;
     }
 }
 
@@ -556,40 +557,36 @@ void fn_813204B0(void) {
 
 /* 0x8132056C: send every block to its cell (or just off the window) */
 void fn_8132056C(CardOrder (*order)[CARD_MAX_FILES], s8* row) {
-    s16* gridY;
-    s16* gridX;
+    s16 (*gridY)[16];
+    s16 (*gridX)[16];
     CardBlock* b;
-    CardOrder* o;
-    CardBlock* blocks;
     u32 slot;
     u32 i;
 
     for (slot = 0; slot < 2; slot++) {
-        o = order[slot];
-        blocks = sBlocks[slot];
-        gridX = sGridX[slot];
-        gridY = sGridY[slot];
+        gridX = sGridX;
+        gridY = sGridY;
         for (i = 0; i < CARD_MAX_FILES; i++) {
-            b = &blocks[o[i].file];
+            b = &sBlocks[slot][order[slot][i].file];
             CardBlock_Rewind(b);
             if (i >= row[slot] * 4 && i <= row[slot] * 4 + 15) {
                 b->alphaTarget = 255;
                 b->p0 = b->pos;
                 b->v0 = b->vel;
-                b->p1.x = gridX[i - row[slot] * 4];
-                b->p1.y = gridY[i - row[slot] * 4];
+                b->p1.x = gridX[slot][i - row[slot] * 4];
+                b->p1.y = gridY[slot][i - row[slot] * 4];
                 b->p1.z = 0.0f;
             } else {
                 b->alphaTarget = 0;
                 b->p0 = b->pos;
                 b->v0 = b->vel;
                 if (i < row[slot] * 4) {
-                    b->p1.x = gridX[i & 3];
-                    b->p1.y = gridY[i & 3] - 512.0f;
+                    b->p1.x = gridX[slot][i & 3];
+                    b->p1.y = gridY[slot][i & 3] - 512.0f;
                 }
                 if (i > row[slot] * 4 + 15) {
-                    b->p1.x = gridX[(i & 3) + 12];
-                    b->p1.y = 512.0f + gridY[(i & 3) + 12];
+                    b->p1.x = gridX[slot][(i & 3) + 12];
+                    b->p1.y = 512.0f + gridY[slot][(i & 3) + 12];
                 }
                 b->p1.z = 0.0f;
             }

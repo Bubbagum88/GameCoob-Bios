@@ -1275,8 +1275,10 @@ void CardUi_UpdateIconAnim(void) {
                 frame = &sCardFileFrame[slot][file];
                 step = &icons[slot][file].step;
                 dur = &icons[slot][file].duration;
+                if (frame && frame) { /* fake match: dead test, register allocation only */
+                }
                 *frame += *step;
-                if (*frame >= *dur) {
+                if (*frame >= icon->duration) {
                     if (icon->bounce == CARD_STAT_ANIM_BOUNCE) {
                         *frame = *dur - icon->lastSpeed - 1;
                         *step = -1;
@@ -2050,29 +2052,29 @@ void CardDraw_MeasureLines(CardSlotFade* f, void* sth, void* glh, u16* outW) {
     SthEntry* entries = ((Sth*)sth)->entry;
     GlhText* texts = GLH_TEXTS(glh);
     u16 max = 0;
-    u16 i;
     u16 w;
     u16 step;
-    u16 str;
+    int str;
     SthEntry* e;
+    SthEntry* ent;
 
-    for (i = 0, str = 2; i < 3; str++, i++) {
-        e = &entries[i + 2];
-        Glh_MeasureString(&texts[entries[str].pane], STH_STRING(e), &w, &f->lineH);
+    for (step = 0, str = 2; step < 3; str++, step++) {
+        e = &entries[step + 2];
+        Glh_MeasureString(&texts[(ent = entries)[str].pane], STH_STRING(e), &w, &f->lineH);
         if (max < w) {
             max = w;
         }
     }
-    f->h3 = f->lineH + texts[entries[2].pane].lineSpace * 32;
+    f->h3 = f->lineH + texts[ent[2].pane].lineSpace * 32;
     if (f->b < f->s8) {
-        step = texts[entries[2].pane].lineSpace * 32;
+        step = texts[ent[2].pane].lineSpace * 32;
     } else if (f->b >= f->s8 && f->b < f->sA) {
-        step = (f->sA - f->b) * (texts[entries[2].pane].lineSpace * 32) / (f->sA - f->s8);
+        step = (f->sA - f->b) * (texts[ent[2].pane].lineSpace * 32) / (f->sA - f->s8);
     } else if (f->b >= f->sA) {
         step = 0;
     }
     f->h1 = f->lineH + step;
-    f->h2 = f->lineH + texts[entries[2].pane].lineSpace * 16;
+    f->h2 = f->lineH + texts[ent[2].pane].lineSpace * 16;
     *outW = max;
 }
 
@@ -2218,6 +2220,7 @@ void CardDraw_Dialog(u8 slot, CardSlotFade* f, void* sth, void* glh, GXColor* c)
     s16 a2;
     s32 dy2;
     s16 unused[4];
+    u32 ox;
 
     for (pane = 0; pane < ((Glh*)glh)->nFrames; pane++) {
         if (frames[pane].tag == 'mes0') {
@@ -2245,7 +2248,7 @@ void CardDraw_Dialog(u8 slot, CardSlotFade* f, void* sth, void* glh, GXColor* c)
         y1 = y + dy;
         c->a = alpha * a / 255;
         Glh_DrawPaneRect(pane, glh, c, x, y1, w + disp->textPad * 32, f->h1 + disp->textPad * 32);
-        CardDraw_TextBox(slot, f, sth, glh, c, x + (w / 2 + disp->textPad * 16), y1 + disp->textPad * 16, w);
+        CardDraw_TextBox(slot, f, sth, glh, c, x + (ox = w / 2 + disp->textPad * 16), y1 + disp->textPad * 16, w);
         c->a = c->a * (f->bMax - f->b) / f->bMax;
         CardDraw_SetScissor(x, y1, w + disp->textPad * 32, f->h1 + disp->textPad * 32, (u8)f->phase, c);
         c->a = alpha;
@@ -2259,7 +2262,7 @@ void CardDraw_Dialog(u8 slot, CardSlotFade* f, void* sth, void* glh, GXColor* c)
         c->a = c->a * a2 / 255;
         Glh_DrawPaneRect(pane, glh, c, x, y + (f->h1 + disp->textPad * 32 + dy2 + 0x80), w + disp->textPad * 32, f->h2 + disp->textPad * 32);
         CardDraw_SetScissor(x, y + (f->h1 + disp->textPad * 32 + dy2 + 0x80), w + disp->textPad * 32, f->h2 + disp->textPad * 32, (u8)f->phase, c);
-        CardDraw_TextLines(f, sth, glh, c, x + (w / 2 + disp->textPad * 16), y + (disp->textPad * 16 + f->lineH + disp->textPad * 32 + dy2 + 0x80), w);
+        CardDraw_TextLines(f, sth, glh, c, x + ox, y + (disp->textPad * 16 + f->lineH + disp->textPad * 32 + dy2 + 0x80), w);
         c->a = alpha;
     }
 }
@@ -2324,22 +2327,27 @@ static inline void CardDraw_SetWhite2(GXColor* out, u8 a) {
     *out = *CardDraw_ColorRef(&c);
 }
 
+/* title and comment lines of the selected file */
+static inline void CardDraw_InfoText(u8 slot, s16 file, u8 alpha) {
+    GXColor c = { 255, 255, 255, 255 };
+
+    c.a = c.a * alpha / 255;
+    Glh_DrawBannerLine('titl', sCardGlh, &c, CardThread_GetComment(slot, file), 31);
+    Glh_DrawBannerLine('info', sCardGlh, &c, CardThread_GetComment(slot, file) + 32, 31);
+}
+
 void CardDraw_FileInfo(u8 alpha) {
     u8 slot = sCardSlot;
     s16 file = sCardSort[slot][sCardCol[slot] + (sCardRow[slot] + sCardTop[slot]) * 4].file;
     GXColor frm;
     CardFile(*files)[CARD_MAX_FILES];
-    u32 pad;
 
     CardDraw_SetWhite2(&frm, alpha);
     files = CardThread_GetFiles();
     GX_Setup2DTex();
     if (files[slot][file].used) {
-        GXColor c = { 255, 255, 255, 255 };
-
-        c.a = c.a * alpha / 255;
-        Glh_DrawBannerLine('titl', sCardGlh, &c, CardThread_GetComment(slot, file), 31);
-        Glh_DrawBannerLine('info', sCardGlh, &c, CardThread_GetComment(slot, file) + 32, 31);
+        CardDraw_InfoText(slot, file, alpha);
+        CardDraw_StackPad();
         Glh_DrawFrame('frmc', sCardGlh, &frm);
         CardDraw_LoadTexture(sCardNameX[2], sCardNameY[2], files[slot][file].blocks);
     }
