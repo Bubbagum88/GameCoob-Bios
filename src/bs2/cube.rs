@@ -3,7 +3,8 @@
 //! from the IPL's own defaults (see the decomp's docs/intro.md); the path the
 //! cube rolls is read from the user's ipl.bin at runtime.
 
-use super::mtx::{self, Mtx, SinTable};
+use super::mtx;
+use crate::sdk::mtx::{self as psmtx, Mtx};
 use super::scene::Scene;
 use alloc::vec::Vec;
 
@@ -378,7 +379,7 @@ impl Cube {
 
     /// Model matrix of the small cube (before the world matrix), plus the
     /// world-space height to lift it by.
-    pub fn small_cube_mtx(&self, s: &SinTable, world: &Mtx) -> Mtx {
+    pub fn small_cube_mtx(&self, world: &Mtx) -> Mtx {
         let half = (self.size / 2) as f32;
         let c3 = (self.size * 3 / 2) as f32;
         let mut m;
@@ -389,8 +390,8 @@ impl Cube {
                 if a > max {
                     a = max;
                 }
-                m = mtx::concat(&mtx::IDENTITY, &mtx::trans(-half, half, -half));
-                m = mtx::concat(&mtx::rot_x(s, a), &m);
+                m = psmtx::concat(&psmtx::IDENTITY, &psmtx::trans(-half, half, -half));
+                m = psmtx::concat(&mtx::rot_axis('x', a), &m);
                 // Point the roll along the travel direction and place on the grid.
                 let yaw = match self.dir {
                     0 => -0x4000,
@@ -398,23 +399,23 @@ impl Cube {
                     2 => 0x4000,
                     _ => 0,
                 };
-                m = mtx::concat(&mtx::trans(half, 0.0, half), &m);
-                m = mtx::concat(&mtx::rot_trans(s, 0, yaw, 0, [-half, 0.0, -half]), &m);
+                m = psmtx::concat(&psmtx::trans(half, 0.0, half), &m);
+                m = psmtx::concat(&mtx::rot_trans(0, yaw, 0, [-half, 0.0, -half]), &m);
                 let sz = self.size as f32;
-                m = mtx::concat(
-                    &mtx::trans(-(self.x - 16) as f32 * sz, 0.0, -(self.y - 16) as f32 * sz),
+                m = psmtx::concat(
+                    &psmtx::trans(-(self.x - 16) as f32 * sz, 0.0, -(self.y - 16) as f32 * sz),
                     &m,
                 );
                 if self.face == 1 {
-                    m = mtx::concat(&mtx::rot_trans(s, 0x4000, 0, 0x4000, [0.0; 3]), &m);
+                    m = psmtx::concat(&mtx::rot_trans(0x4000, 0, 0x4000, [0.0; 3]), &m);
                 }
                 if self.face == 2 {
-                    m = mtx::concat(&mtx::rot_trans(s, 0, -0x4000, -0x4000, [0.0; 3]), &m);
+                    m = psmtx::concat(&mtx::rot_trans(0, -0x4000, -0x4000, [0.0; 3]), &m);
                 }
-                m = mtx::concat(&mtx::trans(c3, c3, c3), &m);
-                m = mtx::concat(world, &m);
+                m = psmtx::concat(&psmtx::trans(c3, c3, c3), &m);
+                m = psmtx::concat(world, &m);
                 if self.phase == Phase::Fall {
-                    m = mtx::concat(&mtx::trans(0.0, self.fall_height, 0.0), &m);
+                    m = psmtx::concat(&psmtx::trans(0.0, self.fall_height, 0.0), &m);
                 }
             }
             _ => {
@@ -426,11 +427,11 @@ impl Cube {
                 let a = (max_a * self.rise_frame / self.rise_frames).min(max_a);
                 let sz = self.size as f32;
                 let lift = (half - (rf * ((1.0 + scale) * sz) / n) * 0.5).max(-(scale * sz * 0.5));
-                m = mtx::scale(scale, scale, scale);
-                m = mtx::concat(&mtx::rot_trans(s, a, 0, 0, [scale * -sz * 0.5, lift, scale * -sz * 0.5]), &m);
-                m = mtx::concat(&mtx::rot_trans(s, 0, -0x4000, -0x4000, [0.0; 3]), &m);
-                m = mtx::concat(&mtx::trans(c3, c3, c3), &m);
-                m = mtx::concat(world, &m);
+                m = psmtx::scale(scale, scale, scale);
+                m = psmtx::concat(&mtx::rot_trans(a, 0, 0, [scale * -sz * 0.5, lift, scale * -sz * 0.5]), &m);
+                m = psmtx::concat(&mtx::rot_trans(0, -0x4000, -0x4000, [0.0; 3]), &m);
+                m = psmtx::concat(&psmtx::trans(c3, c3, c3), &m);
+                m = psmtx::concat(world, &m);
                 let y = if self.phase == Phase::Rise {
                     let r = (self.rise_frames - self.rise_frame).max(0) as f32;
                     let h = self.rise_height;
@@ -438,7 +439,7 @@ impl Cube {
                 } else {
                     self.drop_height
                 };
-                m = mtx::concat(&mtx::trans(0.0, y, 0.0), &m);
+                m = psmtx::concat(&psmtx::trans(0.0, y, 0.0), &m);
             }
         }
         m

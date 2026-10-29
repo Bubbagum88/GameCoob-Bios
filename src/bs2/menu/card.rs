@@ -11,7 +11,9 @@
 //! noted as `SE n` comments; there is no sound yet.
 
 use super::backend::{CardError, CardOp, MemCards, Save, SlotState, DIR_ENTRIES};
-use super::super::mtx::{self, Mtx, SinTable};
+use crate::bs2::gbase;
+use crate::bs2::mtx::{self, cos_s, sin_s};
+use crate::sdk::mtx::{self as psmtx, Mtx};
 use super::super::raster::Prim;
 use super::super::render::{self, DrawOpts, Prepared, View};
 use super::super::shader::FastTex;
@@ -178,7 +180,7 @@ impl Tile {
     fn advance(&mut self) {
         let new = if self.frame >= self.start {
             let f = (self.frame as f32).min(self.len as f32);
-            [0, 1].map(|k| mtx::hermite(f, self.start as f32, self.from[k], self.from_v[k], self.len as f32, self.to[k], 0.0))
+            [0, 1].map(|k| gbase::hermite(f, self.start as f32, self.from[k], self.from_v[k], self.len as f32, self.to[k], 0.0))
         } else {
             self.from
         };
@@ -202,17 +204,17 @@ impl Tile {
 
     /// The block's model matrix: its spot, a wobble that grows with the
     /// zoom, and the zoom.
-    fn mtx(&self, s: &SinTable, c: i32) -> Mtx {
+    fn mtx(&self, c: i32) -> Mtx {
         let k = (self.zoom - ZOOM_MIN) / (ZOOM_MAX - ZOOM_MIN);
         let t = [
-            self.pos[0] - 292.0 + 10.0 * k * s.sin(-0x4000 + 35 * c),
-            224.0 - self.pos[1] - 5.0 * k * s.sin(70 * c),
+            self.pos[0] - 292.0 + 10.0 * k * sin_s(-0x4000 + 35 * c),
+            224.0 - self.pos[1] - 5.0 * k * sin_s(70 * c),
             2.0 * k,
         ];
-        let rx = (350.0 * k * s.cos(70 * c)) as i32;
-        let ry = (1000.0 * k * s.cos(-15000 + 35 * c)) as i32;
-        let rz = (1000.0 * k * s.cos(35 * c)) as i32;
-        mtx::concat(&mtx::rot_trans(s, rx, ry, rz, t), &mtx::scale(self.zoom, self.zoom, self.zoom))
+        let rx = (350.0 * k * cos_s(70 * c)) as i32;
+        let ry = (1000.0 * k * cos_s(-15000 + 35 * c)) as i32;
+        let rz = (1000.0 * k * cos_s(35 * c)) as i32;
+        psmtx::concat(&mtx::rot_trans(rx, ry, rz, t), &psmtx::scale(self.zoom, self.zoom, self.zoom))
     }
 }
 
@@ -683,7 +685,7 @@ impl Card {
     fn update_tiles(&mut self, cards: &dyn MemCards, fade_done: bool) {
         if self.erasing {
             let f = &mut self.fly.t;
-            f.zoom = mtx::hermite(f.zt as f32, 0.0, f.zoom_from, 0.0, f.zlen as f32, f.zoom_to, 0.0);
+            f.zoom = gbase::hermite(f.zt as f32, 0.0, f.zoom_from, 0.0, f.zlen as f32, f.zoom_to, 0.0);
             f.zt -= 1;
             let shrunk = f.zt < 0;
             f.zt = f.zt.clamp(0, f.zlen);
@@ -720,7 +722,7 @@ impl Card {
                     }
                     t.alpha = t.alpha.clamp(0, 255);
                     t.advance();
-                    t.zoom = mtx::hermite(t.zt as f32, 0.0, t.zoom_from, 0.0, t.zlen as f32, t.zoom_to, 0.0);
+                    t.zoom = gbase::hermite(t.zt as f32, 0.0, t.zoom_from, 0.0, t.zlen as f32, t.zoom_to, 0.0);
                     t.zt += if (s, i) == sel && !self.entering { 1 } else { -1 };
                     t.zt = t.zt.clamp(0, t.zlen);
                 }
@@ -1310,7 +1312,7 @@ impl Card {
 
     /// Card_Draw with the screen's three fader alphas (fx, backdrop, text).
     #[allow(clippy::too_many_arguments)]
-    pub fn draw<'a>(&'a self, ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, cards: &'a dyn MemCards, lang: usize, al: [f32; 3], s: &SinTable) {
+    pub fn draw<'a>(&'a self, ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, cards: &'a dyn MemCards, lang: usize, al: [f32; 3]) {
         let g = &ma.card;
         let mid = |k: usize| {
             let c = self.cells[k];
@@ -1329,9 +1331,9 @@ impl Card {
         let light = mid(cur);
         let mut v = View::intro(0.0, false);
         v.vp = ui.view.vp;
-        v.light = mtx::apply(&v.view, [light[0] - 292.0, 224.0 - light[1], LIGHT_Z]);
+        v.light = psmtx::mult_vec(&v.view, [light[0] - 292.0, 224.0 - light[1], LIGHT_Z]);
         for k in [cur, cur ^ 1] {
-            self.draw_blocks(ui.list, &v, ma, cards, k, al[0], s);
+            self.draw_blocks(ui.list, &v, ma, cards, k, al[0]);
         }
         let st = &ma.card_str[lang];
         for k in [cur ^ 1, cur] {
@@ -1353,7 +1355,7 @@ impl Card {
 
     /// fn_81321378: one slot's blocks; the chosen one and the flying one last.
     #[allow(clippy::too_many_arguments)]
-    fn draw_blocks<'a>(&'a self, list: &mut Vec<Prim<'a>>, v: &View, ma: &'a MenuAssets, cards: &'a dyn MemCards, k: usize, a: f32, s: &SinTable) {
+    fn draw_blocks<'a>(&'a self, list: &mut Vec<Prim<'a>>, v: &View, ma: &'a MenuAssets, cards: &'a dyn MemCards, k: usize, a: f32) {
         if a <= 0.0 {
             return;
         }
@@ -1372,12 +1374,12 @@ impl Card {
                     if (self.flying && k == self.fly.slot && i == self.fly.file) || chosen == Some(i) {
                         continue;
                     }
-                    draw_block(list, &m.file[size][1], &t.mtx(s, c), v, al, self.icon(save, k, i));
+                    draw_block(list, &m.file[size][1], &t.mtx(c), v, al, self.icon(save, k, i));
                 }
                 None => {
                     let var = if chosen == Some(i) { 0 } else { 1 };
                     for d in 0..2 {
-                        render::draw_model(list, &m.empty[size][var], &t.mtx(s, c), v, &DrawOpts { alpha: al, only: Some(d..d + 1), ..Default::default() });
+                        render::draw_model(list, &m.empty[size][var], &t.mtx(c), v, &DrawOpts { alpha: al, only: Some(d..d + 1), ..Default::default() });
                     }
                 }
             }
@@ -1385,18 +1387,18 @@ impl Card {
         if self.flying && !self.erasing && k == self.fly.slot {
             if let Some(save) = Self::save(cards, k, self.fly.file) {
                 let t = &self.fly.t;
-                draw_block(list, &m.file[size][1], &t.mtx(s, c), v, alpha(t), self.icon(save, k, self.fly.file));
+                draw_block(list, &m.file[size][1], &t.mtx(c), v, alpha(t), self.icon(save, k, self.fly.file));
             }
         } else if let Some((i, save)) = chosen.filter(|_| !self.flying).and_then(|i| Some((i, Self::save(cards, k, i)?))) {
             let t = &self.tiles[k][i];
-            draw_block(list, &m.file[size][0], &t.mtx(s, c), v, alpha(t), self.icon(save, k, i));
+            draw_block(list, &m.file[size][0], &t.mtx(c), v, alpha(t), self.icon(save, k, i));
         }
         if self.erasing && k == self.fly.slot {
             let t = &self.fly.t;
             let p = &m.file[size][1];
             if !self.bursting {
                 if t.zoom > 0.0 {
-                    draw_block(list, p, &t.mtx(s, c), v, alpha(t), None);
+                    draw_block(list, p, &t.mtx(c), v, alpha(t), None);
                 }
             } else {
                 for sp in self.sparks.iter() {
@@ -1406,9 +1408,9 @@ impl Card {
                         continue;
                     }
                     let r = 48.0 * (0.25 + 0.75 * f);
-                    let off = [r * s.sin(sp.angle as i32), r * s.cos(sp.angle as i32)];
-                    let at = mtx::trans(t.pos[0] - 292.0 + off[0], 224.0 - t.pos[1] + off[1], 0.0);
-                    draw_block(list, p, &mtx::concat(&at, &mtx::scale(0.3, 0.3, 0.3)), v, al, None);
+                    let off = [r * sin_s(sp.angle as i32), r * cos_s(sp.angle as i32)];
+                    let at = psmtx::trans(t.pos[0] - 292.0 + off[0], 224.0 - t.pos[1] + off[1], 0.0);
+                    draw_block(list, p, &psmtx::concat(&at, &psmtx::scale(0.3, 0.3, 0.3)), v, al, None);
                 }
             }
         }
@@ -1435,7 +1437,7 @@ impl Card {
             ui.string(&ma.font, g, bank, t, white, 0.0, 0.0);
         }
         // Scroll arrows, bobbing.
-        let bob = mtx::hermite(self.bob.0 as f32, 0.0, 0.0, 0.0, 15.0, 128.0, 0.0) / 16.0;
+        let bob = gbase::hermite(self.bob.0 as f32, 0.0, 0.0, 0.0, 15.0, 128.0, 0.0) / 16.0;
         let ups = [(b'u', &self.up_f[k], bob), (b'd', &self.down_f[k], -bob)];
         for (d, f, dy) in ups {
             let c = with_a(WHITE, ar * f.alpha() as f32 / 255.0);

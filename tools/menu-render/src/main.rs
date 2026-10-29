@@ -20,6 +20,10 @@ extern crate alloc;
 #[allow(dead_code)]
 mod ipl;
 
+#[path = "../../../src/sdk/mod.rs"]
+#[allow(dead_code)]
+mod sdk;
+
 #[path = "../../../src/bs2/mod.rs"]
 #[allow(dead_code)]
 mod bs2;
@@ -29,6 +33,7 @@ mod png;
 use bs2::menu::backend::{FakeCards, FakeDrive};
 use bs2::menu::{Menu, MenuAssets, Pad, SysInfo};
 use std::collections::HashMap;
+use sdk::mtx as psmtx;
 use std::path::PathBuf;
 
 fn info(frame: u32) -> SysInfo {
@@ -84,7 +89,7 @@ fn main() {
                     let (mut lo, mut hi) = ([f32::MAX; 3], [f32::MIN; 3]);
                     for v in &sh.vertices {
                         let p = ipl::j3d::Model::joint_world(&m, v.joint);
-                        let q = bs2::mtx::apply(&p, v.pos);
+                        let q = psmtx::mult_vec(&p, v.pos);
                         for k in 0..3 {
                             lo[k] = lo[k].min(q[k]);
                             hi[k] = hi[k].max(q[k]);
@@ -183,7 +188,7 @@ fn main() {
                             }
                         }
                     }
-                    menu = Some(Menu::new(info(f), &ma, Box::new(FakeDrive::new()), Box::new(cards), intro.wobble_frame, &intro.sin));
+                    menu = Some(Menu::new(info(f), &ma, Box::new(FakeDrive::new()), Box::new(cards), intro.wobble_frame, ));
                 }
             }
             Some(m) => {
@@ -200,11 +205,11 @@ fn main() {
                     eject: has("eject"),
                     slot: [has("slot1"), has("slot2")],
                 };
-                if let Some(act) = m.update(&pad, &intro.sin) {
+                if let Some(act) = m.update(&pad, ) {
                     println!("frame {f}: action {act:?}");
                 }
                 m.tick_guide();
-                m.update_fx(&ma, &intro.sin);
+                m.update_fx(&ma, );
             }
         }
         if frames.contains(&f) {

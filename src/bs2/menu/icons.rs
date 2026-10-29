@@ -8,7 +8,9 @@
 //! `face` while the cube shows its face, `enter` inside the submenu and
 //! `hide` anywhere else.
 
-use super::super::mtx::{self, Mtx, SinTable};
+use crate::bs2::gbase;
+use crate::bs2::mtx::{self, cos_s, sin_s};
+use crate::sdk::mtx::{self as psmtx, Mtx};
 use super::super::raster::Prim;
 use super::super::render::{self, DrawOpts, Prepared, View};
 use super::super::shader::Shader;
@@ -138,9 +140,9 @@ impl GameIcon {
         GameIcon { cubes, frame: 0, rx: 0, rz: 0, spin: 0, drx: 100, drz: 50 }
     }
 
-    pub fn update(&mut self, phase: Phase, s: &SinTable) {
+    pub fn update(&mut self, phase: Phase) {
         match phase {
-            Phase::Face => self.update_face(s),
+            Phase::Face => self.update_face(),
             Phase::Enter => self.update_enter(),
             Phase::Hide => self.update_hide(),
         }
@@ -148,7 +150,7 @@ impl GameIcon {
 
     /// GameIcon_UpdateFace: one cube after another grows out to the ring
     /// while the ring spins; once complete it also tumbles.
-    fn update_face(&mut self, s: &SinTable) {
+    fn update_face(&mut self) {
         let f = self.frame;
         for c in &mut self.cubes {
             if f > c.start && f < c.end {
@@ -163,8 +165,8 @@ impl GameIcon {
                 c.alpha = 255;
             }
             let a = c.angle - self.spin as i32;
-            c.x = c.r as f32 * s.sin(a);
-            c.y = c.r as f32 * s.cos(a);
+            c.x = c.r as f32 * sin_s(a);
+            c.y = c.r as f32 * cos_s(a);
         }
         self.frame += 1;
         self.spin = self.spin.wrapping_add(0x199);
@@ -232,11 +234,11 @@ impl GameIcon {
 
     /// GameIcon_CalcMtx + GameIcon_Draw: `cube · RotX(-90°) · R(rx, 0, rz)
     /// · T(x, y, 0) · S(0.65)`, in the plane of the top face.
-    pub fn draw<'a>(&self, list: &mut Vec<Prim<'a>>, d: &'a IconData, view: &View, cube: &Mtx, s: &SinTable) {
-        let base = mtx::concat(cube, &mtx::rot_trans(s, -0x4000, 0, 0, [0.0; 3]));
-        let base = mtx::concat(&base, &mtx::rot_trans(s, self.rx as i32, 0, self.rz as i32, [0.0; 3]));
+    pub fn draw<'a>(&self, list: &mut Vec<Prim<'a>>, d: &'a IconData, view: &View, cube: &Mtx) {
+        let base = psmtx::concat(cube, &mtx::rot_trans(-0x4000, 0, 0, [0.0; 3]));
+        let base = psmtx::concat(&base, &mtx::rot_trans(self.rx as i32, 0, self.rz as i32, [0.0; 3]));
         for c in &self.cubes {
-            let m = mtx::concat(&base, &mtx::concat(&mtx::trans(c.x, c.y, 0.0), &mtx::scale(GAME_SCALE, GAME_SCALE, GAME_SCALE)));
+            let m = psmtx::concat(&base, &psmtx::concat(&psmtx::trans(c.x, c.y, 0.0), &psmtx::scale(GAME_SCALE, GAME_SCALE, GAME_SCALE)));
             d.cube(list, TINT_GAME, &m, view, c.alpha);
         }
     }
@@ -332,7 +334,7 @@ impl CardIcon {
                     } else if f >= c.end {
                         c.target[k]
                     } else {
-                        mtx::hermite(f as f32, t0, 0.0, c.target[k] / (t1 - t0), t1, c.target[k], 0.0)
+                        gbase::hermite(f as f32, t0, 0.0, c.target[k] / (t1 - t0), t1, c.target[k], 0.0)
                     };
                 }
                 c.pos[2] = 0.0;
@@ -384,7 +386,7 @@ impl CardIcon {
         if (CARD_LOOP.0..=CARD_LOOP.1).contains(&f) {
             let u = f - CARD_LOOP.0;
             self.yaw = match CARD_YAW.windows(2).find(|w| u < w[1].0) {
-                Some(w) => mtx::to_s16(mtx::hermite(u as f32, w[0].0 as f32, w[0].1 as f32, 0.0, w[1].0 as f32, w[1].1 as f32, 0.0)),
+                Some(w) => mtx::to_s16(gbase::hermite(u as f32, w[0].0 as f32, w[0].1 as f32, 0.0, w[1].0 as f32, w[1].1 as f32, 0.0)),
                 None => 0,
             };
         }
@@ -420,13 +422,13 @@ impl CardIcon {
     /// CardIcon_CalcMtx + CardIcon_Draw: `cube · RotX(90°) · RotY(yaw) ·
     /// T(pos) · R(flip, flip, 0) · S`, on the bottom face. Label cubes are
     /// half size.
-    pub fn draw<'a>(&self, list: &mut Vec<Prim<'a>>, d: &'a IconData, view: &View, cube: &Mtx, s: &SinTable) {
-        let base = mtx::concat(cube, &mtx::rot_trans(s, 0x4000, 0, 0, [0.0; 3]));
-        let base = mtx::concat(&base, &mtx::rot_trans(s, 0, self.yaw as i32, 0, [0.0; 3]));
+    pub fn draw<'a>(&self, list: &mut Vec<Prim<'a>>, d: &'a IconData, view: &View, cube: &Mtx) {
+        let base = psmtx::concat(cube, &mtx::rot_trans(0x4000, 0, 0, [0.0; 3]));
+        let base = psmtx::concat(&base, &mtx::rot_trans(0, self.yaw as i32, 0, [0.0; 3]));
         for (i, c) in self.cubes.iter().enumerate() {
             let k = if card_inner(i) { CARD_SCALE * 0.5 } else { CARD_SCALE };
             let a = c.flip as i32;
-            let m = mtx::concat(&base, &mtx::concat(&mtx::rot_trans(s, a, a, 0, c.pos), &mtx::scale(k, k, k)));
+            let m = psmtx::concat(&base, &psmtx::concat(&mtx::rot_trans(a, a, 0, c.pos), &psmtx::scale(k, k, k)));
             d.cube(list, TINT_CARD, &m, view, c.alpha);
         }
     }
@@ -470,9 +472,9 @@ impl ClockIcon {
     }
 
     /// `time` is year, month, day, hour, minute, second.
-    pub fn update(&mut self, phase: Phase, s: &SinTable, time: &[i32; 6]) {
+    pub fn update(&mut self, phase: Phase, time: &[i32; 6]) {
         match phase {
-            Phase::Face => self.update_face(s, time),
+            Phase::Face => self.update_face(time),
             Phase::Enter => self.update_enter(),
             Phase::Hide => self.update_hide(),
         }
@@ -481,7 +483,7 @@ impl ClockIcon {
     /// ClockIcon_UpdateFace: the dial fades in, then the hands grow out
     /// from the centre; the hands follow the clock. Angles are negative
     /// because the face is mirrored (it sits on the cube's side).
-    fn update_face(&mut self, s: &SinTable, time: &[i32; 6]) {
+    fn update_face(&mut self, time: &[i32; 6]) {
         self.frame = (self.frame + 1).min(CLOCK_DONE);
         let f = self.frame as i32;
         let (hour, min, sec) = (time[3], time[4], time[5]);
@@ -494,18 +496,18 @@ impl ClockIcon {
         for i in 0..5 {
             self.alpha[i] = (dial * 255 / CLOCK_DIAL_IN as i32) as u8 as i16;
             let (r, a) = if i == 0 { (0.0, 0) } else { (CLOCK_RIM, (i as i32 - 1) * 0x4000) };
-            self.pos[i] = [r * s.sin(a), r * s.cos(a)];
+            self.pos[i] = [r * sin_s(a), r * cos_s(a)];
         }
         let hand_alpha = (g * 255 / 10) as u8 as i16;
         for (range, a) in [(CLOCK_MIN, min_a), (CLOCK_HOUR, hour_a)] {
             for (j, i) in range.enumerate() {
                 self.alpha[i] = hand_alpha;
                 let r = (20 * (j as i32 + 1) * g) as f32;
-                self.pos[i] = [r * s.sin(a) / 10.0, r * s.cos(a) / 10.0];
+                self.pos[i] = [r * sin_s(a) / 10.0, r * cos_s(a) / 10.0];
             }
         }
         self.alpha[CLOCK_SEC] = hand_alpha;
-        self.pos[CLOCK_SEC] = [CLOCK_RIM * s.sin(sec_a), CLOCK_RIM * s.cos(sec_a)];
+        self.pos[CLOCK_SEC] = [CLOCK_RIM * sin_s(sec_a), CLOCK_RIM * cos_s(sec_a)];
     }
 
     /// ClockIcon_UpdateEnter: everything shrinks to the centre and fades.
@@ -547,8 +549,8 @@ impl ClockIcon {
     /// ClockIcon_CalcMtx + ClockIcon_Draw: `cube · RotY(-90°) · T(x, y, 0)
     /// · S`, on the right face. The dial and the seconds cube scale in with
     /// the frame count; the dial has its own tint.
-    pub fn draw<'a>(&self, list: &mut Vec<Prim<'a>>, d: &'a IconData, view: &View, cube: &Mtx, s: &SinTable) {
-        let base = mtx::concat(cube, &mtx::rot_trans(s, 0, -0x4000, 0, [0.0; 3]));
+    pub fn draw<'a>(&self, list: &mut Vec<Prim<'a>>, d: &'a IconData, view: &View, cube: &Mtx) {
+        let base = psmtx::concat(cube, &mtx::rot_trans(0, -0x4000, 0, [0.0; 3]));
         let f = self.frame as f32;
         for i in 0..13 {
             let (k, tint) = match i {
@@ -559,7 +561,7 @@ impl ClockIcon {
             if k <= 0.0 {
                 continue;
             }
-            let m = mtx::concat(&base, &mtx::concat(&mtx::trans(self.pos[i][0], self.pos[i][1], 0.0), &mtx::scale(k, k, k)));
+            let m = psmtx::concat(&base, &psmtx::concat(&psmtx::trans(self.pos[i][0], self.pos[i][1], 0.0), &psmtx::scale(k, k, k)));
             d.cube(list, tint, &m, view, self.alpha[i]);
         }
     }
@@ -662,7 +664,7 @@ impl OptionIcon {
         if f == 0 {
             self.reset_shape(d);
         }
-        let h = |t: i16, p0: f32, p1: f32, d: f32| mtx::hermite(t as f32, 0.0, p0, 0.0, d, p1, 0.0);
+        let h = |t: i16, p0: f32, p1: f32, d: f32| gbase::hermite(t as f32, 0.0, p0, 0.0, d, p1, 0.0);
         match f {
             0..=19 => {
                 for i in OPTION_CORNERS {
@@ -678,7 +680,7 @@ impl OptionIcon {
                     let to = option_slot(k);
                     let c = &mut self.frame_cubes[i];
                     for a in 0..2 {
-                        c.base[a] = mtx::hermite(t, 0.0, 0.0, (to[a] as i32 / 20) as f32, 20.0, to[a], 0.0);
+                        c.base[a] = gbase::hermite(t, 0.0, 0.0, (to[a] as i32 / 20) as f32, 20.0, to[a], 0.0);
                     }
                     c.alpha += 6;
                 }
@@ -691,7 +693,7 @@ impl OptionIcon {
                     let c = &mut self.frame_cubes[i];
                     for a in 0..2 {
                         let v = ((to[a] - from[a]) as i32 / 30) as f32;
-                        c.base[a] = mtx::hermite(t, 0.0, from[a], v, 30.0, to[a], 0.0);
+                        c.base[a] = gbase::hermite(t, 0.0, from[a], v, 30.0, to[a], 0.0);
                     }
                     c.alpha = (c.alpha + 6).min(255);
                     let [x, y] = c.base;
@@ -811,12 +813,12 @@ impl OptionIcon {
 
     /// OptionIcon_CalcMtx + OptionIcon_Draw: frame cubes `face · T(cur) ·
     /// R(rot) · S`, picture cubes `face · T(cur) · S`, on the left face.
-    pub fn draw<'a>(&self, list: &mut Vec<Prim<'a>>, d: &'a IconData, view: &View, cube: &Mtx, s: &SinTable) {
-        let base = mtx::concat(cube, &mtx::rot_trans(s, 0, -0x4000, 0, [0.0; 3]));
-        let k = mtx::scale(OPTION_SCALE, OPTION_SCALE, OPTION_SCALE);
+    pub fn draw<'a>(&self, list: &mut Vec<Prim<'a>>, d: &'a IconData, view: &View, cube: &Mtx) {
+        let base = psmtx::concat(cube, &mtx::rot_trans(0, -0x4000, 0, [0.0; 3]));
+        let k = psmtx::scale(OPTION_SCALE, OPTION_SCALE, OPTION_SCALE);
         for c in self.frame_cubes.iter().chain(&self.picture) {
-            let r = mtx::rot_trans(s, c.rot[0] as i32, c.rot[1] as i32, 0, [c.cur[0], c.cur[1], 0.0]);
-            let m = mtx::concat(&base, &mtx::concat(&r, &k));
+            let r = mtx::rot_trans(c.rot[0] as i32, c.rot[1] as i32, 0, [c.cur[0], c.cur[1], 0.0]);
+            let m = psmtx::concat(&base, &psmtx::concat(&r, &k));
             d.cube(list, TINT_OPTION, &m, view, c.alpha);
         }
     }

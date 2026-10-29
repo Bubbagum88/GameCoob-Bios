@@ -235,19 +235,19 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
             done_frames += 1;
             stepped = true;
             if let Some(m) = &mut menu {
-                if let Some(act) = m.update(&pad, &intro.sin) {
+                if let Some(act) = m.update(&pad) {
                     if let Some(msg) = perform(act) {
                         m.notify(msg);
                     }
                 }
                 m.tick_guide();
-                m.update_fx(ma, &intro.sin);
+                m.update_fx(ma);
                 pad = Pad::default();
                 continue;
             }
             intro.update(Input { a: now < a_until, egg });
             if intro.finished() {
-                menu = Some(Menu::new(sys_info(), ma, Box::new(FakeDrive::new()), Box::new(FakeCards::new()), intro.wobble_frame, &intro.sin));
+                menu = Some(Menu::new(sys_info(), ma, Box::new(FakeDrive::new()), Box::new(FakeCards::new()), intro.wobble_frame));
                 // Keys pressed during the intro don't leak into the menu.
                 pad = Pad::default();
             }

@@ -2,7 +2,9 @@
 //! lighting, texgens, the material's TEV stages, alpha test, blending and
 //! z mode, into a 640x448 GX-sized target.
 
-use super::mtx::{self, Mtx};
+use crate::sdk::mtx::{self as psmtx, Mtx};
+use super::bs2main::{self, Projection};
+use super::camera;
 use super::raster::{BlendMode, Prim, SVert, Sh, State, MAX_TC};
 use super::shader::{FastTex, Shader};
 use crate::ipl::j3d::{self, Model};
@@ -27,19 +29,24 @@ pub struct View {
 }
 
 impl View {
-    /// The intro camera: eye on +Z looking at (0, yoff, 0), fovy 20.
-    pub fn intro(yoff: f32, ortho: bool) -> View {
-        let fovy = 20.0f32;
-        let dist = 224.0 / libm::tanf((fovy * 0.5).to_radians());
-        let view = mtx::look_at([0.0, yoff, dist], [0.0, 1.0, 0.0], [0.0, yoff, 0.0]);
-        let light = mtx::apply(&view, [400.0, 500.0, 200.0]);
+    /// The BS2 camera raised by `y` (`fn_81302DF0`, see [`camera::cam_y`])
+    /// with GX_LIGHT0 (`fn_81302FA0`) and the scene projection
+    /// (`fn_81301100`), orthographic for the intro.
+    pub fn intro(y: f32, ortho: bool) -> View {
+        let disp = bs2main::disp_settings();
+        let view = camera::view(disp, y);
+        let light = camera::light_pos(&view);
+        let (ortho, fovy, aspect) = match bs2main::projection(disp, ortho) {
+            Projection::Ortho { t, b, l, r } => (Some([t, b, l, r]), disp.fovy, bs2main::ASPECT),
+            Projection::Perspective { fovy, aspect } => (None, fovy, aspect),
+        };
         View {
             view,
-            ortho: if ortho { Some([224.0, -224.0, -296.0, 292.0]) } else { None },
+            ortho,
             fovy,
-            aspect: 1.321_428_5,
-            near: 50.0,
-            far: 10000.0,
+            aspect,
+            near: disp.near,
+            far: disp.far,
             light,
             ambient: [0.0, 0.0, 0.0, 0.0],
             vp: [EFB_W as f32, EFB_H as f32],
@@ -152,7 +159,7 @@ fn draw_model_impl<'a>(
     if o.alpha == 0 {
         return;
     }
-    let model_view = mtx::concat(&v.view, base);
+    let model_view = psmtx::concat(&v.view, base);
     let range = o.only.clone().unwrap_or(0..m.draws.len());
     for d in m.draws.get(range).unwrap_or(&[]) {
         let Some(shape) = m.shapes.get(d.shape as usize) else { continue };
@@ -193,13 +200,13 @@ fn draw_model_impl<'a>(
             .iter()
             .map(|vx| {
                 let jm = match o.joints {
-                    Some(js) => js.get(vx.joint as usize).copied().unwrap_or(mtx::IDENTITY),
+                    Some(js) => js.get(vx.joint as usize).copied().unwrap_or(psmtx::IDENTITY),
                     None => m.joint_world(vx.joint),
                 };
-                let mv = mtx::concat(&model_view, &jm);
-                let p = mtx::apply(&mv, vx.pos);
+                let mv = psmtx::concat(&model_view, &jm);
+                let p = psmtx::mult_vec(&mv, vx.pos);
                 let s = v.project(p)?;
-                let n = norm(mtx::apply_dir(&mv, vx.normal));
+                let n = norm(psmtx::mult_vec_sr(&mv, vx.normal));
                 let l = norm([v.light[0] - p[0], v.light[1] - p[1], v.light[2] - p[2]]);
                 let diff = (n[0] * l[0] + n[1] * l[1] + n[2] * l[2]).max(0.0);
                 let vc = vx.color.map(|c| c as f32 / 255.0);
@@ -209,7 +216,7 @@ fn draw_model_impl<'a>(
                 // is concatenated with the model-view matrix minus its
                 // translation, so the normal is not renormalised and keeps
                 // the model's scale.
-                let env_n = mtx::apply_dir(&mv, vx.normal);
+                let env_n = psmtx::mult_vec_sr(&mv, vx.normal);
                 for (g, out) in uv.iter_mut().enumerate() {
                     let env = mat.tex_gens.get(g).is_some_and(|tg| tg.src == 1);
                     *out = mat.texcoord(g, vx.pos, if env { env_n } else { vx.normal }, vx.uv);
@@ -254,7 +261,7 @@ pub fn pose(m: &Model, local: impl Fn(usize) -> Option<([f32; 3], [i16; 3], [f32
             None => j.local(),
         };
         let w = match j.parent {
-            Some(p) if (p as usize) < m.joints.len() && depth < 64 => mtx::concat(&resolve(m, p as usize, out, local, depth + 1), &l),
+            Some(p) if (p as usize) < m.joints.len() && depth < 64 => psmtx::concat(&resolve(m, p as usize, out, local, depth + 1), &l),
             _ => l,
         };
         out[i] = Some(w);
@@ -263,5 +270,5 @@ pub fn pose(m: &Model, local: impl Fn(usize) -> Option<([f32; 3], [i16; 3], [f32
     for i in 0..m.joints.len() {
         resolve(m, i, &mut out, &local, 0);
     }
-    out.into_iter().map(|x| x.unwrap_or(mtx::IDENTITY)).collect()
+    out.into_iter().map(|x| x.unwrap_or(psmtx::IDENTITY)).collect()
 }

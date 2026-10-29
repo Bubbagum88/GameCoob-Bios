@@ -2,7 +2,7 @@
 //! blocky "mosaic" text, as textured quads in any 3D plane (a cube face or
 //! the screen), queued into the same display list as the models.
 
-use super::mtx::{self, Mtx};
+use crate::sdk::mtx::{self as psmtx, Mtx};
 use super::raster::{BlendMode, Prim, SVert, Sh, State};
 use super::render::View;
 use super::shader::FastTex;
@@ -91,7 +91,7 @@ impl<'a> Ui<'a, '_> {
     pub fn quad(&mut self, p: [[f32; 2]; 4], uv: [[f32; 2]; 4], col: [Rgba; 4], sh: Sh<'a>) {
         let mut v = [SVert::default(); 4];
         for k in 0..4 {
-            let q = mtx::apply(&self.mv, [p[k][0], p[k][1], 0.0]);
+            let q = psmtx::mult_vec(&self.mv, [p[k][0], p[k][1], 0.0]);
             let Some(s) = self.view.project(q) else { return };
             v[k] = SVert { x: s[0], y: s[1], z: s[2].clamp(0.0, 1.0), rw: s[3], color: col[k], uv: [uv[k], [0.0; 2]] };
         }
