@@ -12,14 +12,14 @@
 <circle cx="414.7" cy="40.1" r="3" fill="#58a6ff"/>
 <circle cx="509.3" cy="39.1" r="3" fill="#58a6ff"/>
 <circle cx="604.0" cy="38.3" r="3" fill="#58a6ff"/>
-<polyline fill="none" stroke="#2ea043" stroke-width="2" points="36.0,141.4 130.7,98.8 225.3,70.4 320.0,54.8 414.7,51.4 509.3,48.2 604.0,45.5"/>
+<polyline fill="none" stroke="#2ea043" stroke-width="2" points="36.0,141.4 130.7,98.8 225.3,70.4 320.0,54.8 414.7,51.4 509.3,48.2 604.0,45.4"/>
 <circle cx="36.0" cy="141.4" r="3" fill="#2ea043"/>
 <circle cx="130.7" cy="98.8" r="3" fill="#2ea043"/>
 <circle cx="225.3" cy="70.4" r="3" fill="#2ea043"/>
 <circle cx="320.0" cy="54.8" r="3" fill="#2ea043"/>
 <circle cx="414.7" cy="51.4" r="3" fill="#2ea043"/>
 <circle cx="509.3" cy="48.2" r="3" fill="#2ea043"/>
-<circle cx="604.0" cy="45.5" r="3" fill="#2ea043"/>
+<circle cx="604.0" cy="45.4" r="3" fill="#2ea043"/>
 <text x="490" y="20" font-size="10" fill="#2ea043">code %</text>
 <text x="550" y="20" font-size="10" fill="#58a6ff">functions %</text>
 <text x="36" y="208" font-size="10" fill="#8b949e">2026-10-21</text>

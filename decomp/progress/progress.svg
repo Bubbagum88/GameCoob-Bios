@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="960" height="584" font-family="Verdana,DejaVu Sans,sans-serif">
 <rect width="100%" height="100%" fill="#0d1117"/>
 <rect x="0" y="0" width="960" height="44" fill="#161b22"/>
-<rect x="0" y="40" width="898.5" height="4" fill="#2ea043"/>
-<text x="12" y="27" font-size="16" fill="#e6edf3">BS2 PAL 1.0: 97.08% total, 93.59% code, 97.79% data, 2007/2039 functions</text>
+<rect x="0" y="40" width="899.3" height="4" fill="#2ea043"/>
+<text x="12" y="27" font-size="16" fill="#e6edf3">BS2 PAL 1.0: 97.10% total, 93.68% code, 97.79% data, 2008/2039 functions</text>
 <g><title>BS2 menu</title>
 <rect x="0.0" y="44.0" width="297.2" height="540.0" fill="#21262d" stroke="#0d1117"/>
 <text x="4.0" y="56.0" font-size="11" fill="#e6edf3">BS2 menu</text>
@@ -41,8 +41,8 @@
 <rect x="88.3" y="460.7" width="92.6" height="64.9" fill="#2ea043" stroke="#0d1117" stroke-width="1"/>
 <text x="91.3" y="472.7" font-size="10" fill="#0d1117">menu_icon_card</text>
 </g>
-<g><title>bs2/menu/menu_fx_spark: 5372 bytes, 91.9% matched, 99.9% fuzzy, 8/9 functions</title>
-<rect x="88.3" y="525.6" width="92.6" height="56.4" fill="#3b9f40" stroke="#0d1117" stroke-width="1"/>
+<g><title>bs2/menu/menu_fx_spark: 5372 bytes, 100.0% matched, 100.0% fuzzy, 9/9 functions</title>
+<rect x="88.3" y="525.6" width="92.6" height="56.4" fill="#2ea043" stroke="#0d1117" stroke-width="1"/>
 <text x="91.3" y="537.6" font-size="10" fill="#0d1117">menu_fx_spark</text>
 </g>
 <g><title>bs2/menu/menu_icon_clock: 5304 bytes, 71.5% matched, 100.0% fuzzy, 7/8 functions</title>
