@@ -2052,29 +2052,29 @@ void CardDraw_MeasureLines(CardSlotFade* f, void* sth, void* glh, u16* outW) {
     SthEntry* entries = ((Sth*)sth)->entry;
     GlhText* texts = GLH_TEXTS(glh);
     u16 max = 0;
-    u16 i;
     u16 w;
     u16 step;
     u16 str;
     SthEntry* e;
+    SthEntry* ent;
 
-    for (i = 0, str = 2; i < 3; str++, i++) {
-        e = &entries[i + 2];
-        Glh_MeasureString(&texts[entries[str].pane], STH_STRING(e), &w, &f->lineH);
+    for (step = 0, str = 2; step < 3; str++, step++) {
+        e = &entries[step + 2];
+        Glh_MeasureString(&texts[(ent = entries)[str].pane], STH_STRING(e), &w, &f->lineH);
         if (max < w) {
             max = w;
         }
     }
-    f->h3 = f->lineH + texts[entries[2].pane].lineSpace * 32;
+    f->h3 = f->lineH + texts[ent[2].pane].lineSpace * 32;
     if (f->b < f->s8) {
-        step = texts[entries[2].pane].lineSpace * 32;
+        step = texts[ent[2].pane].lineSpace * 32;
     } else if (f->b >= f->s8 && f->b < f->sA) {
-        step = (f->sA - f->b) * (texts[entries[2].pane].lineSpace * 32) / (f->sA - f->s8);
+        step = (f->sA - f->b) * (texts[ent[2].pane].lineSpace * 32) / (f->sA - f->s8);
     } else if (f->b >= f->sA) {
         step = 0;
     }
     f->h1 = f->lineH + step;
-    f->h2 = f->lineH + texts[entries[2].pane].lineSpace * 16;
+    f->h2 = f->lineH + texts[ent[2].pane].lineSpace * 16;
     *outW = max;
 }
 

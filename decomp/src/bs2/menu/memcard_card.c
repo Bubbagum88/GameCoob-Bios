@@ -1278,7 +1278,7 @@ cleanup:
     }
     CardThread_UpdateSlot(slot);
     CardThread_MarkConflicts();
-    OSSendMessage(&sCardReplyQueue, CardThread_Msg(((u8)file << 24) | ((slot << 16) & 0x10000)), OS_MESSAGE_BLOCK);
+    OSSendMessage(&sCardReplyQueue, CardThread_Msg(((u8)file << 24) | (((u8)slot << 16) & 0x10000)), OS_MESSAGE_BLOCK);
 }
 
 /* 0x8131E994 */
