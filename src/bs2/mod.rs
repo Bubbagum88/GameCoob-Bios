@@ -111,9 +111,9 @@ pub struct Intro {
     /// What is left of [`HOLD_FRAMES`].
     hold: i32,
     pub frame: u32,
-    /// The menu's idle-wobble clock (MenuWork.wobbleFrame): restarts with
-    /// the spin-out and keeps running into the menu.
-    pub wobble_frame: i16,
+    /// `gMenuWork`, made by `Scene_Init` (Menu_Init): the spin-out runs
+    /// the menu's idle-wobble clock, and the menu takes it over.
+    pub menu: menu::Work,
     /// `disp->ortho` (the flag at 0x1E): set by `Scene_Init`, cleared by the
     /// spin-out and the menu.
     ortho: bool,
@@ -140,7 +140,7 @@ impl Intro {
             disc: Disc::new(),
             hold: HOLD_FRAMES,
             frame: 0,
-            wobble_frame: 0,
+            menu: menu::Work::new(),
             ortho: true,
             cam_y: camera::cam_y(disp, camera::CamState::Intro),
             world: psmtx::IDENTITY,
@@ -257,7 +257,7 @@ impl Intro {
         }
         self.ortho = false;
         let rot = mtx::rot_trans(0, s.spin as i32, 0, [0.0; 3]);
-        let wobble = s.calc_spin_out_mtx(&mut self.wobble_frame, true);
+        let wobble = s.calc_spin_out_mtx(&mut self.menu, true);
         self.spin_out_mtx = psmtx::concat(&rot, &wobble);
         if s.out_frame <= s.out_fade_frames as i32 {
             self.draw_world();

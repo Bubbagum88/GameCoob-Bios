@@ -49,7 +49,7 @@ app counterpart yet.
 | `backdrop.c` | `bs2/menu/mod.rs`, `bs2/menu/card.rs` | behavioral |
 | `pad.c` | `boot_intro.rs` (keyboard to pad) | behavioral |
 | `rnd.c` | none | missing |
-| `menu/menu.c` | `bs2/menu/mod.rs` | close |
+| `menu/menu.c` | `bs2/menu/mod.rs` | update ported: `Work` is `MenuWork` (less the mosaic's fields), made at boot by the scene and wobbled by the spin-out; `Menu::update` runs `Menu_Update`'s steps in its order (rotation, icons, slot glow, guide, sub faders, one-shots, latch, cube or zoom-in). No SRAM-lost flag or fatal-error text yet (dummy disc). Draw side close |
 | `menu/menu_fx*.c` | `bs2/fx.rs`, `ipl/fx.rs` | close; `Fx_Draw` ported (both AA-half passes in one frame) |
 | `menu/menu_icon_*.c` | `bs2/menu/icons.rs` | close; the cubes draw as the C does (tint in material 0's tevColor) |
 | `menu/game.c`, `game_params.c` | `bs2/menu/game.rs` | close; START opens the firmware boot list |
@@ -69,7 +69,8 @@ app counterpart yet.
    moved over too and `render.rs` keeps only `View` and `Prepared`).
 3. `glh.c`, `font.c`, `fader.c` on `sdk::gx`, under `ui.rs` (done).
 4. The intro: `cube.c`, `cube_draw.c`, `scene*.c` (done; `backdrop.c` goes with the menu).
-5. The menu core, `menu_fx*.c` and the icon units (their model draws done).
+5. The menu core, `menu_fx*.c` and the icon units (their model draws and
+   `Menu_Update` done).
 6. Options, Calendar, Game Play and Memory Card, keeping their UEFI and
    dummy backends at the edges.
 7. `gInit.c` and the `BS2Main` loop over `sdk::vi` and `sdk::pad`, replacing

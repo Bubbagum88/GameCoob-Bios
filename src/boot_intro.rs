@@ -237,7 +237,7 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
             if let Some(m) = &mut menu {
                 // Scene_Update in state 5 runs Menu_Update.
                 intro.update(Input::default());
-                if let Some(act) = m.update(&pad) {
+                if let Some(act) = m.update(ma, &pad) {
                     if let Some(msg) = perform(act) {
                         m.notify(msg);
                     }
@@ -249,7 +249,7 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
             }
             intro.update(Input { a: now < a_until, egg });
             if intro.finished() {
-                menu = Some(Menu::new(sys_info(), ma, Box::new(FakeDrive::new()), Box::new(FakeCards::new()), intro.wobble_frame));
+                menu = Some(Menu::new(sys_info(), ma, Box::new(FakeDrive::new()), Box::new(FakeCards::new()), intro.menu.clone()));
                 // Keys pressed during the intro don't leak into the menu.
                 pad = Pad::default();
             }

@@ -172,7 +172,7 @@ fn main() {
                     let sc = &intro.scene;
                     println!(
                         "trace f{f} state={:?} spin={} speed={:.3} accel={:.3} wph={} wamp={} t={} mwob={} land={} drop={}",
-                        intro.state, sc.spin, sc.spin_speed, sc.spin_accel, sc.wobble_phase, sc.wobble_amp, sc.out_frame, intro.wobble_frame, sc.land_impulse, sc.drop_impulse
+                        intro.state, sc.spin, sc.spin_speed, sc.spin_accel, sc.wobble_phase, sc.wobble_amp, sc.out_frame, intro.menu.wobble_frame, sc.land_impulse, sc.drop_impulse
                     );
                 }
                 if intro.finished() {
@@ -188,7 +188,7 @@ fn main() {
                             }
                         }
                     }
-                    menu = Some(Menu::new(info(f), &ma, Box::new(FakeDrive::new()), Box::new(cards), intro.wobble_frame, ));
+                    menu = Some(Menu::new(info(f), &ma, Box::new(FakeDrive::new()), Box::new(cards), intro.menu.clone()));
                 }
             }
             Some(m) => {
@@ -206,7 +206,7 @@ fn main() {
                     eject: has("eject"),
                     slot: [has("slot1"), has("slot2")],
                 };
-                if let Some(act) = m.update(&pad, ) {
+                if let Some(act) = m.update(&ma, &pad) {
                     println!("frame {f}: action {act:?}");
                 }
                 m.tick_guide();
