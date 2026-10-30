@@ -11,9 +11,9 @@
 use crate::bs2::gbase;
 use crate::bs2::mtx::{self, cos_s, sin_s};
 use crate::sdk::mtx::{self as psmtx, Mtx};
-use super::super::raster::Prim;
-use super::super::render::{self, DrawOpts, Prepared, View};
-use super::super::shader::Shader;
+use super::super::gmr::{self, Instance};
+use super::super::render::{Prepared, View};
+use crate::sdk::gx::Gx;
 use crate::ipl::j3d::Model;
 use crate::ipl::Ipl;
 use alloc::vec::Vec;
@@ -29,12 +29,10 @@ pub enum Phase {
     Hide,
 }
 
-/// The cube model and one copy of its shader per tint. The model's TEV
-/// stage is `2 * (0.5 * tex + C0)`: TEVREG0 is a signed tint added to the
-/// grey shading.
+/// The cube model. Its TEV stage is `2 * (0.5 * tex + C0)`: TEVREG0 is a
+/// signed tint added to the grey shading.
 pub struct IconData {
     model: Prepared,
-    shaders: Vec<Shader>,
     /// Options picture: one position per set cell of its bitmap (empty if
     /// the IPL is not PAL 1.0).
     picture: Vec<[f32; 2]>,
@@ -49,20 +47,11 @@ pub const TINT_CLOCK_DIAL: usize = 4;
 
 /// `Game_GetParams`, `Card_GetParams`, `Option_GetParams`,
 /// `Clock_GetParams` tints, in the order of the `TINT_*` ids.
-const TINTS: [[i16; 3]; 5] = [[0, -90, 20], [-45, -40, 50], [-30, 20, -50], [40, 20, -50], [80, 0, -60]];
+const TINTS: [[i16; 4]; 5] = [[0, -90, 20, 255], [-45, -40, 50, 255], [-30, 20, -50, 255], [40, 20, -50, 255], [80, 0, -60, 255]];
 
 impl IconData {
     pub fn load(ipl: &Ipl) -> Option<IconData> {
         let model = Prepared::new(Model::parse(&ipl.resource(RES_CUBE).ok()?).ok()?);
-        let base = model.shader(0)?.clone();
-        let shaders = TINTS
-            .iter()
-            .map(|t| {
-                let mut s = base.clone();
-                s.set_reg(0, [t[0] as f32 / 255.0, t[1] as f32 / 255.0, t[2] as f32 / 255.0, 1.0]);
-                s
-            })
-            .collect();
         let cells = Ipl::ram_to_rom(OPTION_PICTURE_RAM)
             .and_then(|o| ipl.rom().get(o..o + 72))
             .filter(|b| b.iter().all(|&c| c <= 1))
@@ -73,16 +62,22 @@ impl IconData {
             .filter(|&(_, &c)| c != 0)
             .map(|(k, _)| [(k % 9) as f32 * 20.0 - 80.0, 70.0 - (k / 9) as f32 * 20.0])
             .collect();
-        Some(IconData { model, shaders, picture })
+        Some(IconData { model, picture })
     }
 
-    /// Queue one cube: `m` is its model-to-world matrix (scale included).
-    fn cube<'a>(&'a self, list: &mut Vec<Prim<'a>>, tint: usize, m: &Mtx, view: &View, alpha: i16) {
+    /// Draw one cube with a tint (`model->material->tevColor` swapped for
+    /// the draw): `m` is its model matrix (scale included).
+    fn cube<'a>(&'a self, gx: &mut Gx<'a>, tint: usize, m: &Mtx, view: &View, alpha: i16) {
         if alpha <= 0 {
             return;
         }
-        let o = DrawOpts { alpha: alpha.min(255) as u8, ..Default::default() };
-        render::draw_model_with(list, &self.model, self.shaders.get(tint), m, view, &o);
+        let mut inst = Instance::new(&self.model.model);
+        gmr::set_model_mtx(&mut inst, m, [1.0; 3]);
+        gmr::set_view_mtx(&mut inst, &view.view);
+        gmr::calc_joints(&self.model.model, &mut inst);
+        inst.alpha = alpha.min(255) as u8;
+        inst.tev_color0 = TINTS.get(tint).copied();
+        gmr::draw(gx, &self.model, &mut inst);
     }
 }
 
@@ -234,12 +229,12 @@ impl GameIcon {
 
     /// GameIcon_CalcMtx + GameIcon_Draw: `cube · RotX(-90°) · R(rx, 0, rz)
     /// · T(x, y, 0) · S(0.65)`, in the plane of the top face.
-    pub fn draw<'a>(&self, list: &mut Vec<Prim<'a>>, d: &'a IconData, view: &View, cube: &Mtx) {
+    pub fn draw<'a>(&self, gx: &mut Gx<'a>, d: &'a IconData, view: &View, cube: &Mtx) {
         let base = psmtx::concat(cube, &mtx::rot_trans(-0x4000, 0, 0, [0.0; 3]));
         let base = psmtx::concat(&base, &mtx::rot_trans(self.rx as i32, 0, self.rz as i32, [0.0; 3]));
         for c in &self.cubes {
             let m = psmtx::concat(&base, &psmtx::concat(&psmtx::trans(c.x, c.y, 0.0), &psmtx::scale(GAME_SCALE, GAME_SCALE, GAME_SCALE)));
-            d.cube(list, TINT_GAME, &m, view, c.alpha);
+            d.cube(gx, TINT_GAME, &m, view, c.alpha);
         }
     }
 }
@@ -422,14 +417,14 @@ impl CardIcon {
     /// CardIcon_CalcMtx + CardIcon_Draw: `cube · RotX(90°) · RotY(yaw) ·
     /// T(pos) · R(flip, flip, 0) · S`, on the bottom face. Label cubes are
     /// half size.
-    pub fn draw<'a>(&self, list: &mut Vec<Prim<'a>>, d: &'a IconData, view: &View, cube: &Mtx) {
+    pub fn draw<'a>(&self, gx: &mut Gx<'a>, d: &'a IconData, view: &View, cube: &Mtx) {
         let base = psmtx::concat(cube, &mtx::rot_trans(0x4000, 0, 0, [0.0; 3]));
         let base = psmtx::concat(&base, &mtx::rot_trans(0, self.yaw as i32, 0, [0.0; 3]));
         for (i, c) in self.cubes.iter().enumerate() {
             let k = if card_inner(i) { CARD_SCALE * 0.5 } else { CARD_SCALE };
             let a = c.flip as i32;
             let m = psmtx::concat(&base, &psmtx::concat(&mtx::rot_trans(a, a, 0, c.pos), &psmtx::scale(k, k, k)));
-            d.cube(list, TINT_CARD, &m, view, c.alpha);
+            d.cube(gx, TINT_CARD, &m, view, c.alpha);
         }
     }
 }
@@ -549,7 +544,7 @@ impl ClockIcon {
     /// ClockIcon_CalcMtx + ClockIcon_Draw: `cube · RotY(-90°) · T(x, y, 0)
     /// · S`, on the right face. The dial and the seconds cube scale in with
     /// the frame count; the dial has its own tint.
-    pub fn draw<'a>(&self, list: &mut Vec<Prim<'a>>, d: &'a IconData, view: &View, cube: &Mtx) {
+    pub fn draw<'a>(&self, gx: &mut Gx<'a>, d: &'a IconData, view: &View, cube: &Mtx) {
         let base = psmtx::concat(cube, &mtx::rot_trans(0, -0x4000, 0, [0.0; 3]));
         let f = self.frame as f32;
         for i in 0..13 {
@@ -562,7 +557,7 @@ impl ClockIcon {
                 continue;
             }
             let m = psmtx::concat(&base, &psmtx::concat(&psmtx::trans(self.pos[i][0], self.pos[i][1], 0.0), &psmtx::scale(k, k, k)));
-            d.cube(list, tint, &m, view, self.alpha[i]);
+            d.cube(gx, tint, &m, view, self.alpha[i]);
         }
     }
 }
@@ -813,13 +808,13 @@ impl OptionIcon {
 
     /// OptionIcon_CalcMtx + OptionIcon_Draw: frame cubes `face · T(cur) ·
     /// R(rot) · S`, picture cubes `face · T(cur) · S`, on the left face.
-    pub fn draw<'a>(&self, list: &mut Vec<Prim<'a>>, d: &'a IconData, view: &View, cube: &Mtx) {
+    pub fn draw<'a>(&self, gx: &mut Gx<'a>, d: &'a IconData, view: &View, cube: &Mtx) {
         let base = psmtx::concat(cube, &mtx::rot_trans(0, -0x4000, 0, [0.0; 3]));
         let k = psmtx::scale(OPTION_SCALE, OPTION_SCALE, OPTION_SCALE);
         for c in self.frame_cubes.iter().chain(&self.picture) {
             let r = mtx::rot_trans(c.rot[0] as i32, c.rot[1] as i32, 0, [c.cur[0], c.cur[1], 0.0]);
             let m = psmtx::concat(&base, &psmtx::concat(&r, &k));
-            d.cube(list, TINT_OPTION, &m, view, c.alpha);
+            d.cube(gx, TINT_OPTION, &m, view, c.alpha);
         }
     }
 }

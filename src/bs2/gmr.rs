@@ -39,12 +39,15 @@ pub struct Instance {
     /// `matAnm`: material color 0 of each material from the color
     /// animation, in place of the model's (`gmr_AnimMaterials`).
     pub mat_anm: Option<Vec<[u8; 4]>>,
+    /// Material 0's first TEV color, where a caller points
+    /// `model->material->tevColor` at its own (the menu icons' tints).
+    pub tev_color0: Option<[i16; 4]>,
 }
 
 impl Instance {
     /// `J3D_InitModel`: joint matrices for `m`, alpha 255.
     pub fn new(m: &Model) -> Instance {
-        Instance { joint_mtx: vec![psmtx::IDENTITY; m.joints.len()], base: psmtx::IDENTITY, alpha: 255, mat_anm: None }
+        Instance { joint_mtx: vec![psmtx::IDENTITY; m.joints.len()], base: psmtx::IDENTITY, alpha: 255, mat_anm: None, tev_color0: None }
     }
 }
 
@@ -186,8 +189,9 @@ fn load_material<'a>(gx: &mut Gx<'a>, p: &'a Prepared, inst: &Instance, index: u
     let stages = mat.tev_stages.len() as u8;
     gx.set_num_tev_stages(stages);
     for (i, c) in mat.tev_colors.iter().enumerate() {
+        let c = if index == 0 && i == 0 { inst.tev_color0.or(*c) } else { *c };
         if let Some(c) = c {
-            gx.set_tev_color_s10(i as u8 + 1, *c);
+            gx.set_tev_color_s10(i as u8 + 1, c);
         }
     }
     for i in 0..8u8 {

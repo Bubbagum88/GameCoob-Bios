@@ -905,11 +905,10 @@ impl Menu {
             }
         };
         glass(gx, &mut cube, BIG_CUBE_BACK);
-        let list = &mut gx.list;
-        self.card_icon.draw(list, &ma.icons, view, &self.cube);
-        self.game_icon.draw(list, &ma.icons, view, &self.cube);
-        self.option_icon.draw(list, &ma.icons, view, &self.cube);
-        self.clock_icon.draw(list, &ma.icons, view, &self.cube);
+        self.card_icon.draw(gx, &ma.icons, view, &self.cube);
+        self.game_icon.draw(gx, &ma.icons, view, &self.cube);
+        self.option_icon.draw(gx, &ma.icons, view, &self.cube);
+        self.clock_icon.draw(gx, &ma.icons, view, &self.cube);
         glass(gx, &mut cube, BIG_CUBE_FRONT);
         let mut ui = Ui { gx, view, mv: psmtx::IDENTITY };
         self.draw_faces(&mut ui, ma, view, bg);
