@@ -29,13 +29,13 @@ use crate::ipl::{bti, j3d::Model, Ipl};
 use alloc::vec::Vec;
 use anim::{Bck, Ipk};
 use cube::{Cube, Jingle, Phase};
-use mtx::sin_s;
 use crate::sdk::gx::{Gx, GxArena, GxRegs, GX_COLOR0A0};
 use crate::sdk::mtx::{self as psmtx, Mtx};
 use raster::Target;
 use gmr::Instance;
 use render::{Prepared, View};
-use scene::Scene;
+use ginit::{Disc, DiscState};
+use scene::{Scene, SceneState, SHAKE_MAX};
 
 /// Resource ids in the IPL archive.
 mod res {
@@ -96,132 +96,177 @@ pub struct Input {
 /// when no disc is present. The real IPL holds none; GameCoob lingers one
 /// second (60 frames) on the logo.
 pub const HOLD_FRAMES: i32 = 60;
-/// Spin-out timing (Scene defaults): keep spinning, decelerate with three
-/// extra turns, settle, and how long the logo scene keeps fading.
-pub const SPINOUT_KEEP: i32 = 15;
-pub const SPINOUT_BRAKE: i32 = 80;
-pub const SPINOUT_SETTLE: i32 = 50;
-pub const SPINOUT_TURNS: i32 = 3;
-pub const SPINOUT_FADE: i32 = 30;
-pub const SPINOUT_END: i32 = SPINOUT_KEEP + SPINOUT_BRAKE + SPINOUT_SETTLE;
-/// Frames before the end of the spin-out that the front face starts fading in.
-pub const SPINOUT_FACE: i32 = 100;
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum State0 {
-    Intro,
-    SpinOut,
-    Done,
-}
-
+/// The scene (`scene.c`, `scene_intro.c`, `scene_spinout.c`): the scene
+/// state machine and the models it draws, the rolling cube, and the bits of
+/// BS2Main's frame it depends on (the camera, the projection flag).
 pub struct Intro {
     pub cube: Cube,
     pub scene: Scene,
-    pub state: State0,
+    /// `sState`: the state `Scene_Draw2D` draws.
+    pub state: SceneState,
+    /// `sNextState`: the state the next `Scene_Update` runs.
+    next_state: SceneState,
+    pub disc: Disc,
+    /// What is left of [`HOLD_FRAMES`].
     hold: i32,
-    pub spin_frame: i32,
-    spin_start: i16,
     pub frame: u32,
     /// The menu's idle-wobble clock (MenuWork.wobbleFrame): restarts with
     /// the spin-out and keeps running into the menu.
     pub wobble_frame: i16,
+    /// `disp->ortho` (the flag at 0x1E): set by `Scene_Init`, cleared by the
+    /// spin-out and the menu.
+    ortho: bool,
+    /// The camera height `fn_81302DF0` picked at the start of the frame.
+    cam_y: f32,
+    /// `sWorldMtx`, from the last `Scene_DrawWorld`.
+    world: Mtx,
+    /// `sSpinOutMtx`.
+    spin_out_mtx: Mtx,
     /// GX registers as the last rendered frame left them.
     gx_regs: core::cell::Cell<Option<GxRegs>>,
 }
 
 impl Intro {
+    /// `Scene_Init(TRUE)` on a boot with no disc.
     pub fn new(a: &Assets) -> Intro {
         mtx::sin_table_init(12);
+        let disp = bs2main::disp_settings();
         Intro {
             cube: Cube::new(a.path.clone()),
             scene: Scene::new(),
-            state: State0::Intro,
-            hold: 0,
-            spin_frame: 1,
-            spin_start: 0,
+            state: SceneState::NoDisc,
+            next_state: SceneState::NoDisc,
+            disc: Disc::new(),
+            hold: HOLD_FRAMES,
             frame: 0,
             wobble_frame: 0,
+            ortho: true,
+            cam_y: camera::cam_y(disp, camera::CamState::Intro),
+            world: psmtx::IDENTITY,
+            spin_out_mtx: psmtx::IDENTITY,
             gx_regs: core::cell::Cell::new(None),
         }
     }
 
-    /// One 1/60 s logic frame (Scene_UpdateNoDisc / the spin-out).
+    /// One 1/60 s logic frame: `fn_81302DF0`'s camera for the state the last
+    /// frame left, then `Scene_Update`. Once the menu has taken over this
+    /// only latches the state; `Menu_Update` is the menu's own.
     pub fn update(&mut self, input: Input) -> Option<Jingle> {
         self.frame += 1;
+        let s = &self.scene;
+        let cam = match self.state {
+            SceneState::SpinOut => camera::CamState::SpinOut { frame: s.out_frame, fade: s.out_fade_frames as i32 },
+            SceneState::Menu => camera::CamState::Menu,
+            _ => camera::CamState::Intro,
+        };
+        self.cam_y = camera::cam_y(bs2main::disp_settings(), cam);
+
+        self.state = self.next_state;
         let mut jingle = None;
         match self.state {
-            State0::Intro => {
-                // Scene_UpdateNoDisc: A spins the cube while it runs; once
-                // it is done (and the disc text has faded) the scene spins
-                // itself, with a second spin and wobble step that frame.
-                if !self.cube.done {
-                    let _whoosh = self.scene.update_spin(input.a, self.cube.running, false);
-                }
-                self.scene.update_wobble();
-                jingle = self.cube.update(&mut self.scene, input.egg.unwrap_or(Jingle::Normal));
-                if self.scene.spin_speed > self.scene.spin_threshold {
-                    self.start_spin_out();
-                } else if self.cube.done {
-                    self.hold += 1;
-                    if self.hold > HOLD_FRAMES {
-                        let _whoosh = self.scene.update_spin(false, self.cube.running, true);
-                        self.scene.update_wobble();
-                        if self.scene.spin_speed > self.scene.spin_threshold {
-                            self.start_spin_out();
-                        }
-                    }
-                }
+            SceneState::NoDisc => {
+                let (next, j) = self.update_no_disc(input);
+                self.next_state = next;
+                jingle = j;
+                self.draw_world();
             }
-            State0::SpinOut => {
-                // Scene_SpinOut: the spin-out counter starts at 1 (Scene_Reset).
-                // Scene_CalcSpinOutMtx drives the menu's wobble clock (still 0
-                // from Menu_Init) by 7 per frame.
-                if self.spin_frame == 1 {
-                    self.wobble_frame = 0;
-                }
-                self.update_spin_out();
-                // The scene wobble is frozen during the spin-out.
-                self.wobble_frame = self.wobble_frame.wrapping_add(7);
-                if self.spin_frame > SPINOUT_END {
-                    self.state = State0::Done;
-                }
-            }
-            State0::Done => {}
+            SceneState::SpinOut => self.next_state = self.spin_out(),
+            SceneState::Menu => self.ortho = false,
+            // The disc boot, the SRAM-lost language select and the cover
+            // open state need a drive.
+            SceneState::Mode0 | SceneState::Disc | SceneState::Mode3 => {}
         }
         jingle
     }
 
-    /// Entering Scene state 4 snaps the scene spin to spinRest (0).
-    fn start_spin_out(&mut self) {
-        self.state = State0::SpinOut;
-        self.scene.spin = 0;
-        self.spin_start = 0;
+    /// `Scene_UpdateNoDisc` (0x8130CB74).
+    fn update_no_disc(&mut self, input: Input) -> (SceneState, Option<Jingle>) {
+        let s = &mut self.scene;
+        let cube = &mut self.cube;
+        if !cube.done {
+            let _whoosh = s.update_spin(input.a, cube.running, false);
+        }
+        s.update_wobble();
+        let jingle = cube.update(s, Some(input.egg.unwrap_or(Jingle::Normal)));
+        if s.spin_speed > s.spin_threshold as f32 {
+            s.spin = s.spin_rest;
+            return (SceneState::SpinOut, jingle);
+        }
+
+        if s.fatal {
+            s.fatal_fade = (s.fatal_fade + 1).min(s.fatal_fade_frames);
+            return (SceneState::NoDisc, jingle);
+        }
+
+        let disc = &mut self.disc;
+        if matches!(disc.state(), DiscState::Wrong | DiscState::Retry) {
+            s.err_fade = (s.err_fade + 1).min(s.err_fade_frames);
+        } else {
+            s.err_fade = (s.err_fade - 1).max(0);
+        }
+
+        if s.cover_opened {
+            if cube.done {
+                if self.hold > 0 {
+                    self.hold -= 1;
+                    return (SceneState::NoDisc, jingle);
+                }
+                disc.fade_out_start();
+                if disc.fade_alpha() == 0 {
+                    let _whoosh = s.update_spin(false, cube.running, true);
+                    s.update_wobble();
+                    if s.spin_speed > s.spin_threshold as f32 {
+                        s.spin = s.spin_rest;
+                        return (SceneState::SpinOut, jingle);
+                    }
+                }
+            }
+            return (SceneState::NoDisc, jingle);
+        }
+
+        match disc.state() {
+            // fn_8130213C boots the disc once the cube is done.
+            DiscState::Ready => {}
+            DiscState::Fatal => s.fatal = true,
+            DiscState::None | DiscState::CoverOpen => s.cover_opened = true,
+            DiscState::Reading | DiscState::Wrong | DiscState::Retry => {}
+        }
+        (SceneState::NoDisc, jingle)
     }
 
-    /// Scene_UpdateSpinOut: brake the spin with Hermite curves so the menu
-    /// cube lands facing front.
-    fn update_spin_out(&mut self) {
-        let sc = &mut self.scene;
-        let t = self.spin_frame;
-        let prev = sc.spin;
-        let (k0, k1, k2) = (SPINOUT_KEEP, SPINOUT_KEEP + SPINOUT_BRAKE, SPINOUT_END);
-        if t < k0 {
-            sc.spin = mtx::to_s16(sc.spin as f32 + sc.spin_speed);
-            self.spin_start = sc.spin;
-        } else if t < k1 {
-            let from = -(self.spin_start as i32 + (SPINOUT_TURNS << 16)) as f32;
-            sc.spin = mtx::to_s16(gbase::hermite(t as f32, k0 as f32, from, sc.spin_threshold, k1 as f32, 5000.0, 0.0));
-            if t > k0 {
-                sc.spin_speed = sc.spin.wrapping_sub(prev) as f32;
-            }
-        } else if t < k2 {
-            sc.spin = mtx::to_s16(gbase::hermite(t as f32, k1 as f32, 5000.0, 0.0, k2 as f32, 0.0, 0.0));
-            sc.spin_speed = sc.spin.wrapping_sub(prev) as f32;
-        } else if t == k2 {
-            sc.spin = 0;
-            sc.spin_speed = 0.0;
+    /// `Scene_DrawWorld` (0x8130C90C): the world matrix and `Cube_Draw`'s
+    /// cube matrix. The models' joints follow from these and the camera,
+    /// so [`Intro::draw`] works them out.
+    fn draw_world(&mut self) {
+        self.world = self.scene.world_mtx();
+        self.cube.calc_mtx(&self.world);
+    }
+
+    /// `Scene_SpinOut` (0x8130ED30): state 4, until the spin has settled.
+    fn spin_out(&mut self) -> SceneState {
+        let s = &mut self.scene;
+        if s.out_first {
+            s.out_start = s.spin;
+            s.out_first = false;
         }
-        self.spin_frame += 1;
+        let _whoosh = s.update_spin_out();
+        s.out_frame += 1;
+        if s.spin_speed <= 0.0 && s.spin == 0 {
+            s.out_first = true;
+        }
+        self.ortho = false;
+        let rot = mtx::rot_trans(0, s.spin as i32, 0, [0.0; 3]);
+        let wobble = s.calc_spin_out_mtx(&mut self.wobble_frame, true);
+        self.spin_out_mtx = psmtx::concat(&rot, &wobble);
+        if s.out_frame <= s.out_fade_frames as i32 {
+            self.draw_world();
+        }
+        let s = &self.scene;
+        if s.spin_speed <= 0.0 && s.spin == 0 {
+            return SceneState::Menu;
+        }
+        SceneState::SpinOut
     }
 
     /// GX for this frame, starting from the registers the last frame left.
@@ -233,7 +278,7 @@ impl Intro {
         let regs = self.gx_regs.get().unwrap_or_else(|| {
             let scratch = GxArena::new();
             let mut gx = Gx::new(&scratch, vp[0], vp[1]);
-            self.draw(&mut gx, a, vp);
+            self.draw(&mut gx, a, None, vp);
             gx.regs()
         });
         Gx::with_regs(arena, regs)
@@ -247,7 +292,7 @@ impl Intro {
         let arena = GxArena::new();
         let vp = [t.w as f32, t.h as f32];
         let mut gx = self.frame_gx(&arena, a, vp);
-        self.draw(&mut gx, a, vp);
+        self.draw(&mut gx, a, None, vp);
         self.gx_regs.set(Some(gx.regs()));
         t.clear([0.0; 3]);
         let job = raster::Job::new(t, &gx.list, 16);
@@ -261,17 +306,8 @@ impl Intro {
         let vp = [t.w as f32, t.h as f32];
         let mut gx = self.frame_gx(&arena, a, vp);
         match m {
-            Some(m) => m.draw(&mut gx, a, ma, &self.spin_out_view(vp)),
-            None => {
-                self.draw(&mut gx, a, vp);
-                // Scene_Draw2DSpinOut: the front face fades in over the
-                // last 100 frames of the spin-out.
-                let f = self.spin_frame - (SPINOUT_END - SPINOUT_FACE);
-                if self.state != State0::Intro && f >= 0 {
-                    let alpha = (255 * f.min(SPINOUT_FACE) / SPINOUT_FACE) as u8;
-                    menu::Menu::draw_spin_out_face(&mut gx, ma, &self.spin_out_view(vp), &self.spin_out_mtx(), alpha);
-                }
-            }
+            Some(m) if self.state == SceneState::Menu => m.draw(&mut gx, a, ma, &self.view(vp)),
+            _ => self.draw(&mut gx, a, Some(ma), vp),
         }
         self.gx_regs.set(Some(gx.regs()));
         t.clear([0.0; 3]);
@@ -279,72 +315,27 @@ impl Intro {
         par(&job);
     }
 
-    /// Build the frame's display list (Scene_DrawWorld + Scene_Draw2DNoDisc).
-    pub fn draw<'a>(&self, gx: &mut Gx<'a>, a: &'a Assets, vp: [f32; 2]) {
-        if self.state != State0::Intro {
-            return self.draw_spin_out(gx, a, vp);
-        }
-        let sc = &self.scene;
-        let mut view = View::intro(camera::cam_y(bs2main::disp_settings(), camera::CamState::Intro), true);
+    /// The frame's camera (`Camera_GetView`), light and projection
+    /// (`fn_81301100`).
+    pub fn view(&self, vp: [f32; 2]) -> View {
+        let mut view = View::intro(self.cam_y, self.ortho);
         view.vp = vp;
-        gx.set_projection(&view.projection());
-        gx.set_viewport(0.0, 0.0, vp[0], vp[1]);
-        camera::load_light(gx, &view.view);
-
-        // Scene_DrawWorld: the models' joint matrices.
-        let world = sc.world_mtx();
-        let placed = |p: &Prepared, m: &Mtx, s: f32| {
-            let mut inst = Instance::new(&p.model);
-            gmr::set_model_mtx(&mut inst, m, [s; 3]);
-            gmr::set_view_mtx(&mut inst, &view.view);
-            gmr::calc_joints(&p.model, &mut inst);
-            inst
-        };
-        let mut inner = placed(&a.bg_inner, &world, 1.0);
-        let mut logo = placed(&a.logo, &world, 1.0);
-        let mut outer = placed(&a.bg_outer, &world, 1.01);
-        let mut small = placed(&a.small_cube, &self.cube.small_cube_mtx(&world), 1.0);
-
-        // Scene_Draw2DNoDisc.
-        let master: i32 = 255;
-        // 1. The "NINTENDO GAMECUBE" wordmark, fixed to the screen, drawn
-        //    over the state the last frame left.
-        self.draw_text(gx, a, &view.view, master as u8);
-        gmr::setup(gx);
-
-        // 2. Inner background cube, visible while the impacts shake it.
-        let shake = (sc.land_impulse as i32 + sc.drop_impulse as i32).min(3000);
-        inner.alpha = (master * (255 * shake / 3000) / 255) as u8;
-        if inner.alpha > 0 {
-            gmr::draw(gx, &a.bg_inner, &mut inner);
-        }
-
-        // 3. Outer background, inside faces, visible while wobbling.
-        outer.alpha = (master * (255 * (sc.wobble_amp as i32).min(3000) / 3000) / 255) as u8;
-        if outer.alpha > 0 {
-            gmr::draw_packet(gx, &a.bg_outer, &mut outer, BG_OUTER_BACK);
-        }
-
-        // 4. Cube_DrawBig: trail tiles and the small cube, fading out as the
-        //    logo fades in.
-        let cube_a = ((255 - sc.logo_alpha as i32) * master / 255) as u8;
-        cube_draw::draw_big_tiles(gx, &self.cube, &world, &view.view, cube_a, &a.tile);
-        small.alpha = (self.cube.alpha as i32 * cube_a as i32 / 255) as u8;
-        gmr::draw(gx, &a.small_cube, &mut small);
-
-        // 5. The logo, 6. the outer background's outside faces.
-        logo.alpha = (sc.logo_alpha as i32 * master / 255) as u8;
-        if logo.alpha > 0 {
-            gmr::draw(gx, &a.logo, &mut logo);
-        }
-        if outer.alpha > 0 {
-            gmr::draw_packet(gx, &a.bg_outer, &mut outer, BG_OUTER_FRONT);
-        }
+        view
     }
 
-    /// Cube_DrawText + `J3D_Draw(&sText)`: the wordmark with its joint
-    /// (`.bck`) and material color (`.ipk`) animations.
-    fn draw_text<'a>(&self, gx: &mut Gx<'a>, a: &'a Assets, view: &Mtx, alpha: u8) {
+    /// A model placed by `J3D_SetModelMtx` and `J3D_SetViewMtx`, joints
+    /// from `J3D_CalcJoints`.
+    fn place(p: &Prepared, m: &Mtx, s: f32, view: &Mtx) -> Instance {
+        let mut inst = Instance::new(&p.model);
+        gmr::set_model_mtx(&mut inst, m, [s; 3]);
+        gmr::set_view_mtx(&mut inst, view);
+        gmr::calc_joints(&p.model, &mut inst);
+        inst
+    }
+
+    /// `Cube_DrawText`: the wordmark, its joint (`.bck`) and material
+    /// color (`.ipk`) animations on the text clock.
+    fn text(&self, a: &Assets, view: &Mtx) -> Instance {
         let tf = self.cube.text_anim_frame();
         let mut inst = Instance::new(&a.text.model);
         gmr::set_model_mtx(&mut inst, &psmtx::IDENTITY, [1.0; 3]);
@@ -360,90 +351,121 @@ impl Intro {
             Some([0, 1, 2, 3].map(|k| tr[k].sample(tf).clamp(0.0, 255.0) as u8))
         };
         gmr::animate_joints(&a.text.model, &mut inst, &joint, Some(&color));
-        inst.alpha = alpha;
-        gmr::draw(gx, &a.text, &mut inst);
+        inst
     }
 
-    /// Scene_SpinOut + Scene_Draw2DSpinOut: perspective camera rising to the
-    /// menu height, the logo scene fading out and the glass menu cube in.
-    fn draw_spin_out<'a>(&self, gx: &mut Gx<'a>, a: &'a Assets, vp: [f32; 2]) {
-        let sc = &self.scene;
-        let f = self.spin_frame.min(SPINOUT_END);
-        let fade = SPINOUT_FADE;
-        let view = self.spin_out_view(vp);
+    /// `Scene_Draw2D` (0x8130BE78) for the intro states, after
+    /// `fn_81302FA0`'s light and `fn_81301100`'s projection. `ma` draws the
+    /// menu face during the spin-out.
+    pub fn draw<'a>(&self, gx: &mut Gx<'a>, a: &'a Assets, ma: Option<&'a menu::MenuAssets>, vp: [f32; 2]) {
+        let view = self.view(vp);
+        gx.set_projection(&view.projection());
         gx.set_viewport(0.0, 0.0, vp[0], vp[1]);
         camera::load_light(gx, &view.view);
-        let k = sc.spin_speed / sc.spin_threshold;
-        if f < fade {
-            // The logo scene (inner background and wordmark) fades out.
-            let shake = (sc.land_impulse as i32 + sc.drop_impulse as i32 + sc.wobble_amp as i32).min(3000);
-            let a_in = ((fade - f) * 255 * shake / (fade * 3000)) as u8;
-            gx.set_projection(&view.projection());
-            let mut inner = Instance::new(&a.bg_inner.model);
-            gmr::set_model_mtx(&mut inner, &sc.world_mtx(), [1.0; 3]);
-            gmr::set_view_mtx(&mut inner, &view.view);
-            gmr::calc_joints(&a.bg_inner.model, &mut inner);
-            inner.alpha = a_in;
-            gmr::draw(gx, &a.bg_inner, &mut inner);
-            // The wordmark stays where the intro camera had it.
-            let text_view = View::intro(bs2main::disp_settings().cam_y_far, true);
-            gx.set_projection(&text_view.projection());
-            self.draw_text(gx, a, &text_view.view, a_in);
+        match self.state {
+            SceneState::SpinOut | SceneState::Menu => self.draw_2d_spin_out(gx, a, ma, &view),
+            _ => self.draw_2d_no_disc(gx, a, &view.view),
         }
-        gx.set_projection(&view.projection());
-        // The glass cube (Scene_SpinOut): faces the camera once the spin
-        // settles, already wobbling like the menu cube it becomes.
-        let m = self.spin_out_mtx();
-        let base = 1.1 * (1.0 - k);
-        let sxz = base + sc.squash_xz * k;
-        let sy = base + (1.0 + sc.stretch_y) * k;
-        let mut cube = Instance::new(&a.big_cube.model);
-        gmr::set_model_mtx(&mut cube, &m, [sxz, sy, sxz]);
-        gmr::set_view_mtx(&mut cube, &view.view);
-        gmr::calc_joints(&a.big_cube.model, &mut cube);
-        cube.alpha = if f < fade { (255 * f / fade) as u8 } else { 255 };
-        if cube.alpha > 0 {
-            // Scene_SetAmbDark, then Scene_SetAmbFull, which stays set.
+    }
+
+    /// `Scene_Draw2DNoDisc` (0x8130D73C): the cube intro. The disc error
+    /// texts (dialog strings 4 and 5) need a drive and are not drawn.
+    fn draw_2d_no_disc<'a>(&self, gx: &mut Gx<'a>, a: &'a Assets, view: &Mtx) {
+        let s = &self.scene;
+        let fade0 = (255 - s.unk_c0[2] as i32 * 150 / 30) as u8;
+        let fade1 = (255 - s.unk_c0[7] as i32 * 150 / 30) as u8;
+        let fade = fade0.min(fade1) as i32;
+        let shake = (s.land_impulse as i32 + s.drop_impulse as i32).min(SHAKE_MAX);
+
+        // The "NINTENDO GAMECUBE" wordmark, fixed to the screen, drawn over
+        // the state the last frame left; then fn_81304CE8.
+        let mut text = self.text(a, view);
+        text.alpha = (fade * 255 / 255) as u8;
+        gmr::draw(gx, &a.text, &mut text);
+        gmr::setup(gx);
+
+        // The inner background cube, visible while the impacts shake it.
+        let world = &self.world;
+        let mut inner = Self::place(&a.bg_inner, world, s.model_scale, view);
+        inner.alpha = (fade * (s.shake_alpha as i32 * shake / SHAKE_MAX) / 255) as u8;
+        if inner.alpha > 0 {
+            gmr::draw(gx, &a.bg_inner, &mut inner);
+        }
+
+        // The outer background's inside faces, visible while wobbling.
+        let wobble = (s.wobble_amp as i32).min(SHAKE_MAX);
+        let mut outer = Self::place(&a.bg_outer, world, 1.01, view);
+        outer.alpha = (fade * (s.shake_alpha as i32 * wobble / SHAKE_MAX) / 255) as u8;
+        if outer.alpha > 0 {
+            gmr::draw_packet(gx, &a.bg_outer, &mut outer, BG_OUTER_BACK);
+        }
+
+        // Cube_DrawBig: the trail tiles and the small cube, fading out as
+        // the logo fades in.
+        let cube_a = ((255 - s.logo_alpha as i32) * fade / 255) as u8;
+        cube_draw::draw_big_tiles(gx, &self.cube, world, view, cube_a, &a.tile);
+        let mut small = Self::place(&a.small_cube, &self.cube.mtx, s.model_scale, view);
+        small.alpha = (self.cube.alpha as i32 * cube_a as i32 / 255) as u8;
+        gmr::draw(gx, &a.small_cube, &mut small);
+
+        // The logo, then the outer background's outside faces.
+        let mut logo = Self::place(&a.logo, world, 1.0, view);
+        logo.alpha = (s.logo_alpha as i32 * fade / 255) as u8;
+        if logo.alpha > 0 {
+            gmr::draw(gx, &a.logo, &mut logo);
+        }
+        if outer.alpha > 0 {
+            gmr::draw_packet(gx, &a.bg_outer, &mut outer, BG_OUTER_FRONT);
+        }
+    }
+
+    /// `Scene_Draw2DSpinOut` (0x8130E3C8): the logo scene fading out, the
+    /// glass menu cube in, and the menu's front face over the last frames.
+    fn draw_2d_spin_out<'a>(&self, gx: &mut Gx<'a>, a: &'a Assets, ma: Option<&'a menu::MenuAssets>, view: &View) {
+        let s = &self.scene;
+        let (of, fade) = (s.out_frame, s.out_fade_frames as i32);
+        let big_alpha;
+        if of <= fade {
+            let shake = (s.land_impulse as i32 + s.drop_impulse as i32 + s.wobble_amp as i32).min(SHAKE_MAX);
+            let mut inner = Self::place(&a.bg_inner, &self.world, s.model_scale, &view.view);
+            big_alpha = (s.bg_alpha as i32 * of / fade) as u8;
+            inner.alpha = ((fade - of) * (s.shake_alpha as i32 * shake) / (fade * SHAKE_MAX)) as u8;
+            let mut text = self.text(a, &view.view);
+            text.alpha = (inner.alpha as i32 * s.m0_logo_fade as i32 / s.m0_logo_frames as i32) as u8;
+            gmr::draw(gx, &a.bg_inner, &mut inner);
+            gmr::draw(gx, &a.text, &mut text);
+        } else {
+            big_alpha = s.bg_alpha;
+        }
+        if big_alpha > 0 {
+            // Scene_SetBigCubeMtx, then Scene_SetAmbDark and Scene_SetAmbFull
+            // around the draw.
+            let mut cube = Instance::new(&a.big_cube.model);
+            gmr::set_model_mtx(&mut cube, &self.spin_out_mtx, s.big_cube_scale());
+            gmr::set_view_mtx(&mut cube, &view.view);
+            gmr::calc_joints(&a.big_cube.model, &mut cube);
+            cube.alpha = big_alpha;
             gx.set_chan_amb_color(GX_COLOR0A0, [0x28, 0x28, 0x28, 0xFF]);
             gmr::draw(gx, &a.big_cube, &mut cube);
             gx.set_chan_amb_color(GX_COLOR0A0, [0xFF; 4]);
         }
+        let end = s.out_turn_frames + s.out_settle_frames + s.out_coast_frames;
+        let start = end - s.out_face_frames;
+        let face = if of >= start && of <= end {
+            Some(((of - start) * 255 / (end - start)) as i16 as u8)
+        } else if of > end {
+            Some(255)
+        } else {
+            None
+        };
+        if let (Some(alpha), Some(ma)) = (face, ma) {
+            menu::Menu::draw_spin_out_face(gx, ma, view, &self.spin_out_mtx, alpha);
+        }
     }
 
-    /// The camera of the spin-out and the menu (perspective, rising to y -10).
-    pub fn spin_out_view(&self, vp: [f32; 2]) -> View {
-        let state = camera::CamState::SpinOut { frame: self.spin_frame.min(SPINOUT_END), fade: SPINOUT_FADE };
-        let mut view = View::intro(camera::cam_y(bs2main::disp_settings(), state), false);
-        view.vp = vp;
-        view
-    }
-
-    /// Scene_SpinOut's cube matrix without the model scale: `RotY(spin) ·
-    /// Scene_CalcSpinOutMtx`. The latter blends the scene's spin tilt (and
-    /// its wobble) with the menu's idle wobble (MenuWork defaults) by
-    /// `f = (1 - spinTilt) · spinSpeed / threshold`, so as the spin brakes
-    /// the cube settles into exactly the matrix the menu starts from.
-    pub fn spin_out_mtx(&self) -> Mtx {
-        let sc = &self.scene;
-        let k = sc.spin_speed / sc.spin_threshold;
-        let f = (1.0 - sc.spin_tilt_k()) * k;
-        let amp = sc.wobble_amp as f32;
-        let ph = sc.wobble_phase as i32;
-        // Drawn from the matrix computed before this frame's +7.
-        let w = menu::Wobble::at(self.wobble_frame.wrapping_sub(7));
-        let blend = |tilt: f32, speed: i32, menu: f32| mtx::to_s16(f * (tilt + amp * sin_s(ph * speed)) + (1.0 - f) * menu) as i32;
-        let rot = mtx::rot_trans(
-            blend(8191.0, 90, w.rx),
-            blend(-6371.0, 60, w.ry),
-            blend(-5461.0, 70, w.rz),
-            [w.tx, w.ty, 0.0],
-        );
-        psmtx::concat(&mtx::rot_trans(0, sc.spin as i32, 0, [0.0; 3]), &rot)
-    }
-
-    /// Cube_DrawTiles: one textured quad per live cell on the three faces.
+    /// `sNextState` is the menu: the spin-out has settled.
     pub fn finished(&self) -> bool {
-        self.state == State0::Done
+        self.next_state == SceneState::Menu
     }
 
     #[allow(dead_code)]

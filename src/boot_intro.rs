@@ -235,6 +235,8 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
             done_frames += 1;
             stepped = true;
             if let Some(m) = &mut menu {
+                // Scene_Update in state 5 runs Menu_Update.
+                intro.update(Input::default());
                 if let Some(act) = m.update(&pad) {
                     if let Some(msg) = perform(act) {
                         m.notify(msg);
