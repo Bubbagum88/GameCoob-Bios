@@ -14,8 +14,9 @@ use super::backend::{CardError, CardOp, MemCards, Save, SlotState, DIR_ENTRIES};
 use crate::bs2::gbase;
 use crate::bs2::mtx::{self, cos_s, sin_s};
 use crate::sdk::mtx::{self as psmtx, Mtx};
-use super::super::raster::Prim;
-use super::super::render::{self, DrawOpts, Prepared, View};
+use super::super::gmr::{self, Instance};
+use super::super::render::{Prepared, View};
+use crate::sdk::gx::Gx;
 use super::super::shader::FastTex;
 use super::super::ui::{self, Rgba, Ui, UiFont};
 use super::{rgb, with_a, BackdropLight, Fade, Fader, MenuAssets, Pad, St, WHITE};
@@ -88,26 +89,23 @@ const COLORS: [[[i16; 3]; 4]; 6] = [
     [[255, 110, 100], [160, 45, 50], [150, 60, 50], [50, 20, 0]],
     [[200, 80, 190], [90, 30, 170], [100, 40, 90], [45, 0, 60]],
 ];
-/// The models' own TEVREG0 (res 88, res 87).
-const FILE_TEV0: [i16; 4] = [0, 50, 200, 255];
-const EMPTY_TEV0: [i16; 4] = [0, 20, 60, 255];
-
-/// The browser's block models, recoloured per sector size and variant.
+/// The browser's block models: a save (res 88) and an empty block (res 87).
 pub struct Models {
-    /// res 88: `[size][0 chosen, 1 other]`.
-    file: Vec<[Prepared; 2]>,
-    /// res 87: `[size][0 chosen, 1 other]`.
-    empty: Vec<[Prepared; 2]>,
+    file: Prepared,
+    empty: Prepared,
 }
 
 impl Models {
     pub fn new(file: Prepared, empty: Prepared) -> Models {
-        let tint = |p: &Prepared, old: [i16; 4], c: [i16; 3]| p.with_tev0(old, [c[0], c[1], c[2], 255]);
-        Models {
-            file: COLORS.iter().map(|c| [tint(&file, FILE_TEV0, c[0]), tint(&file, FILE_TEV0, c[1])]).collect(),
-            empty: COLORS.iter().map(|c| [tint(&empty, EMPTY_TEV0, c[2]), tint(&empty, EMPTY_TEV0, c[3])]).collect(),
-        }
+        Models { file, empty }
     }
+}
+
+/// `CardBlock_Color(sectorSize, kind, slot)`: 0 the chosen save, 1 another
+/// save, 2 the chosen empty block, 3 another empty block.
+fn block_color(size: usize, kind: usize) -> [i16; 4] {
+    let c = COLORS[size][kind];
+    [c[0], c[1], c[2], 255]
 }
 
 fn size_index(bytes: u32) -> usize {
@@ -1328,12 +1326,10 @@ impl Card {
             ui.frame(f, &ma.bank, with_a(WHITE, al[2]));
         }
         let cur = self.slot;
-        let light = mid(cur);
         let mut v = View::intro(0.0, false);
         v.vp = ui.view.vp;
-        v.light = psmtx::mult_vec(&v.view, [light[0] - 292.0, 224.0 - light[1], LIGHT_Z]);
         for k in [cur, cur ^ 1] {
-            self.draw_blocks(&mut ui.gx.list, &v, ma, cards, k, al[0]);
+            self.draw_blocks(ui.gx, &v, ma, cards, k, al[0]);
         }
         let st = &ma.card_str[lang];
         for k in [cur ^ 1, cur] {
@@ -1355,7 +1351,7 @@ impl Card {
 
     /// fn_81321378: one slot's blocks; the chosen one and the flying one last.
     #[allow(clippy::too_many_arguments)]
-    fn draw_blocks<'a>(&'a self, list: &mut Vec<Prim<'a>>, v: &View, ma: &'a MenuAssets, cards: &'a dyn MemCards, k: usize, a: f32) {
+    fn draw_blocks<'a>(&'a self, gx: &mut Gx<'a>, v: &View, ma: &'a MenuAssets, cards: &'a dyn MemCards, k: usize, a: f32) {
         if a <= 0.0 {
             return;
         }
@@ -1374,31 +1370,29 @@ impl Card {
                     if (self.flying && k == self.fly.slot && i == self.fly.file) || chosen == Some(i) {
                         continue;
                     }
-                    draw_block(list, &m.file[size][1], &t.mtx(c), v, al, self.icon(save, k, i));
+                    draw_file(gx, &m.file, &t.mtx(c), v, al, block_color(size, 1), self.icon(save, k, i));
                 }
                 None => {
-                    let var = if chosen == Some(i) { 0 } else { 1 };
-                    for d in 0..2 {
-                        render::draw_model(list, &m.empty[size][var], &t.mtx(c), v, &DrawOpts { alpha: al, only: Some(d..d + 1), ..Default::default() });
-                    }
+                    let kind = if chosen == Some(i) { 2 } else { 3 };
+                    draw_empty(gx, &m.empty, &t.mtx(c), v, al, block_color(size, kind));
                 }
             }
         }
         if self.flying && !self.erasing && k == self.fly.slot {
             if let Some(save) = Self::save(cards, k, self.fly.file) {
                 let t = &self.fly.t;
-                draw_block(list, &m.file[size][1], &t.mtx(c), v, alpha(t), self.icon(save, k, self.fly.file));
+                draw_file(gx, &m.file, &t.mtx(c), v, alpha(t), block_color(size, 1), self.icon(save, k, self.fly.file));
             }
         } else if let Some((i, save)) = chosen.filter(|_| !self.flying).and_then(|i| Some((i, Self::save(cards, k, i)?))) {
             let t = &self.tiles[k][i];
-            draw_block(list, &m.file[size][0], &t.mtx(c), v, alpha(t), self.icon(save, k, i));
+            draw_file(gx, &m.file, &t.mtx(c), v, alpha(t), block_color(size, 0), self.icon(save, k, i));
         }
         if self.erasing && k == self.fly.slot {
             let t = &self.fly.t;
-            let p = &m.file[size][1];
+            let p = &m.file;
             if !self.bursting {
                 if t.zoom > 0.0 {
-                    draw_block(list, p, &t.mtx(c), v, alpha(t), None);
+                    draw_file(gx, p, &t.mtx(c), v, alpha(t), block_color(size, 1), None);
                 }
             } else {
                 for sp in self.sparks.iter() {
@@ -1410,7 +1404,7 @@ impl Card {
                     let r = 48.0 * (0.25 + 0.75 * f);
                     let off = [r * sin_s(sp.angle as i32), r * cos_s(sp.angle as i32)];
                     let at = psmtx::trans(t.pos[0] - 292.0 + off[0], 224.0 - t.pos[1] + off[1], 0.0);
-                    draw_block(list, p, &psmtx::concat(&at, &psmtx::scale(0.3, 0.3, 0.3)), v, al, None);
+                    draw_file(gx, p, &psmtx::concat(&at, &psmtx::scale(0.3, 0.3, 0.3)), v, al, block_color(size, 1), None);
                 }
             }
         }
@@ -1633,18 +1627,44 @@ fn bounce(v: &mut (i16, i16), max: i16) {
     }
 }
 
-/// The three packets of a save block: back faces, front faces, then the
-/// icon on its face (BS2 draws packets 0 and 2, then 1 with the icon).
-fn draw_block<'a>(list: &mut Vec<Prim<'a>>, p: &'a Prepared, m: &Mtx, v: &View, alpha: u8, icon: Option<&'a FastTex>) {
+/// A block placed with the view without the camera's height offset
+/// (`fn_81302F94`).
+fn block<'a>(p: &'a Prepared, m: &Mtx, v: &View, alpha: u8, color: [i16; 4], mats: [u16; 2]) -> Instance {
+    let mut inst = Instance::new(&p.model);
+    gmr::set_model_mtx(&mut inst, m, [1.0; 3]);
+    gmr::set_view_mtx(&mut inst, &v.view);
+    gmr::calc_joints(&p.model, &mut inst);
+    inst.alpha = alpha;
+    inst.tev_color = vec![(mats[0], 0, color), (mats[1], 0, color)];
+    inst
+}
+
+/// `CardBlock_DrawFile` (0x81320FD8): a save's block in `color` (materials
+/// 0 and 2), packets 0x30 and 0xF0, then its icon on the face (packet 0x90
+/// with material 1 drawing whatever TEXMAP0 holds).
+fn draw_file<'a>(gx: &mut Gx<'a>, p: &'a Prepared, m: &Mtx, v: &View, alpha: u8, color: [i16; 4], icon: Option<&'a FastTex>) {
     if alpha == 0 {
         return;
     }
-    for d in [0usize, 2] {
-        render::draw_model(list, p, m, v, &DrawOpts { alpha, only: Some(d..d + 1), ..Default::default() });
-    }
+    let mut inst = block(p, m, v, alpha, color, [0, 2]);
+    gmr::draw_packet(gx, p, &mut inst, 0x30 / 0x18);
+    gmr::draw_packet(gx, p, &mut inst, 0xF0 / 0x18);
     if let Some(tex) = icon {
-        render::draw_model_tex(list, p, m, v, &DrawOpts { alpha, only: Some(1..2), ..Default::default() }, tex);
+        inst.tev_color.clear();
+        inst.no_tex0 = Some(1);
+        gx.load_tex_obj(tex, 0);
+        gmr::draw_packet(gx, p, &mut inst, 0x90 / 0x18);
     }
+}
+
+/// `CardBlock_DrawEmpty` (0x81321168): an empty block in `color`
+/// (materials 0 and 1).
+fn draw_empty<'a>(gx: &mut Gx<'a>, p: &'a Prepared, m: &Mtx, v: &View, alpha: u8, color: [i16; 4]) {
+    if alpha == 0 {
+        return;
+    }
+    let mut inst = block(p, m, v, alpha, color, [0, 1]);
+    gmr::draw(gx, p, &mut inst);
 }
 
 /// CardDraw_LoadTexture: a number from the 110 x 14 digit strip (res 90),

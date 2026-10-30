@@ -39,7 +39,7 @@ app counterpart yet.
 | `gInit.c` disc state (`Disc_GetState`, the disc fade) | `bs2/ginit.rs` `Disc` | ported; no drive behind it, so always "no disc" |
 | `gInit.c` (DEMO init, frame begin/end, Screen_Dim) | `boot_intro.rs`, `gfx.rs` | behavioral |
 | `gMRbuild.c`, `gMRshape.c` (model load) | `ipl/j3d.rs` | close (parses the same J3D1 data; INF1 tree linked as `fn_81303838` does) |
-| `gMRdraw.c`, `gMRtexture.c` (joint calc, material and shape draw) | `bs2/gmr.rs` on `sdk::gx` | ported for the intro and spin-out; shapes go out in immediate mode instead of display lists. The menu still draws through `bs2/render.rs` |
+| `gMRdraw.c`, `gMRtexture.c` (joint calc, material and shape draw) | `bs2/gmr.rs` on `sdk::gx` | ported; every model (intro, glass cube, icons, mosaic, memory card blocks) draws through it, with the callers' material swaps (`tevColor`, cleared `texNo`) as instance overrides. Shapes go out in immediate mode instead of display lists |
 | `gMRanim.c` | `bs2/anim.rs` | close |
 | `glh.c`, `font.c`, `fader.c` | `bs2/glh.rs`, `bs2/font.rs`, `bs2/fader.rs` on `sdk::gx` | ported; `bs2/ui.rs` is now a thin wrapper the menu calls until step 5 moves it onto `glh.rs` directly |
 | `lang.c`, `res_archive.c` | `ipl/mod.rs` | close |
@@ -50,12 +50,12 @@ app counterpart yet.
 | `pad.c` | `boot_intro.rs` (keyboard to pad) | behavioral |
 | `rnd.c` | none | missing |
 | `menu/menu.c` | `bs2/menu/mod.rs` | close |
-| `menu/menu_fx*.c` | `bs2/fx.rs`, `ipl/fx.rs` | close |
-| `menu/menu_icon_*.c` | `bs2/menu/icons.rs` | close |
+| `menu/menu_fx*.c` | `bs2/fx.rs`, `ipl/fx.rs` | close; `Fx_Draw` ported (both AA-half passes in one frame) |
+| `menu/menu_icon_*.c` | `bs2/menu/icons.rs` | close; the cubes draw as the C does (tint in material 0's tevColor) |
 | `menu/game.c`, `game_params.c` | `bs2/menu/game.rs` | close; START opens the firmware boot list |
 | `menu/options.c`, `option_params.c` | `bs2/menu/mod.rs` | behavioral; edits the boot timeout |
 | `menu/calendar.c`, `clock_params.c` | `bs2/menu/mod.rs` | behavioral; sets the firmware clock |
-| `menu/memcard*.c` | `bs2/menu/card.rs`, `bs2/menu/backend.rs` | close; fake cards in RAM |
+| `menu/memcard*.c` | `bs2/menu/card.rs`, `bs2/menu/backend.rs` | close; fake cards in RAM. `CardBlock_DrawFile`/`DrawEmpty` ported |
 | `BS2Mach.c` (boot state machine, DVD) | none | dummy disc for now |
 | JAudio, SDK (`dolphin/`), runtime, MSL | none | replaced by `src/sdk/` stand-ins; sound later |
 
@@ -65,11 +65,11 @@ app counterpart yet.
 2. `sdk::gx`: GX state and immediate-mode vertex calls feeding the existing
    rasterizer, with the projection as a real `Mtx44`; `GX_Setup2D` and
    `cube_draw.c` as its first users.
-2b. `gMRdraw.c` and `gMRtexture.c` on `sdk::gx` (done for the intro; the
-   menu moves over with step 5, then `render.rs` goes).
+2b. `gMRdraw.c` and `gMRtexture.c` on `sdk::gx` (done; the menu's models
+   moved over too and `render.rs` keeps only `View` and `Prepared`).
 3. `glh.c`, `font.c`, `fader.c` on `sdk::gx`, under `ui.rs` (done).
 4. The intro: `cube.c`, `cube_draw.c`, `scene*.c` (done; `backdrop.c` goes with the menu).
-5. The menu core, `menu_fx*.c` and the icon units.
+5. The menu core, `menu_fx*.c` and the icon units (their model draws done).
 6. Options, Calendar, Game Play and Memory Card, keeping their UEFI and
    dummy backends at the edges.
 7. `gInit.c` and the `BS2Main` loop over `sdk::vi` and `sdk::pad`, replacing

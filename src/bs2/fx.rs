@@ -31,9 +31,9 @@
 use super::gbase;
 use super::mtx;
 use crate::sdk::mtx::self as psmtx;
-use super::raster::Prim;
-use super::render::{self, DrawOpts, Prepared, View};
-use super::shader::Shader;
+use super::gmr::{self, Instance};
+use super::render::{Prepared, View};
+use crate::sdk::gx::Gx;
 use crate::ipl::fx::{Glyphs, Paths};
 use crate::ipl::j3d::Model;
 use crate::ipl::Ipl;
@@ -259,8 +259,6 @@ pub struct Mosaic {
     /// Frames since the screen opened, up to [`READY`] (`pool+0xA794`).
     progress: i16,
     cells: Vec<Cell>,
-    /// Each cube's copy of the cube shader, with its colours loaded.
-    shaders: Vec<Shader>,
     wave: u16,
     restart: bool,
 }
@@ -294,10 +292,6 @@ impl Mosaic {
         let n = paths.paths.len();
         if self.cells.len() < n {
             self.cells.resize(n, Cell::default());
-        }
-        if self.shaders.len() < n {
-            let Some(sh) = data.model.shader(0) else { return };
-            self.shaders.resize(n, sh.clone());
         }
         if self.screen != Some(set) || self.restart {
             self.screen = Some(set);
@@ -335,10 +329,6 @@ impl Mosaic {
             };
             c.light = mix(|p| p.light);
             c.dark = mix(|p| p.dark);
-        }
-        for (c, sh) in self.cells[..n].iter().zip(&mut self.shaders) {
-            sh.set_reg(0, c.light.map(|v| v / 255.0));
-            sh.set_reg(1, c.dark.map(|v| v / 255.0));
         }
         // fn_8132BF20
         for c in &mut self.cells[..n] {
@@ -419,20 +409,29 @@ impl Mosaic {
         }
     }
 
-    /// Fx_Draw: queue the visible cubes. `view` is the submenu camera
-    /// (one unit per pixel at z = 0), `alpha` the submenu's fx fader.
-    pub fn draw<'a>(&'a self, list: &mut Vec<Prim<'a>>, data: &'a MosaicData, view: &View, alpha: u8) {
+    /// Fx_Draw (0x81333030): the visible cubes, each with its light and
+    /// dark colors in TEVREG0 and TEVREG1. `view` is the submenu camera
+    /// (one unit per pixel at z = 0), `alpha` the submenu's fx fader. BS2
+    /// draws the cubes behind the menu plane in one AA half and those in
+    /// front in the other; a frame here draws both.
+    pub fn draw<'a>(&self, gx: &mut Gx<'a>, data: &'a MosaicData, view: &View, alpha: u8) {
         let Some(set) = self.screen else { return };
-        let n = data.paths.sets[set].paths.len().min(self.shaders.len());
-        for (c, sh) in self.cells[..n].iter().zip(&self.shaders) {
+        let n = data.paths.sets[set].paths.len().min(self.cells.len());
+        let s10 = |c: [f32; 4]| [c[0] as i16, c[1] as i16, c[2] as i16, 0xFF];
+        for c in &self.cells[..n] {
             let a = (c.alpha as u32 * alpha as u32 / 255) as u8;
             if a <= 10 {
                 continue;
             }
             let k = CUBE_SCALE * c.scale;
-            let m = psmtx::concat(&mtx::rot_trans(c.rot[0], c.rot[1], c.rot[2], c.pos), &psmtx::scale(k, k, k));
-            let o = DrawOpts { alpha: a, ..Default::default() };
-            render::draw_model_with(list, &data.model, Some(sh), &m, view, &o);
+            let m = mtx::rot_trans(c.rot[0], c.rot[1], c.rot[2], c.pos);
+            let mut inst = Instance::new(&data.model.model);
+            gmr::set_model_mtx(&mut inst, &m, [k; 3]);
+            gmr::set_view_mtx(&mut inst, &view.view);
+            gmr::calc_joints(&data.model.model, &mut inst);
+            inst.alpha = a;
+            inst.tev_color = alloc::vec![(0, 0, s10(c.light)), (0, 1, s10(c.dark))];
+            gmr::draw_packet(gx, &data.model, &mut inst, 1);
         }
     }
 }

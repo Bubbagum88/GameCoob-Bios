@@ -3,7 +3,7 @@
 //! and update switches. Frames are built as a display list on one processor
 //! and rasterized in bands, possibly on several.
 
-use super::shader::{FastTex, Shader};
+use super::shader::FastTex;
 use crate::sdk::gx::GxDraw;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -70,8 +70,6 @@ impl Target {
 /// How a primitive's pixels are colored.
 #[derive(Clone, Copy)]
 pub enum Sh<'a> {
-    /// A model material; `alpha` is the model alpha multiplier.
-    Mat { shader: &'a Shader, texs: &'a [FastTex], alpha: f32 },
     /// Vertex color times texture (the intro's trail tiles, 2D panes).
     Modulate { tex: &'a FastTex },
     /// Vertex color only (untextured 2D boxes).
@@ -93,7 +91,7 @@ impl Sh<'_> {
     #[inline]
     fn texcoords(&self) -> usize {
         match self {
-            Sh::Mat { .. } | Sh::Gx(_) => MAX_TC,
+            Sh::Gx(_) => MAX_TC,
             Sh::Modulate { .. } => 1,
             Sh::Flat => 0,
         }
@@ -102,11 +100,6 @@ impl Sh<'_> {
     #[inline]
     fn shade(&self, f: &Frag) -> Option<[f32; 4]> {
         match *self {
-            Sh::Mat { shader, texs, alpha } => {
-                let mut c = shader.eval(f.color, &f.uv, texs)?;
-                c[3] *= alpha;
-                Some(c)
-            }
             Sh::Modulate { tex } => {
                 let t = tex.sample(f.uv[0][0], f.uv[0][1]);
                 Some([f.color[0] * t[0], f.color[1] * t[1], f.color[2] * t[2], f.color[3] * t[3]])
