@@ -6,6 +6,7 @@
 //! * [`Assets::load`] pulls every model, texture and animation out of the dump.
 
 pub mod anim;
+pub mod backdrop;
 pub mod bs2main;
 pub mod camera;
 pub mod cube;

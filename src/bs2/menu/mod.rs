@@ -20,13 +20,14 @@ mod game;
 pub mod icons;
 mod system;
 
+use super::backdrop;
 use super::fx::{self, screen, Mosaic, MosaicData};
 use crate::bs2::{bs2main, camera};
 use crate::bs2::mtx::{self, cos_s, sin_s, to_s16};
 use crate::sdk::mtx::{self as psmtx, Mtx};
 use super::render::{self, View};
 use super::shader::FastTex;
-use crate::sdk::gx::{Gx, GX_COLOR0A0};
+use crate::sdk::gx::{Gx, GX_COLOR0A0, GX_PNMTX0};
 use super::gmr::{self, Instance};
 use super::ui::{self, cp1252, Rgba, Ui, UiFont, SHADOW, WHITE};
 use super::Assets;
@@ -1300,13 +1301,13 @@ impl Menu {
             let fx_alpha = f[0].alpha() as u8;
             match k {
                 SUB_GAME => self.draw_game(ui, ma, al),
-                SUB_CARD => self.card.draw(ui, ma, &*self.cards, self.lang, al),
+                SUB_CARD => self.card.draw(ui, ma, &self.w, &*self.cards, self.lang, al),
                 SUB_OPTION => {
-                    draw_backdrop(ui, ma, al[1]);
+                    draw_backdrop(ui, ma, &self.w, al[1]);
                     self.draw_options(ui, ma, al);
                 }
                 _ => {
-                    draw_backdrop(ui, ma, al[1]);
+                    draw_backdrop(ui, ma, &self.w, al[1]);
                     self.draw_clock(ui, ma, al);
                 }
             }
@@ -1334,7 +1335,7 @@ impl Menu {
     /// Game Play: the drive screen, with the mosaic between the banner and
     /// the status lines.
     fn draw_game<'a>(&'a self, ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, al: [f32; 3]) {
-        self.game.draw(ui, ma, &*self.drive, &self.info, self.lang, al);
+        self.game.draw(ui, ma, &self.w, &*self.drive, &self.info, self.lang, al);
     }
 
     /// Options: the firmware boot timeout and the menu language.
@@ -1543,73 +1544,25 @@ fn draw_front<'a>(ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, lang: usize, view: &V
 
 /// Backdrop_Draw, simplified: the 8x8 grid tile repeated over the screen,
 /// lit by a soft spot from the centre instead of the GX spot light.
-fn draw_backdrop<'a>(ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, a: f32) {
-    draw_backdrop_lit(ui, ma, a, &[BackdropLight::main(1.0)]);
+/// The 2D plane's matrices with its normal matrix, as the submenus load
+/// them before `Backdrop_Draw`.
+fn load_backdrop_mtx(ui: &mut Ui) {
+    ui.load();
+    let nrm = mtx::inverse33(&ui.mv).unwrap_or(psmtx::IDENTITY);
+    ui.gx.load_nrm_mtx_imm(&nrm, GX_PNMTX0);
 }
 
-/// One GX spot light over the backdrop (Backdrop_DrawLit): the plane only
-/// shows where the lights reach, through its lit alpha channel.
-#[derive(Clone, Copy)]
-pub(crate) struct BackdropLight {
-    pub pos: [f32; 3],
-    /// Light colour alpha, 0..1 (a fader).
-    pub alpha: f32,
-    /// Spot cutoff in degrees (GX_SP_COS2).
-    pub cutoff: f32,
-    /// Brightness at 500 units (GX_DA_GENTLE).
-    pub ref_br: f32,
+/// `Backdrop_Draw` on the 2D plane at fader alpha `a` (0..1).
+fn draw_backdrop<'a>(ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, w: &Work, a: f32) {
+    load_backdrop_mtx(ui);
+    backdrop::draw(ui.gx, w, &ma.backdrop, &ui.mv, (a * 255.0 + 0.5) as u8);
 }
 
-impl BackdropLight {
-    /// The MenuWork light every submenu backdrop uses.
-    pub fn main(alpha: f32) -> Self {
-        BackdropLight { pos: [296.0, 224.0, 474.0], alpha, cutoff: 36.0, ref_br: 0.375 }
-    }
-
-    /// One of the Memory Card screen's slot spots (Backdrop_DrawSpots).
-    pub fn slot(xy: [f32; 2], z: f32, alpha: f32) -> Self {
-        BackdropLight { pos: [xy[0], xy[1], z], alpha, cutoff: 28.0, ref_br: 0.525 }
-    }
-
-    /// GX per-vertex light on the z = 0 plane with normal +z, the spot
-    /// pointing down -z: clamped N.L x spot x distance attenuation.
-    fn at(&self, q: [f32; 2]) -> f32 {
-        if self.alpha <= 0.0 {
-            return 0.0;
-        }
-        let (dx, dy, h) = (q[0] - self.pos[0], q[1] - self.pos[1], self.pos[2]);
-        let d = libm::sqrtf(dx * dx + dy * dy + h * h);
-        let cos = h / d;
-        let cr = libm::cosf(self.cutoff * core::f32::consts::PI / 180.0);
-        let spot = ((cos * cos - cr * cos) / (1.0 - cr)).max(0.0);
-        let k1 = (1.0 - self.ref_br) / (self.ref_br * 500.0);
-        self.alpha * cos * spot / (1.0 + k1 * d)
-    }
-}
-
-/// Backdrop_DrawLit: the I4 grid tile across the 576 x 448 plane, its
-/// vertices lit by `lights` (summed, clamped), times the screen alpha `a`.
-fn draw_backdrop_lit<'a>(ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, a: f32, lights: &[BackdropLight]) {
-    if a <= 0.0 {
-        return;
-    }
-    const NX: usize = 20;
-    const NY: usize = 16;
-    let (x0, y0, w, h) = (-30.0f32, -20.0f32, 644.0f32, 488.0f32);
-    let cell = 20.0;
-    for j in 0..NY {
-        for i in 0..NX {
-            let p = |ii: usize, jj: usize| [x0 + w * ii as f32 / NX as f32, y0 + h * jj as f32 / NY as f32];
-            let lit = |q: [f32; 2]| {
-                let v = lights.iter().map(|l| l.at(q)).sum::<f32>().min(1.0);
-                [v, v, v, a]
-            };
-            let q = [p(i, j), p(i + 1, j), p(i + 1, j + 1), p(i, j + 1)];
-            let uv = q.map(|v| [v[0] / cell, v[1] / cell]);
-            let col = q.map(lit);
-            ui.quad(q, uv, col, super::raster::Sh::Modulate { tex: &ma.backdrop });
-        }
-    }
+/// `Backdrop_DrawSpots` on the 2D plane at fader alpha `a` (0..1).
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn draw_backdrop_spots<'a>(ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, w: &Work, a: f32, pos: [[f32; 3]; 2], alpha: [u8; 2], spot_alpha: u8) {
+    load_backdrop_mtx(ui);
+    backdrop::draw_spots(ui.gx, w, &ma.backdrop, &ui.mv, (a * 255.0 + 0.5) as u8, pos[0], pos[1], alpha[0], alpha[1], spot_alpha);
 }
 
 fn pics<'a>(ui: &mut Ui<'a, '_>, g: &Layout, t: &[u8; 4], bank: &'a [FastTex], c: Rgba) {

@@ -46,7 +46,7 @@ app counterpart yet.
 | `cube_draw.c` (trail tiles) | `bs2/cube_draw.rs` | ported, on `sdk::gx`; the small cube model is drawn by the caller through `gmr.rs` |
 | `cube.c` | `bs2/cube.rs` | ported |
 | `scene.c`, `scene_intro.c`, `scene_spinout.c` | `bs2/scene.rs` (`Scene`), `bs2/mod.rs` (`Intro`: the state machine and draws) | ported for the no-disc boot and the spin-out; the disc, SRAM-lost and cover-open states and the dialog texts wait for a drive. GameCoob lingers 60 frames on the logo (`HOLD_FRAMES`) |
-| `backdrop.c` | `bs2/menu/mod.rs`, `bs2/menu/card.rs` | behavioral |
+| `backdrop.c` | `bs2/backdrop.rs` on `sdk::gx` | ported (GX spot lights on the tile grid, `Backdrop_DrawSpots` for the Memory Card slots); `fn_8130AB14` has no caller yet |
 | `pad.c` | `boot_intro.rs` (keyboard to pad) | behavioral |
 | `rnd.c` | `bs2/rnd.rs` over `sdk::os::get_tick` | ported; the host tools' tick is a fixed counter so renders repeat, UEFI uses the TSC |
 | `menu/menu.c` | `bs2/menu/mod.rs` | update ported: `Work` is `MenuWork` (less the mosaic's fields), made at boot by the scene and wobbled by the spin-out; `Menu::update` runs `Menu_Update`'s steps in its order (rotation, icons, slot glow, guide, sub faders, one-shots, latch, cube or zoom-in). No SRAM-lost flag or fatal-error text yet (dummy disc). Draw side close |

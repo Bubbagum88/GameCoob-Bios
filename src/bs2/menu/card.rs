@@ -19,7 +19,7 @@ use super::super::render::{Prepared, View};
 use crate::sdk::gx::Gx;
 use super::super::shader::FastTex;
 use super::super::ui::{self, Rgba, Ui, UiFont};
-use super::{rgb, with_a, BackdropLight, Fade, Fader, MenuAssets, Pad, St, WHITE};
+use super::{rgb, with_a, Fade, Fader, MenuAssets, Pad, St, Work, WHITE};
 use crate::ipl::glh::{tag, Strings, Text};
 use alloc::vec;
 use alloc::vec::Vec;
@@ -1303,18 +1303,15 @@ impl Card {
 
     /// Card_Draw with the screen's three fader alphas (fx, backdrop, text).
     #[allow(clippy::too_many_arguments)]
-    pub fn draw<'a>(&'a self, ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, cards: &'a dyn MemCards, lang: usize, al: [f32; 3]) {
+    pub fn draw<'a>(&'a self, ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, w: &Work, cards: &'a dyn MemCards, lang: usize, al: [f32; 3]) {
         let g = &ma.card;
         let mid = |k: usize| {
             let c = self.cells[k];
             [(c[5][0] + c[6][0]) / 2.0, (c[5][1] + c[9][1]) / 2.0]
         };
-        let lights = [
-            BackdropLight::slot(mid(0), LIGHT_Z, self.cursor_f[0].alpha() as f32 / 255.0),
-            BackdropLight::slot(mid(1), LIGHT_Z, self.cursor_f[1].alpha() as f32 / 255.0),
-            BackdropLight::main(self.no_cursor_f.alpha() as f32 / 255.0),
-        ];
-        super::draw_backdrop_lit(ui, ma, al[1], &lights);
+        let spot = |k: usize| [mid(k)[0], mid(k)[1], LIGHT_Z];
+        let a = |f: &Fader| f.alpha() as u8;
+        super::draw_backdrop_spots(ui, ma, w, al[1], [spot(0), spot(1)], [a(&self.cursor_f[0]), a(&self.cursor_f[1])], a(&self.no_cursor_f));
         for f in g.frame(tag(b"mes6")) {
             ui.frame(f, &ma.bank, with_a(WHITE, al[2]));
         }

@@ -6,7 +6,7 @@
 //! start something.
 
 use super::backend::{DiscDrive, DiscState};
-use super::{draw_backdrop, fit, with_a, Action, Fade, Fader, MenuAssets, Pad, St, SysInfo, WHITE};
+use super::{draw_backdrop, fit, with_a, Action, Fade, Fader, MenuAssets, Pad, St, SysInfo, Work, WHITE};
 use super::super::ui::{cp1252, Ui};
 use crate::ipl::glh::tag;
 use alloc::format;
@@ -127,8 +127,8 @@ impl Game {
 
     /// Game_Draw: backdrop, banner, then the status lines (the mosaic is
     /// drawn by the caller between the two).
-    pub fn draw<'a>(&self, ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, drive: &'a dyn DiscDrive, info: &SysInfo, lang: usize, al: [f32; 3]) {
-        draw_backdrop(ui, ma, al[1]);
+    pub fn draw<'a>(&self, ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, w: &Work, drive: &'a dyn DiscDrive, info: &SysInfo, lang: usize, al: [f32; 3]) {
+        draw_backdrop(ui, ma, w, al[1]);
         self.draw_banner(ui, ma, drive, al[2]);
         let g = &ma.game;
         let s = &ma.game_str[lang];

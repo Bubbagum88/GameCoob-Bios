@@ -101,6 +101,12 @@ pub const GX_AF_SPEC: u8 = 0;
 pub const GX_AF_SPOT: u8 = 1;
 pub const GX_AF_NONE: u8 = 2;
 
+/// `GXLightID` bits (the ones BS2 uses).
+pub const GX_LIGHT0: u8 = 1;
+pub const GX_LIGHT3: u8 = 8;
+pub const GX_LIGHT4: u8 = 0x10;
+pub const GX_LIGHT5: u8 = 0x20;
+
 /// `GXTexGenType` / `GXTexGenSrc`
 pub const GX_TG_MTX3X4: u8 = 0;
 pub const GX_TG_MTX2X4: u8 = 1;

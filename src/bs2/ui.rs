@@ -96,7 +96,7 @@ fn rgba_u8(c: Rgba) -> [u8; 4] {
 impl<'a> Ui<'a, '_> {
     /// The plane's matrices, loaded before every draw (other code may
     /// have changed them in between).
-    fn load(&mut self) {
+    pub fn load(&mut self) {
         self.gx.set_projection(&self.view.projection());
         self.gx.set_viewport(0.0, 0.0, self.view.vp[0], self.view.vp[1]);
         self.gx.load_pos_mtx_imm(&self.mv, GX_PNMTX0);
