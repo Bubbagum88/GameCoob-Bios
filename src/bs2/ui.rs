@@ -1,10 +1,13 @@
 //! 2D drawing for the menu: GLH0 panes, 9-slice frames, ROM-font text and
-//! blocky "mosaic" text, as textured quads in any 3D plane (a cube face or
-//! the screen), queued into the same display list as the models.
+//! blocky "mosaic" text, in any 3D plane (a cube face or the screen),
+//! through GX after the models drawn so far.
 
-use crate::sdk::mtx::{self as psmtx, Mtx};
-use super::raster::{BlendMode, Prim, SVert, Sh, State};
+use crate::sdk::gx::*;
+use crate::sdk::mtx::Mtx;
+use super::raster::Sh;
 use super::render::View;
+use super::font::{self, FontBox};
+use super::{ginit, glh};
 use super::shader::FastTex;
 use crate::ipl::glh::{Font, Frame, Layout, Pic, Str, Text};
 use alloc::vec::Vec;
@@ -22,9 +25,6 @@ pub fn rgba8(c: [u8; 4]) -> Rgba {
 pub fn with_alpha(c: Rgba, a: f32) -> Rgba {
     [c[0], c[1], c[2], c[3] * a]
 }
-
-/// GX_Setup2D also sets GX_CULL_BACK, so faces turned away are not drawn.
-const ST: State = State { z_compare: false, z_update: false, blend: BlendMode::Alpha, cull: 2 };
 
 /// The ROM font with one texture per glyph sheet.
 pub struct UiFont {
@@ -79,24 +79,49 @@ pub fn cp1252(s: &str) -> Vec<u8> {
     s.chars().map(|c| if (c as u32) < 0x100 { c as u8 } else { b'?' }).collect()
 }
 
-/// Draws into `list` in a plane given by `mv` (layout units to view space).
+/// Draws through GX in a plane given by `mv` (layout units to view space,
+/// loaded as the position matrix): a cube face, or the screen
+/// (`GX_Setup2DView`). Panes, frames and text go through the ported
+/// [`glh`] and [`font`] units.
 pub struct Ui<'a, 'l> {
-    pub list: &'l mut Vec<Prim<'a>>,
+    pub gx: &'l mut Gx<'a>,
     pub view: &'l View,
     pub mv: Mtx,
 }
 
+fn rgba_u8(c: Rgba) -> [u8; 4] {
+    c.map(|v| (v.clamp(0.0, 1.0) * 255.0 + 0.5) as u8)
+}
+
 impl<'a> Ui<'a, '_> {
-    /// One quad, corners TL, TR, BR, BL in layout units.
+    /// The plane's matrices, loaded before every draw (other code may
+    /// have changed them in between).
+    fn load(&mut self) {
+        self.gx.set_projection(&self.view.projection());
+        self.gx.set_viewport(0.0, 0.0, self.view.vp[0], self.view.vp[1]);
+        self.gx.load_pos_mtx_imm(&self.mv, GX_PNMTX0);
+        self.gx.set_current_mtx(GX_PNMTX0);
+    }
+
+    /// One quad, corners TL, TR, BR, BL in layout units: flat colored, or
+    /// texture times color.
     pub fn quad(&mut self, p: [[f32; 2]; 4], uv: [[f32; 2]; 4], col: [Rgba; 4], sh: Sh<'a>) {
-        let mut v = [SVert::default(); 4];
-        for k in 0..4 {
-            let q = psmtx::mult_vec(&self.mv, [p[k][0], p[k][1], 0.0]);
-            let Some(s) = self.view.project(q) else { return };
-            v[k] = SVert { x: s[0], y: s[1], z: s[2].clamp(0.0, 1.0), rw: s[3], color: col[k], uv: [uv[k], [0.0; 2]] };
+        self.load();
+        let tex = match sh {
+            Sh::Modulate { tex } => Some(tex),
+            _ => None,
+        };
+        ginit::setup_2d(self.gx, tex.is_some(), true, true);
+        if let Some(t) = tex {
+            self.gx.load_tex_obj(t, 0);
         }
-        self.list.push(Prim { v: [v[0], v[1], v[2]], st: ST, sh });
-        self.list.push(Prim { v: [v[0], v[2], v[3]], st: ST, sh });
+        self.gx.begin(GX_QUADS, 1, 4);
+        for k in 0..4 {
+            self.gx.position3f32(p[k][0], p[k][1], 0.0);
+            self.gx.color1u32(u32::from_be_bytes(rgba_u8(col[k])));
+            self.gx.tex_coord2f32(uv[k][0], uv[k][1]);
+        }
+        self.gx.end();
     }
 
     pub fn rect(&mut self, x: f32, y: f32, w: f32, h: f32, uv: [[f32; 2]; 4], c: Rgba, tex: Option<&'a FastTex>) {
@@ -114,22 +139,16 @@ impl<'a> Ui<'a, '_> {
         self.rect(x, y, w, h, [[0.0; 2]; 4], c, None);
     }
 
-    /// A picture pane (flags: bit 0 mirrors t, bit 1 mirrors s, bit 2 turns
-    /// 90 degrees; `Glh_DrawPaneQuad` 0x81309E54).
+    /// A picture pane, moved by dx, dy (`Glh_DrawPicture`). The texture is
+    /// multiplied by the color (BS2's `GX_Setup2DTex` takes only the
+    /// texture's alpha; every IPL pane texture is white with alpha).
     pub fn pic(&mut self, p: &Pic, tex: &'a FastTex, c: Rgba, dx: f32, dy: f32) {
-        let (mut s0, mut s1, mut t0, mut t1) = (0.0, 1.0, 0.0, 1.0);
-        if p.flags & 1 != 0 {
-            core::mem::swap(&mut t0, &mut t1);
+        if c[3] <= 0.0 {
+            return;
         }
-        if p.flags & 2 != 0 {
-            core::mem::swap(&mut s0, &mut s1);
-        }
-        let uv = if p.flags & 4 != 0 {
-            [[s0, t1], [s0, t0], [s1, t0], [s1, t1]]
-        } else {
-            [[s0, t0], [s1, t0], [s1, t1], [s0, t1]]
-        };
-        self.rect(p.x - p.w / 2.0 + dx, p.y - p.h / 2.0 + dy, p.w, p.h, uv, c, Some(tex));
+        self.load();
+        ginit::setup_2d(self.gx, true, false, true);
+        glh::draw_picture(self.gx, p, rgba_u8(c), Some(tex), glh::fx(dx), glh::fx(dy));
     }
 
     /// A picture pane drawn with another texture (digits, weekday names).
@@ -138,147 +157,89 @@ impl<'a> Ui<'a, '_> {
     }
 
     /// `Glh_DrawPaneRect`: a 9-slice frame around the inner rectangle
-    /// (x, y, w, h). The centre takes the frame's own corner colours (alpha
-    /// scaled by `c`), the textured border takes `c`.
+    /// (x, y, w, h).
+    #[allow(clippy::too_many_arguments)]
     pub fn frame_rect(&mut self, f: &Frame, bank: &'a [FastTex], c: Rgba, x: f32, y: f32, w: f32, h: f32) {
         if c[3] <= 0.0 {
             return;
         }
-        let corner = |k: usize| rgba8(f.colors[k]);
-        let col = [corner(0), corner(1), corner(3), corner(2)].map(|k| [k[0], k[1], k[2], k[3] * c[3]]);
-        self.quad([[x, y], [x + w, y], [x + w, y + h], [x, y + h]], [[0.0; 2]; 4], col, Sh::Flat);
-        let Some(t0) = bank.get(f.tex[0] as usize) else { return };
-        let (cw, ch) = t0.size();
-        let flip = [f.flips >> 6, f.flips >> 4, f.flips >> 2, f.flips].map(|v| v & 3);
-        let tex = |k: usize| bank.get(f.tex[k] as usize);
-        // Corners: TL, TR, BL, BR.
-        let pos = [(x - cw, y - ch), (x + w, y - ch), (x - cw, y + h), (x + w, y + h)];
-        for k in 0..4 {
-            let Some(t) = tex(k) else { continue };
-            let (s0, s1) = if flip[k] & 2 != 0 { (1.0, 0.0) } else { (0.0, 1.0) };
-            let (u0, u1) = if flip[k] & 1 != 0 { (1.0, 0.0) } else { (0.0, 1.0) };
-            self.rect(pos[k].0, pos[k].1, cw, ch, [[s0, u0], [s1, u0], [s1, u1], [s0, u1]], c, Some(t));
-        }
-        // Edges stretch one row or column of a corner texture.
-        let edge = |k: usize, along_x: bool| -> [[f32; 2]; 4] {
-            let a = if flip[k] & 2 != 0 { 1.0 } else { 0.0 };
-            let b = if flip[k] & 1 != 0 { 1.0 } else { 0.0 };
-            if along_x {
-                // s fixed, t runs top to bottom.
-                [[a, b], [a, b], [a, 1.0 - b], [a, 1.0 - b]]
-            } else {
-                // t fixed, s runs left to right.
-                [[a, b], [1.0 - a, b], [1.0 - a, b], [a, b]]
-            }
-        };
-        if let Some(t) = tex(1) {
-            self.rect(x, y - ch, w, ch, edge(1, true), c, Some(t));
-        }
-        if let Some(t) = tex(3) {
-            self.rect(x, y + h, w, ch, edge(3, true), c, Some(t));
-            self.rect(x + w, y, cw, h, edge(3, false), c, Some(t));
-        }
-        if let Some(t) = tex(2) {
-            self.rect(x - cw, y, cw, h, edge(2, false), c, Some(t));
-        }
+        self.load();
+        glh::draw_pane_rect(self.gx, f, bank, rgba_u8(c), glh::fx(x), glh::fx(y), glh::fx(w), glh::fx(h));
     }
 
     /// `Glh_DrawFrame`: the frame at its own position and size.
     pub fn frame(&mut self, f: &Frame, bank: &'a [FastTex], c: Rgba) {
-        self.frame_rect(f, bank, c, f.x - f.inner_w / 2.0, f.y - f.inner_h / 2.0, f.inner_w, f.inner_h);
+        if c[3] <= 0.0 {
+            return;
+        }
+        self.load();
+        glh::draw_frame_at(self.gx, f, bank, rgba_u8(c), 0, 0);
     }
 
-    /// Text in a text pane, aligned like BS2's string drawing; the pane's
-    /// top/bottom colours are multiplied by `c`.
+    /// Text in a text pane, as `Glh_DrawString` sets it (in color `c`).
     pub fn text(&mut self, font: &'a UiFont, p: &Text, s: &[u8], c: Rgba, dx: f32, dy: f32) {
         self.text_sized(font, p, s, c, dx, dy, p.size);
     }
 
+    /// [`Ui::text`] at another glyph size.
     #[allow(clippy::too_many_arguments)]
     pub fn text_sized(&mut self, font: &'a UiFont, p: &Text, s: &[u8], c: Rgba, dx: f32, dy: f32, size: f32) {
+        self.text_glow(font, p, s, c, None, dx, dy, size);
+    }
+
+    /// [`Ui::text`], glowing in `glow` with the given pulse when set.
+    #[allow(clippy::too_many_arguments)]
+    pub fn text_glow(&mut self, font: &'a UiFont, p: &Text, s: &[u8], c: Rgba, glow: Option<(Rgba, i16)>, dx: f32, dy: f32, size: f32) {
         if c[3] <= 0.0 || s.is_empty() {
             return;
         }
-        let line_h = if p.line > 0.0 { p.line.max(size) } else { size };
-        let lines: Vec<&[u8]> = s.split(|&ch| ch == b'\n').collect();
-        let total = (lines.len() as f32 - 1.0) * line_h + size;
-        let (cx, cy) = (p.x + dx, p.y + dy);
-        let top = match p.v_align {
-            1 => cy + p.h / 2.0 - total,
-            2 => cy - p.h / 2.0,
-            _ => cy - total / 2.0,
-        };
-        let ct = rgba8(p.top);
-        let cb = rgba8(p.bottom);
-        let mul = |a: Rgba| [a[0] * c[0], a[1] * c[1], a[2] * c[2], a[3] * c[3]];
-        let (ct, cb) = (mul(ct), mul(cb));
-        let f = &font.font;
-        let (cw, chh) = (f.cell_w as f32, f.cell_h as f32);
-        for (li, line) in lines.iter().enumerate() {
-            let lw = font.width(line, size, p.spacing);
-            let mut x = match p.h_align {
-                1 => cx + p.w / 2.0 - lw,
-                2 => cx - p.w / 2.0,
-                _ => cx - lw / 2.0,
-            };
-            let y = top + li as f32 * line_h;
-            for &ch in line.iter() {
-                if let Some(g) = f.glyph(ch) {
-                    let (sh, gx, gy) = f.cell(g);
-                    if let Some(tex) = font.sheets.get(sh) {
-                        let (sw, shh) = tex.size();
-                        let (u0, v0) = (gx as f32 / sw, gy as f32 / shh);
-                        let (u1, v1) = ((gx as f32 + cw) / sw, (gy as f32 + chh) / shh);
-                        let gw = size * cw / chh;
-                        self.quad(
-                            [[x, y], [x + gw, y], [x + gw, y + size], [x, y + size]],
-                            [[u0, v0], [u1, v0], [u1, v1], [u0, v1]],
-                            [ct, ct, cb, cb],
-                            Sh::Modulate { tex },
-                        );
-                    }
-                }
-                x += font.adv(ch, size, p.spacing);
-            }
-        }
+        self.load();
+        let pane = Text { size, bg: None, ..p.clone() };
+        let glow = glow.map(|(g, pulse)| (rgba_u8(g), pulse));
+        glh::draw_text_in(self.gx, font, &Layout::default(), &[], &pane, s, rgba_u8(c), glow, glh::fx(dx), glh::fx(dy));
     }
 
     /// `Glh_DrawString` (0x8130A39C): STH0 string `st` in its text pane,
-    /// over the pane's background frame (if it has one) sized to the text
-    /// plus 8 units of padding on every side.
+    /// over the pane's background frame (if it has one) sized to the text.
     #[allow(clippy::too_many_arguments)]
     pub fn string(&mut self, font: &'a UiFont, l: &Layout, bank: &'a [FastTex], st: &Str, c: Rgba, dx: f32, dy: f32) {
         if c[3] <= 0.0 {
             return;
         }
         let Some(p) = l.texts.get(st.pane as usize) else { return };
-        if let Some(f) = p.bg.and_then(|i| l.frames.get(i as usize)) {
-            let (w, h) = font.measure(p, &st.text, p.size);
-            let (w, h) = (w + 16.0, h + 16.0);
-            self.frame_rect(f, bank, c, f.x - w / 2.0 + dx, f.y - h / 2.0 + dy, w, h);
-        }
-        self.text(font, p, &st.text, c, dx, dy);
+        self.load();
+        glh::draw_text_in(self.gx, font, l, bank, p, &st.text, rgba_u8(c), None, glh::fx(dx), glh::fx(dy));
     }
 
-    /// Text at a point with no layout pane (left, top).
-    pub fn label(&mut self, font: &'a UiFont, x: f32, y: f32, size: f32, s: &[u8], c: Rgba, align: u8) {
-        let p = Text {
-            tag: 0,
-            x,
-            y,
-            w: 0.0,
-            h: 0.0,
-            top: [255; 4],
-            bottom: [255; 4],
-            h_align: align,
-            v_align: 2,
-            spacing: 0.0,
-            line: size + 4.0,
-            size,
-            bg: None,
-            default: Vec::new(),
+    /// Text at a point with no layout pane: `align` 0 centres it on `x`,
+    /// 1 ends it there, 2 starts it there; `y` is its top.
+    pub fn label(&mut self, f: &'a UiFont, x: f32, y: f32, size: f32, s: &[u8], c: Rgba, align: u8) {
+        if c[3] <= 0.0 || s.is_empty() {
+            return;
+        }
+        // A box wide enough never to wrap, placed so its aligned edge is at
+        // x, and with no height so its top is at y.
+        const W: f32 = 1024.0;
+        let bx = match align {
+            1 => x - W / 2.0,
+            2 => x + W / 2.0,
+            _ => x,
         };
-        self.text(font, &p, s, c, 0.0, 0.0);
+        let b = FontBox {
+            x: glh::fx(bx),
+            y: glh::fx(y),
+            w: glh::fx(W),
+            h: 0,
+            halign: align,
+            valign: 2,
+            char_space: 0,
+            line_space: (size + 4.0) as i16,
+            size: size as u16,
+        };
+        self.load();
+        glh::setup_2d_text(self.gx);
+        font::set_color(rgba_u8(c), rgba_u8(c));
+        font::draw_box(self.gx, f, &b, s);
     }
 
     /// Text built from small blocks, like the IPL's cube mosaic: the ROM

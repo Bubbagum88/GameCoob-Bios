@@ -24,9 +24,9 @@ use super::fx::{self, screen, Mosaic, MosaicData};
 use crate::bs2::{bs2main, camera};
 use crate::bs2::mtx::{self, cos_s, sin_s};
 use crate::sdk::mtx::{self as psmtx, Mtx};
-use super::raster::Prim;
 use super::render::{self, DrawOpts, View};
 use super::shader::FastTex;
+use crate::sdk::gx::Gx;
 use super::ui::{self, cp1252, Rgba, Ui, UiFont, SHADOW, WHITE};
 use super::Assets;
 use alloc::boxed::Box;
@@ -149,71 +149,7 @@ impl MenuAssets {
 // Faders
 // ---------------------------------------------------------------------
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum Fade {
-    In,
-    Out,
-    Half,
-}
-
-/// `Fader`: an alpha ramp of `length` frames after `delay` frames.
-#[derive(Clone, Copy, Debug)]
-pub struct Fader {
-    pub frame: i16,
-    pub length: i16,
-    pub delay: i16,
-    pub max: u8,
-}
-
-impl Default for Fader {
-    fn default() -> Self {
-        Fader { frame: 0, length: 20, delay: 0, max: 255 }
-    }
-}
-
-impl Fader {
-    pub fn with_delay(delay: i16) -> Fader {
-        Fader { delay, ..Default::default() }
-    }
-
-    pub fn step(&mut self, mode: Fade) {
-        let end = self.delay + self.length;
-        match mode {
-            Fade::In => self.frame = (self.frame + 1).min(end),
-            Fade::Out => {
-                if self.frame > 0 {
-                    self.frame -= 1;
-                }
-                if self.frame < self.delay {
-                    self.frame = 0;
-                }
-            }
-            Fade::Half => {
-                let mid = self.delay + self.length / 2;
-                if self.frame < mid {
-                    self.frame = if self.frame < self.delay { self.delay } else { self.frame + 1 };
-                } else if self.frame > mid {
-                    self.frame -= 1;
-                }
-            }
-        }
-    }
-
-    pub fn alpha(&self) -> i32 {
-        if self.frame <= self.delay {
-            return 0;
-        }
-        self.max as i32 * (self.frame - self.delay) as i32 / self.length as i32
-    }
-
-    pub fn reset(&mut self) {
-        self.frame = 0;
-    }
-
-    pub fn step_if(&mut self, on: bool) {
-        self.step(if on { Fade::In } else { Fade::Out });
-    }
-}
+pub use super::fader::{Fade, Fader};
 
 // ---------------------------------------------------------------------
 // Cube motion
@@ -942,13 +878,14 @@ impl Menu {
     // -----------------------------------------------------------------
 
     /// Scene_Draw2DSpinOut's face: the front layout on the spinning cube.
-    pub fn draw_spin_out_face<'a>(list: &mut Vec<Prim<'a>>, ma: &'a MenuAssets, view: &View, cube: &Mtx, alpha: u8) {
-        let mut ui = Ui { list, view, mv: psmtx::IDENTITY };
+    pub fn draw_spin_out_face<'a>(gx: &mut Gx<'a>, ma: &'a MenuAssets, view: &View, cube: &Mtx, alpha: u8) {
+        let mut ui = Ui { gx, view, mv: psmtx::IDENTITY };
         draw_front(&mut ui, ma, 0, view, cube, alpha);
     }
 
     /// Scene_Draw2DMenu + Menu_Draw2D.
-    pub fn draw<'a>(&'a self, list: &mut Vec<Prim<'a>>, a: &'a Assets, ma: &'a MenuAssets, view: &View) {
+    pub fn draw<'a>(&'a self, gx: &mut Gx<'a>, a: &'a Assets, ma: &'a MenuAssets, view: &View) {
+        let list = &mut gx.list;
         let bg = (255 * (0x7FFF - self.zoom as i32) / 0x7FFF) as u8;
         // The glass cube, translucent as it zooms away.
         let mut v = View { ambient: [40.0 / 255.0, 40.0 / 255.0, 40.0 / 255.0, 1.0], ..clone_view(view) };
@@ -962,11 +899,11 @@ impl Menu {
             let m = psmtx::concat(&self.cube, &psmtx::scale(1.1, 1.1, 1.1));
             render::draw_model(list, &a.big_cube, &m, &v, &DrawOpts { alpha: bg, ..Default::default() });
         }
-        let mut ui = Ui { list, view, mv: psmtx::IDENTITY };
+        let mut ui = Ui { gx, view, mv: psmtx::IDENTITY };
         self.draw_faces(&mut ui, ma, view, bg);
         let mut v2 = View::intro(0.0, false);
         v2.vp = view.vp;
-        let mut ui = Ui { list: ui.list, view: &v2, mv: screen_2d() };
+        let mut ui = Ui { gx: ui.gx, view: &v2, mv: screen_2d() };
         self.draw_submenus(&mut ui, ma);
         self.draw_guide(&mut ui, ma, 255);
         let pulse = (self.highlight - 50) as f32 / 70.0;
@@ -1182,7 +1119,7 @@ impl Menu {
                 _ => None,
             };
             if set.is_some() && set == self.fx.screen() {
-                self.fx.draw(ui.list, &ma.fx, ui.view, fx_alpha);
+                self.fx.draw(&mut ui.gx.list, &ma.fx, ui.view, fx_alpha);
             }
             self.draw_message(ui, ma, al[2]);
         }

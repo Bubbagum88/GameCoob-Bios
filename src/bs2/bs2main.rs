@@ -20,6 +20,15 @@ pub struct DispSettings {
     /// 0x1E: orthographic projection (the intro) instead of perspective.
     #[allow(dead_code)] // the scene passes it to `projection` itself for now
     pub ortho: bool,
+    /// 0x2B: frame padding around dialog text, pixels.
+    pub text_pad: u8,
+    /// 0x2C: how far a line-end SJIS comma or period hangs out.
+    pub punct_hang: i16,
+    /// 0x32, 0x34: text glow alpha range.
+    pub glow_max: i16,
+    pub glow_min: i16,
+    /// 0x38: length of the glow pulse (`pulse` runs 0..this and back).
+    pub pulse_len: i16,
 }
 
 /// `fn_81300F50`: the defaults BS2Main installs.
@@ -30,6 +39,11 @@ pub const DISP_DEFAULTS: DispSettings = DispSettings {
     cam_y_far: -55.0,
     cam_y_near: -10.0,
     ortho: true,
+    text_pad: 8,
+    punct_hang: 6,
+    glow_max: 255,
+    glow_min: 70,
+    pulse_len: 35,
 };
 
 /// `Disp_GetSettings` (0x813010F8). The app never changes them yet.

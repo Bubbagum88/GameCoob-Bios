@@ -40,7 +40,7 @@ app counterpart yet.
 | `gMRbuild.c`, `gMRshape.c` (model load) | `ipl/j3d.rs` | close (parses the same J3D1 data; INF1 tree linked as `fn_81303838` does) |
 | `gMRdraw.c`, `gMRtexture.c` (joint calc, material and shape draw) | `bs2/gmr.rs` on `sdk::gx` | ported for the intro and spin-out; shapes go out in immediate mode instead of display lists. The menu still draws through `bs2/render.rs` |
 | `gMRanim.c` | `bs2/anim.rs` | close |
-| `glh.c`, `font.c`, `fader.c` | `bs2/ui.rs`, `ipl/glh.rs` | behavioral |
+| `glh.c`, `font.c`, `fader.c` | `bs2/glh.rs`, `bs2/font.rs`, `bs2/fader.rs` on `sdk::gx` | ported; `bs2/ui.rs` is now a thin wrapper the menu calls until step 5 moves it onto `glh.rs` directly |
 | `lang.c`, `res_archive.c` | `ipl/mod.rs` | close |
 | `cube_draw.c` (trail tiles) | `bs2/cube_draw.rs` | ported, on `sdk::gx`; the small cube model is drawn by the caller through `gmr.rs` |
 | `cube.c` | `bs2/cube.rs` | close |
@@ -66,7 +66,7 @@ app counterpart yet.
    `cube_draw.c` as its first users.
 2b. `gMRdraw.c` and `gMRtexture.c` on `sdk::gx` (done for the intro; the
    menu moves over with step 5, then `render.rs` goes).
-3. `glh.c`, `font.c`, `fader.c` on `sdk::gx`, replacing `ui.rs`.
+3. `glh.c`, `font.c`, `fader.c` on `sdk::gx`, under `ui.rs` (done).
 4. The intro: `cube.c`, `cube_draw.c`, `backdrop.c`, `scene*.c`.
 5. The menu core, `menu_fx*.c` and the icon units.
 6. Options, Calendar, Game Play and Memory Card, keeping their UEFI and
