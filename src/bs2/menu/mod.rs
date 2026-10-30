@@ -24,9 +24,10 @@ use super::fx::{self, screen, Mosaic, MosaicData};
 use crate::bs2::{bs2main, camera};
 use crate::bs2::mtx::{self, cos_s, sin_s};
 use crate::sdk::mtx::{self as psmtx, Mtx};
-use super::render::{self, DrawOpts, View};
+use super::render::{self, View};
 use super::shader::FastTex;
-use crate::sdk::gx::Gx;
+use crate::sdk::gx::{Gx, GX_COLOR0A0};
+use super::gmr::{self, Instance};
 use super::ui::{self, cp1252, Rgba, Ui, UiFont, SHADOW, WHITE};
 use super::Assets;
 use alloc::boxed::Box;
@@ -883,22 +884,33 @@ impl Menu {
         draw_front(&mut ui, ma, 0, view, cube, alpha);
     }
 
-    /// Scene_Draw2DMenu + Menu_Draw2D.
+    /// Scene_Draw2DMenu (0x8130E5C0) + Menu_Draw2D.
     pub fn draw<'a>(&'a self, gx: &mut Gx<'a>, a: &'a Assets, ma: &'a MenuAssets, view: &View) {
-        let list = &mut gx.list;
+        // bgMinAlpha is 0: the glass cube fades out as it zooms away.
         let bg = (255 * (0x7FFF - self.zoom as i32) / 0x7FFF) as u8;
-        // The glass cube, translucent as it zooms away.
-        let mut v = View { ambient: [40.0 / 255.0, 40.0 / 255.0, 40.0 / 255.0, 1.0], ..clone_view(view) };
-        v.vp = view.vp;
-        // The icon cubes sit inside the glass cube.
-        self.game_icon.draw(list, &ma.icons, view, &self.cube);
+        // Menu_CalcCubeMtx's model and view, then Menu_AnimCube's joints.
+        let mut cube = Instance::new(&a.big_cube.model);
+        gmr::set_model_mtx(&mut cube, &self.cube, [1.1; 3]);
+        gmr::set_view_mtx(&mut cube, &view.view);
+        gmr::calc_joints(&a.big_cube.model, &mut cube);
+        cube.alpha = bg;
+        // The glass cube's back faces, the icon cubes inside it, then its
+        // front faces, each glass pass between Scene_SetAmbDark and
+        // Scene_SetAmbFull.
+        let glass = |gx: &mut Gx<'a>, cube: &mut Instance, packet: u16| {
+            if cube.alpha > 0 {
+                gx.set_chan_amb_color(GX_COLOR0A0, [0x28, 0x28, 0x28, 0xFF]);
+                gmr::draw_packet(gx, &a.big_cube, cube, packet);
+                gx.set_chan_amb_color(GX_COLOR0A0, [0xFF; 4]);
+            }
+        };
+        glass(gx, &mut cube, BIG_CUBE_BACK);
+        let list = &mut gx.list;
         self.card_icon.draw(list, &ma.icons, view, &self.cube);
-        self.clock_icon.draw(list, &ma.icons, view, &self.cube);
+        self.game_icon.draw(list, &ma.icons, view, &self.cube);
         self.option_icon.draw(list, &ma.icons, view, &self.cube);
-        if bg > 0 {
-            let m = psmtx::concat(&self.cube, &psmtx::scale(1.1, 1.1, 1.1));
-            render::draw_model(list, &a.big_cube, &m, &v, &DrawOpts { alpha: bg, ..Default::default() });
-        }
+        self.clock_icon.draw(list, &ma.icons, view, &self.cube);
+        glass(gx, &mut cube, BIG_CUBE_FRONT);
         let mut ui = Ui { gx, view, mv: psmtx::IDENTITY };
         self.draw_faces(&mut ui, ma, view, bg);
         let mut v2 = View::intro(0.0, false);
@@ -1313,9 +1325,10 @@ impl Menu {
     }
 }
 
-fn clone_view(v: &View) -> View {
-    View { view: v.view, ortho: v.ortho, fovy: v.fovy, aspect: v.aspect, near: v.near, far: v.far, light: v.light, ambient: v.ambient, vp: v.vp }
-}
+/// `sBigCube`'s packets: the faces behind the icons (`packets + 0x78`) and
+/// in front of them (`packets + 0x168`).
+const BIG_CUBE_BACK: u16 = 0x78 / 0x18;
+const BIG_CUBE_FRONT: u16 = 0x168 / 0x18;
 
 /// The 2D screen of Setup2DView: 584 x 448 layout units, y down, at z 0
 /// in front of a camera 224 / tan(fovy / 2) away.
