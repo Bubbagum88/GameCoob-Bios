@@ -1,7 +1,7 @@
 //! BS2 graphics init and per-frame GX helpers (`gInit.c`,
-//! 0x813012D0..0x81302660). Only the GX setup helpers are ported so far;
-//! DEMOInit, the frame begin/end and the disc state still live in
-//! `boot_intro.rs`.
+//! 0x813012D0..0x81302660). The GX setup helpers and the disc state the
+//! scene reads ([`Disc`], with no drive behind it yet) are ported; DEMOInit
+//! and the frame begin/end still live in `boot_intro.rs`.
 
 use crate::sdk::gx::*;
 
@@ -60,4 +60,58 @@ pub fn setup_2d(gx: &mut Gx, tex: bool, color: bool, modulate: bool) {
     gx.set_blend_mode(GX_BM_BLEND, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA);
     gx.set_z_mode(false, GX_LEQUAL, false);
     gx.set_cull_mode(GX_CULL_BACK);
+}
+
+/// The disc states `Disc_GetState` reports (`DVDStep`'s result).
+#[allow(dead_code)] // the dummy drive only reports `None`
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum DiscState {
+    /// "Press START to begin!"
+    Ready = 0x10,
+    /// "Reading disc..."
+    Reading = 0x11,
+    /// "Please insert a NINTENDO GAMECUBE DISC."
+    None = 0x12,
+    CoverOpen = 0x13,
+    /// "The disc could not be read."
+    Wrong = 0x16,
+    /// "An error has occurred."
+    Fatal = 0x17,
+    /// "The disc could not be read."
+    Retry = 0x18,
+}
+
+/// gInit.c's disc globals: the state (`lbl_814AD2EC`) and the screen fade
+/// (`lbl_814AD2E8`, `lbl_814AD2E4`). There is no drive yet, so the state is
+/// always [`DiscState::None`].
+pub struct Disc {
+    state: DiscState,
+    fade: i16,
+    reset_fade: bool,
+}
+
+impl Disc {
+    pub fn new() -> Disc {
+        Disc { state: DiscState::None, fade: 0, reset_fade: false }
+    }
+
+    /// `InitDVDLoader` (0x813020C8) and `Disc_GetState` (0x813020EC).
+    pub fn state(&self) -> DiscState {
+        self.state
+    }
+
+    /// `Disc_FadeOutStart` (0x81302100).
+    pub fn fade_out_start(&mut self) {
+        if !self.reset_fade {
+            self.fade -= 6;
+            if self.fade < 0 {
+                self.fade = 0;
+            }
+        }
+    }
+
+    /// `Disc_GetFadeAlpha` (0x81302130).
+    pub fn fade_alpha(&self) -> u8 {
+        self.fade as u8
+    }
 }

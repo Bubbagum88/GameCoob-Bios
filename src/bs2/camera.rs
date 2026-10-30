@@ -19,7 +19,6 @@ pub enum CamState {
     /// `fade` frames.
     SpinOut { frame: i32, fade: i32 },
     /// State 5, the menu.
-    #[allow(dead_code)] // the menu still builds its own views
     Menu,
 }
 

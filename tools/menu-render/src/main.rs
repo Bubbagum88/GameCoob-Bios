@@ -172,7 +172,7 @@ fn main() {
                     let sc = &intro.scene;
                     println!(
                         "trace f{f} state={:?} spin={} speed={:.3} accel={:.3} wph={} wamp={} t={} mwob={} land={} drop={}",
-                        intro.state, sc.spin, sc.spin_speed, sc.spin_accel, sc.wobble_phase, sc.wobble_amp, intro.spin_frame, intro.wobble_frame, sc.land_impulse, sc.drop_impulse
+                        intro.state, sc.spin, sc.spin_speed, sc.spin_accel, sc.wobble_phase, sc.wobble_amp, sc.out_frame, intro.wobble_frame, sc.land_impulse, sc.drop_impulse
                     );
                 }
                 if intro.finished() {
@@ -192,6 +192,7 @@ fn main() {
                 }
             }
             Some(m) => {
+                intro.update(bs2::Input::default());
                 m.info.time = info(f).time;
                 let pad = Pad {
                     a: has("a"),

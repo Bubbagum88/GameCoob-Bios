@@ -24,7 +24,7 @@ pub fn draw_big_tiles<'a>(gx: &mut Gx<'a>, c: &Cube, world: &Mtx, view: &Mtx, al
 /// `Cube_DrawTiles` (0x813108B8): every lit tile of the grid, fading in
 /// (state 1) or out (state 2) over a side step.
 fn draw_tiles<'a>(gx: &mut Gx<'a>, c: &Cube, world: &Mtx, view: &Mtx, alpha: u8, tile_tex: &'a FastTex) {
-    let center = (c.size * 3 / 2) as f32;
+    let center = (c.size as i32 * 3 / 2) as f32;
     let mut m = mtx::rot_trans(0, 0, 0, [center; 3]);
     m = psmtx::concat(world, &m);
     m = psmtx::concat(view, &m);
@@ -42,10 +42,10 @@ fn draw_tiles<'a>(gx: &mut Gx<'a>, c: &Cube, world: &Mtx, view: &Mtx, alpha: u8,
                 }
                 let mut a = 255;
                 if tile.state == 1 {
-                    a = c.step_frame * 255 / c.side_frames;
+                    a = c.step_frame as i32 * 255 / c.side_frames as i32;
                 }
                 if tile.state == 2 {
-                    a = (c.side_frames - c.step_frame) * 255 / c.side_frames;
+                    a = (c.side_frames - c.step_frame) as i32 * 255 / c.side_frames as i32;
                 }
                 let a = a.clamp(0, 255);
                 draw_tile(gx, c, x as i32, y as i32, f, (a * alpha as i32 / 255) as u8, tile_tex);
@@ -69,11 +69,11 @@ fn tile_vtx(gx: &mut Gx, face: usize, a: i32, b: i32, s: u16, t: u16) {
 /// `Cube_DrawTile` (0x81310AD0): one textured quad on face plane `face`, in
 /// 1/16 units, colored by the material color.
 fn draw_tile<'a>(gx: &mut Gx<'a>, c: &Cube, x: i32, y: i32, face: usize, alpha: u8, tile_tex: &'a FastTex) {
-    let inset = c.tile_inset;
-    let full = c.size * 16;
-    let px = (x - 16) * c.size * 16;
-    let py = (y - 16) * c.size * 16;
-    let [r, g, b] = c.tile_rgb;
+    let inset = c.tile_inset as i32;
+    let full = c.size as i32 * 16;
+    let px = (x - 16) * c.size as i32 * 16;
+    let py = (y - 16) * c.size as i32 * 16;
+    let [r, g, b] = [c.tile_r, c.tile_g, c.tile_b];
     gx.set_chan_mat_color(GX_COLOR0A0, [r, g, b, alpha]);
     gx.load_tex_obj(tile_tex, 0);
     gx.begin(GX_QUADS, 1, 4);
