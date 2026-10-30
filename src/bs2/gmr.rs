@@ -39,15 +39,20 @@ pub struct Instance {
     /// `matAnm`: material color 0 of each material from the color
     /// animation, in place of the model's (`gmr_AnimMaterials`).
     pub mat_anm: Option<Vec<[u8; 4]>>,
-    /// Material 0's first TEV color, where a caller points
-    /// `model->material->tevColor` at its own (the menu icons' tints).
-    pub tev_color0: Option<[i16; 4]>,
+    /// `(material, i, color)`: TEV colors a caller swaps in for a draw by
+    /// pointing `model->material[m].tevColor[i]` at its own (the menu
+    /// icons' tints, the mosaic cubes' colors, the memory card blocks').
+    pub tev_color: Vec<(u16, usize, [i16; 4])>,
+    /// A material whose first texture a caller clears (`texNo[0] = 0xFFFF`)
+    /// so that it draws with whatever TEXMAP0 holds (a memory card file's
+    /// icon on its block).
+    pub no_tex0: Option<u16>,
 }
 
 impl Instance {
     /// `J3D_InitModel`: joint matrices for `m`, alpha 255.
     pub fn new(m: &Model) -> Instance {
-        Instance { joint_mtx: vec![psmtx::IDENTITY; m.joints.len()], base: psmtx::IDENTITY, alpha: 255, mat_anm: None, tev_color0: None }
+        Instance { joint_mtx: vec![psmtx::IDENTITY; m.joints.len()], base: psmtx::IDENTITY, alpha: 255, mat_anm: None, tev_color: Vec::new(), no_tex0: None }
     }
 }
 
@@ -189,7 +194,7 @@ fn load_material<'a>(gx: &mut Gx<'a>, p: &'a Prepared, inst: &Instance, index: u
     let stages = mat.tev_stages.len() as u8;
     gx.set_num_tev_stages(stages);
     for (i, c) in mat.tev_colors.iter().enumerate() {
-        let c = if index == 0 && i == 0 { inst.tev_color0.or(*c) } else { *c };
+        let c = inst.tev_color.iter().find(|t| t.0 == index && t.1 == i).map(|t| t.2).or(*c);
         if let Some(c) = c {
             gx.set_tev_color_s10(i as u8 + 1, c);
         }
@@ -208,7 +213,8 @@ fn load_material<'a>(gx: &mut Gx<'a>, p: &'a Prepared, inst: &Instance, index: u
             Some(o) => gx.set_tev_order(i, o.texcoord, o.texmap, o.channel),
             None => gx.set_tev_order(i, GX_TEXCOORD_NULL, GX_TEXMAP_NULL, GX_COLOR_NULL),
         }
-        if let Some(t) = mat.textures[i as usize].and_then(|t| p.tex(t)) {
+        let tex = mat.textures[i as usize].filter(|_| !(i == 0 && inst.no_tex0 == Some(index)));
+        if let Some(t) = tex.and_then(|t| p.tex(t)) {
             gx.load_tex_obj(t, i);
         }
     }

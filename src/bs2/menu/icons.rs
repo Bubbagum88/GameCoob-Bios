@@ -76,7 +76,7 @@ impl IconData {
         gmr::set_view_mtx(&mut inst, &view.view);
         gmr::calc_joints(&self.model.model, &mut inst);
         inst.alpha = alpha.min(255) as u8;
-        inst.tev_color0 = TINTS.get(tint).copied();
+        inst.tev_color.extend(TINTS.get(tint).map(|&c| (0, 0, c)));
         gmr::draw(gx, &self.model, &mut inst);
     }
 }

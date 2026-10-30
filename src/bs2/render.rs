@@ -1,13 +1,12 @@
-//! Draws IPL models the way BS2's J3D renderer does: per-vertex GX
-//! lighting, texgens, the material's TEV stages, alpha test, blending and
-//! z mode, into a 640x448 GX-sized target.
+//! The camera and projection of a frame ([`View`]) and IPL models with
+//! their textures decoded once ([`Prepared`]). The models are drawn by
+//! [`super::gmr`] through `sdk::gx`.
 
 use crate::sdk::mtx::{self as psmtx, Mtx, Mtx44};
 use super::bs2main::{self, Projection};
 use super::camera;
-use super::raster::{BlendMode, Prim, SVert, Sh, State, MAX_TC};
-use super::shader::{FastTex, Shader};
-use crate::ipl::j3d::{self, Model};
+use super::shader::FastTex;
+use crate::ipl::j3d::Model;
 use alloc::vec::Vec;
 
 pub const EFB_W: usize = 640;
@@ -21,21 +20,17 @@ pub struct View {
     pub aspect: f32,
     pub near: f32,
     pub far: f32,
-    /// Light position in view space.
-    pub light: [f32; 3],
-    pub ambient: [f32; 4],
     /// Viewport size in pixels (the GX EFB is 640x448).
     pub vp: [f32; 2],
 }
 
 impl View {
     /// The BS2 camera raised by `y` (`fn_81302DF0`, see [`camera::cam_y`])
-    /// with GX_LIGHT0 (`fn_81302FA0`) and the scene projection
-    /// (`fn_81301100`), orthographic for the intro.
+    /// and the scene projection (`fn_81301100`), orthographic for the
+    /// intro.
     pub fn intro(y: f32, ortho: bool) -> View {
         let disp = bs2main::disp_settings();
         let view = camera::view(disp, y);
-        let light = camera::light_pos(&view);
         let (ortho, fovy, aspect) = match bs2main::projection(disp, ortho) {
             Projection::Ortho { t, b, l, r } => (Some([t, b, l, r]), disp.fovy, bs2main::ASPECT),
             Projection::Perspective { fovy, aspect } => (None, fovy, aspect),
@@ -47,8 +42,6 @@ impl View {
             aspect,
             near: disp.near,
             far: disp.far,
-            light,
-            ambient: [0.0, 0.0, 0.0, 0.0],
             vp: [EFB_W as f32, EFB_H as f32],
         }
     }
@@ -60,202 +53,22 @@ impl View {
             None => psmtx::perspective(self.fovy, self.aspect, self.near, self.far),
         }
     }
-
-    /// View-space point to screen (x, y, depth 0..1, 1/w). None if clipped.
-    pub fn project(&self, p: [f32; 3]) -> Option<[f32; 4]> {
-        let d = -p[2];
-        if d < self.near * 0.5 {
-            return None;
-        }
-        let (nx, ny, rw) = match self.ortho {
-            Some([t, b, l, r]) => ((2.0 * p[0] - (r + l)) / (r - l), (2.0 * p[1] - (t + b)) / (t - b), 1.0),
-            None => {
-                let c = 1.0 / libm::tanf((self.fovy * 0.5).to_radians());
-                (c / self.aspect * p[0] / d, c * p[1] / d, 1.0 / d)
-            }
-        };
-        let z = (d - self.near) / (self.far - self.near);
-        Some([(nx + 1.0) * 0.5 * self.vp[0], (1.0 - ny) * 0.5 * self.vp[1], z, rw])
-    }
 }
 
-/// A model with its materials compiled and textures converted once.
+/// A model with its textures converted once.
 pub struct Prepared {
     pub model: Model,
-    shaders: Vec<Shader>,
     texs: Vec<FastTex>,
 }
 
 impl Prepared {
-    /// The compiled TEV program of material `i`.
-    pub fn shader(&self, i: usize) -> Option<&Shader> {
-        self.shaders.get(i)
-    }
-
     /// Texture `i` of the model, decoded.
     pub fn tex(&self, i: u16) -> Option<&FastTex> {
         self.texs.get(i as usize)
     }
 
     pub fn new(model: Model) -> Prepared {
-        let shaders = model.materials.iter().map(Shader::new).collect();
         let texs = model.textures.iter().map(FastTex::new).collect();
-        Prepared { model, shaders, texs }
-    }
-
-    /// The same model with each material's TEVREG0 replaced by `c` where it
-    /// held `old` (BS2 recolours a model by writing that register).
-    pub fn with_tev0(&self, old: [i16; 4], c: [i16; 4]) -> Prepared {
-        let mut model = self.model.clone();
-        for m in model.materials.iter_mut() {
-            if m.tev_colors[0] == Some(old) {
-                m.tev_colors[0] = Some(c);
-            }
-        }
-        Prepared::new(model)
-    }
-}
-
-/// Per-draw overrides.
-pub struct DrawOpts<'a> {
-    /// Model alpha (J3D model `alpha` field); below 255 multiplies alpha in
-    /// an extra TEV stage and turns z compare and update off.
-    pub alpha: u8,
-    /// Joint matrices in model space; defaults to the bind pose.
-    pub joints: Option<&'a [Mtx]>,
-    /// Material color 0 overrides (material index, RGBA 0..255).
-    pub mat_colors: &'a [(u16, [f32; 4])],
-    /// Only draw these entries of `Model::draws`.
-    pub only: Option<core::ops::Range<usize>>,
-}
-
-impl Default for DrawOpts<'_> {
-    fn default() -> Self {
-        DrawOpts { alpha: 255, joints: None, mat_colors: &[], only: None }
-    }
-}
-
-fn norm(v: [f32; 3]) -> [f32; 3] {
-    let l = libm::sqrtf(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
-    if l > 1e-12 { [v[0] / l, v[1] / l, v[2] / l] } else { v }
-}
-
-/// Queue a model's triangles. `base` is model-to-world (world matrix times
-/// model scale).
-pub fn draw_model<'a>(list: &mut Vec<Prim<'a>>, p: &'a Prepared, base: &Mtx, v: &View, o: &DrawOpts) {
-    draw_model_impl(list, p, None, base, v, o, None);
-}
-
-/// [`draw_model`] with every material's TEV program replaced by `shader`
-/// (a copy with its own colour registers, see [`Shader::set_reg`]).
-pub fn draw_model_with<'a>(list: &mut Vec<Prim<'a>>, p: &'a Prepared, shader: Option<&'a Shader>, base: &Mtx, v: &View, o: &DrawOpts) {
-    draw_model_impl(list, p, shader, base, v, o, None);
-}
-
-/// [`draw_model`] with `tex` in place of the materials' TEV stages: each
-/// draw is lit vertex color times `tex` (TEX0), the way BS2 draws a memory
-/// card file's icon on its block with the icon loaded into GX_TEXMAP0.
-pub fn draw_model_tex<'a>(list: &mut Vec<Prim<'a>>, p: &'a Prepared, base: &Mtx, v: &View, o: &DrawOpts, tex: &'a FastTex) {
-    draw_model_impl(list, p, None, base, v, o, Some(tex));
-}
-
-fn draw_model_impl<'a>(
-    list: &mut Vec<Prim<'a>>,
-    p: &'a Prepared,
-    shader: Option<&'a Shader>,
-    base: &Mtx,
-    v: &View,
-    o: &DrawOpts,
-    tex: Option<&'a FastTex>,
-) {
-    let m = &p.model;
-    if o.alpha == 0 {
-        return;
-    }
-    let model_view = psmtx::concat(&v.view, base);
-    let range = o.only.clone().unwrap_or(0..m.draws.len());
-    for d in m.draws.get(range).unwrap_or(&[]) {
-        let Some(shape) = m.shapes.get(d.shape as usize) else { continue };
-        let Some(mat0) = m.materials.get(d.material as usize) else { continue };
-        let Some(shader) = shader.or(p.shaders.get(d.material as usize)) else { continue };
-        let over = o.mat_colors.iter().find(|(i, _)| *i == d.material);
-        let mut mat_over;
-        let mat = match over {
-            Some((_, c)) => {
-                mat_over = mat0.clone();
-                mat_over.mat_colors[0] = c.map(|x| x.clamp(0.0, 255.0) as u8);
-                &mat_over
-            }
-            None => mat0,
-        };
-        let alpha = o.alpha as f32 / 255.0;
-        let translucent = o.alpha != 255;
-        let st = State {
-            z_compare: !translucent && mat.z_mode.enable,
-            z_update: !translucent && mat.z_mode.enable && mat.z_mode.update,
-            blend: match mat.blend.mode {
-                1 if mat.blend.dst == 1 => BlendMode::Add,
-                1 => BlendMode::Alpha,
-                _ if translucent => BlendMode::Alpha,
-                _ => BlendMode::None,
-            },
-            cull: match mat.cull {
-                j3d::CULL_FRONT => 1,
-                j3d::CULL_BACK => 2,
-                0 => 0,
-                _ => continue,
-            },
-        };
-
-        // Per-vertex transform, lighting and texgen, like the GX XF stage.
-        let verts: Vec<Option<SVert>> = shape
-            .vertices
-            .iter()
-            .map(|vx| {
-                let jm = match o.joints {
-                    Some(js) => js.get(vx.joint as usize).copied().unwrap_or(psmtx::IDENTITY),
-                    None => m.joint_world(vx.joint),
-                };
-                let mv = psmtx::concat(&model_view, &jm);
-                let p = psmtx::mult_vec(&mv, vx.pos);
-                let s = v.project(p)?;
-                let n = norm(psmtx::mult_vec_sr(&mv, vx.normal));
-                let l = norm([v.light[0] - p[0], v.light[1] - p[1], v.light[2] - p[2]]);
-                let diff = (n[0] * l[0] + n[1] * l[1] + n[2] * l[2]).max(0.0);
-                let vc = vx.color.map(|c| c as f32 / 255.0);
-                let ras = mat.ras_color(0, vc, [diff; 3], v.ambient);
-                let mut uv = [[0.0; 2]; MAX_TC];
-                // J3D env mapping (texgens from the normal): the stored matrix
-                // is concatenated with the model-view matrix minus its
-                // translation, so the normal is not renormalised and keeps
-                // the model's scale.
-                let env_n = psmtx::mult_vec_sr(&mv, vx.normal);
-                for (g, out) in uv.iter_mut().enumerate() {
-                    let env = mat.tex_gens.get(g).is_some_and(|tg| tg.src == 1);
-                    *out = mat.texcoord(g, vx.pos, if env { env_n } else { vx.normal }, vx.uv);
-                }
-                Some(SVert { x: s[0], y: s[1], z: s[2], rw: s[3], color: ras, uv })
-            })
-            .collect();
-
-        let sh = match tex {
-            Some(tex) => Sh::Modulate { tex },
-            None => Sh::Mat { shader, texs: &p.texs, alpha },
-        };
-        for tri in shape.indices.chunks_exact(3) {
-            let (Some(mut a), Some(mut b), Some(mut c)) = (
-                verts.get(tri[0] as usize).copied().flatten(),
-                verts.get(tri[1] as usize).copied().flatten(),
-                verts.get(tri[2] as usize).copied().flatten(),
-            ) else {
-                continue;
-            };
-            if tex.is_some() {
-                for v in [&mut a, &mut b, &mut c] {
-                    v.color[3] *= alpha;
-                }
-            }
-            list.push(Prim { v: [a, b, c], st, sh });
-        }
+        Prepared { model, texs }
     }
 }

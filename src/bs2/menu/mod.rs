@@ -1130,7 +1130,7 @@ impl Menu {
                 _ => None,
             };
             if set.is_some() && set == self.fx.screen() {
-                self.fx.draw(&mut ui.gx.list, &ma.fx, ui.view, fx_alpha);
+                self.fx.draw(ui.gx, &ma.fx, ui.view, fx_alpha);
             }
             self.draw_message(ui, ma, al[2]);
         }

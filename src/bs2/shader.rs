@@ -227,15 +227,6 @@ impl Shader {
         Shader { regs, stages, alpha_always, mat_alpha_test: m.clone() }
     }
 
-    /// Replace the colour a material's `tev_colors[i]` loaded (0..2 are
-    /// TEVREG0..2, 3 is TEVPREV), RGBA 0..1.
-    pub fn set_reg(&mut self, i: usize, c: [f32; 4]) {
-        let r = if i == 3 { 0 } else { i + 1 };
-        if let Some(reg) = self.regs.get_mut(r) {
-            *reg = c;
-        }
-    }
-
     /// Set the konst color and alpha stage `i` reads (`GXSetTevKColorSel`,
     /// `GXSetTevKAlphaSel`).
     pub fn set_konst(&mut self, i: usize, c: [f32; 3], a: f32) {

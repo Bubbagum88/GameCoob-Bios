@@ -306,7 +306,12 @@ impl Intro {
         let vp = [t.w as f32, t.h as f32];
         let mut gx = self.frame_gx(&arena, a, vp);
         match m {
-            Some(m) if self.state == SceneState::Menu => m.draw(&mut gx, a, ma, &self.view(vp)),
+            Some(m) if self.state == SceneState::Menu => {
+                // fn_81302FA0's light, then Scene_Draw2DMenu.
+                let view = self.view(vp);
+                camera::load_light(&mut gx, &view.view);
+                m.draw(&mut gx, a, ma, &view)
+            }
             _ => self.draw(&mut gx, a, Some(ma), vp),
         }
         self.gx_regs.set(Some(gx.regs()));
