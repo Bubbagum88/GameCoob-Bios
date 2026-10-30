@@ -9,8 +9,10 @@ pub mod anim;
 pub mod bs2main;
 pub mod camera;
 pub mod cube;
+pub mod cube_draw;
 pub mod fx;
 pub mod gbase;
+pub mod ginit;
 pub mod menu;
 pub mod mtx;
 pub mod raster;
@@ -22,10 +24,11 @@ pub mod ui;
 use crate::ipl::{bti, j3d::Model, Ipl};
 use alloc::vec::Vec;
 use anim::{Bck, Ipk};
-use cube::{Cube, Jingle, Phase, GRID};
+use cube::{Cube, Jingle, Phase};
 use mtx::sin_s;
+use crate::sdk::gx::{Gx, GxArena};
 use crate::sdk::mtx::{self as psmtx, Mtx};
-use raster::{BlendMode, Prim, SVert, Sh, State, Target};
+use raster::{Prim, Target};
 use render::{DrawOpts, Prepared, View};
 use scene::Scene;
 
@@ -218,40 +221,42 @@ impl Intro {
     /// each and return once `job.finished()`).
     #[allow(dead_code)] // used by tools/intro-render
     pub fn render(&self, t: &mut Target, a: &Assets, par: &dyn Fn(&raster::Job)) {
-        let mut list = Vec::new();
-        self.draw(&mut list, a, [t.w as f32, t.h as f32]);
+        let arena = GxArena::new();
+        let mut gx = Gx::new(&arena, t.w as f32, t.h as f32);
+        self.draw(&mut gx, a, [t.w as f32, t.h as f32]);
         t.clear([0.0; 3]);
-        let job = raster::Job::new(t, &list, 16);
+        let job = raster::Job::new(t, &gx.list, 16);
         par(&job);
     }
 
     /// Render the intro with the menu cube's front face fading in during the
     /// spin-out, or the menu once it has taken over.
     pub fn render_with_menu(&self, t: &mut Target, a: &Assets, ma: &menu::MenuAssets, m: Option<&menu::Menu>, par: &dyn Fn(&raster::Job)) {
-        let mut list = Vec::new();
+        let arena = GxArena::new();
         let vp = [t.w as f32, t.h as f32];
+        let mut gx = Gx::new(&arena, vp[0], vp[1]);
         match m {
-            Some(m) => m.draw(&mut list, a, ma, &self.spin_out_view(vp)),
+            Some(m) => m.draw(&mut gx.list, a, ma, &self.spin_out_view(vp)),
             None => {
-                self.draw(&mut list, a, vp);
+                self.draw(&mut gx, a, vp);
                 // Scene_Draw2DSpinOut: the front face fades in over the
                 // last 100 frames of the spin-out.
                 let f = self.spin_frame - (SPINOUT_END - SPINOUT_FACE);
                 if self.state != State0::Intro && f >= 0 {
                     let alpha = (255 * f.min(SPINOUT_FACE) / SPINOUT_FACE) as u8;
-                    menu::Menu::draw_spin_out_face(&mut list, ma, &self.spin_out_view(vp), &self.spin_out_mtx(), alpha);
+                    menu::Menu::draw_spin_out_face(&mut gx.list, ma, &self.spin_out_view(vp), &self.spin_out_mtx(), alpha);
                 }
             }
         }
         t.clear([0.0; 3]);
-        let job = raster::Job::new(t, &list, 16);
+        let job = raster::Job::new(t, &gx.list, 16);
         par(&job);
     }
 
     /// Build the frame's display list (Scene_DrawWorld + Scene_Draw2DNoDisc).
-    pub fn draw<'a>(&self, t: &mut Vec<Prim<'a>>, a: &'a Assets, vp: [f32; 2]) {
+    pub fn draw<'a>(&self, gx: &mut Gx<'a>, a: &'a Assets, vp: [f32; 2]) {
         if self.state != State0::Intro {
-            return self.draw_spin_out(t, a, vp);
+            return self.draw_spin_out(&mut gx.list, a, vp);
         }
         let sc = &self.scene;
         let mut view = View::intro(camera::cam_y(bs2main::disp_settings(), camera::CamState::Intro), true);
@@ -261,30 +266,32 @@ impl Intro {
         let scaled = |m: &Mtx, k: f32| psmtx::concat(m, &psmtx::scale(k, k, k));
 
         // 1. The "NINTENDO GAMECUBE" wordmark, fixed to the screen.
-        self.draw_text(t, a, &view, master as u8);
+        self.draw_text(&mut gx.list, a, &view, master as u8);
 
         // 2. Inner background cube, visible while the impacts shake it.
         let shake = (sc.land_impulse as i32 + sc.drop_impulse as i32).min(3000);
         let inner_a = master * (255 * shake / 3000) / 255;
-        render::draw_model(t, &a.bg_inner, &world, &view, &DrawOpts { alpha: inner_a as u8, ..Default::default() });
+        render::draw_model(&mut gx.list, &a.bg_inner, &world, &view, &DrawOpts { alpha: inner_a as u8, ..Default::default() });
 
         // 3. Outer background, back half, visible while wobbling.
         let outer_a = (master * (255 * (sc.wobble_amp as i32).min(3000) / 3000) / 255) as u8;
         let outer = scaled(&world, 1.01);
         let (back, front) = split_draws(&a.bg_outer.model);
-        render::draw_model(t, &a.bg_outer, &outer, &view, &DrawOpts { alpha: outer_a, only: Some(back), ..Default::default() });
+        render::draw_model(&mut gx.list, &a.bg_outer, &outer, &view, &DrawOpts { alpha: outer_a, only: Some(back), ..Default::default() });
 
         // 4. Trail tiles and the small cube, fading out as the logo fades in.
         let cube_a = ((255 - sc.logo_alpha as i32) * master / 255) as u8;
-        self.draw_tiles(t, a, &world, &view, cube_a);
+        gx.set_projection(&view.projection());
+        gx.set_viewport(0.0, 0.0, view.vp[0], view.vp[1]);
+        cube_draw::draw_big_tiles(gx, &self.cube, &world, &view.view, cube_a, &a.tile);
         let small = self.cube.small_cube_mtx(&world);
         let small_a = (self.cube.alpha as i32 * cube_a as i32 / 255) as u8;
-        render::draw_model(t, &a.small_cube, &small, &view, &DrawOpts { alpha: small_a, ..Default::default() });
+        render::draw_model(&mut gx.list, &a.small_cube, &small, &view, &DrawOpts { alpha: small_a, ..Default::default() });
 
         // 5. The logo, 6. the outer background's front half.
         let logo_a = (sc.logo_alpha as i32 * master / 255) as u8;
-        render::draw_model(t, &a.logo, &world, &view, &DrawOpts { alpha: logo_a, ..Default::default() });
-        render::draw_model(t, &a.bg_outer, &outer, &view, &DrawOpts { alpha: outer_a, only: Some(front), ..Default::default() });
+        render::draw_model(&mut gx.list, &a.logo, &world, &view, &DrawOpts { alpha: logo_a, ..Default::default() });
+        render::draw_model(&mut gx.list, &a.bg_outer, &outer, &view, &DrawOpts { alpha: outer_a, only: Some(front), ..Default::default() });
     }
 
     fn draw_text<'a>(&self, t: &mut Vec<Prim<'a>>, a: &'a Assets, view: &View, alpha: u8) {
@@ -373,58 +380,6 @@ impl Intro {
     }
 
     /// Cube_DrawTiles: one textured quad per live cell on the three faces.
-    fn draw_tiles<'a>(&self, t: &mut Vec<Prim<'a>>, a: &'a Assets, world: &Mtx, view: &View, alpha: u8) {
-        if alpha == 0 {
-            return;
-        }
-        let c = &self.cube;
-        let c3 = (c.size * 3 / 2) as f32;
-        let mv = psmtx::concat(&view.view, &psmtx::concat(world, &psmtx::trans(c3, c3, c3)));
-        let size = c.size as f32;
-        let inset = c.tile_inset as f32 / 16.0;
-        let rgb = c.tile_rgb.map(|x| x as f32 / 255.0);
-        let st = State { z_compare: true, z_update: false, blend: BlendMode::Alpha, cull: 0 };
-        for f in 0..cube::FACES {
-            for x in 0..GRID {
-                for y in 0..GRID {
-                    let tile = c.tile(f, x, y);
-                    if tile.group == 0 {
-                        continue;
-                    }
-                    let ta = c.tile_alpha(tile) * alpha as i32 / 255;
-                    let px = (x as f32 - 16.0) * size;
-                    let py = (y as f32 - 16.0) * size;
-                    let corners = [
-                        (-(px + inset), -(py + inset), [0.0, 0.0]),
-                        (-(px + size), -(py + inset), [0.0, 2.0]),
-                        (-(px + size), -(py + size), [2.0, 2.0]),
-                        (-(px + inset), -(py + size), [2.0, 0.0]),
-                    ];
-                    let mut sv = [SVert::default(); 4];
-                    let mut ok = true;
-                    for (k, &(u, v, uv)) in corners.iter().enumerate() {
-                        let p = match f {
-                            0 => [u, 0.0, v],
-                            1 => [v, u, 0.0],
-                            _ => [0.0, v, u],
-                        };
-                        let Some(s) = view.project(psmtx::mult_vec(&mv, p)) else {
-                            ok = false;
-                            break;
-                        };
-                        sv[k] = SVert { x: s[0], y: s[1], z: s[2], rw: s[3], color: [rgb[0], rgb[1], rgb[2], ta as f32 / 255.0], uv: [uv, [0.0; 2]] };
-                    }
-                    if !ok {
-                        continue;
-                    }
-                    let sh = Sh::Modulate { tex: &a.tile };
-                    t.push(Prim { v: [sv[0], sv[1], sv[2]], st, sh });
-                    t.push(Prim { v: [sv[0], sv[2], sv[3]], st, sh });
-                }
-            }
-        }
-    }
-
     pub fn finished(&self) -> bool {
         self.state == State0::Done
     }

@@ -367,16 +367,6 @@ impl Cube {
         jingle
     }
 
-    /// Alpha (0..255) of a tile given its fade state.
-    pub fn tile_alpha(&self, t: &Tile) -> i32 {
-        let a = match t.state {
-            1 => self.step_frame * 0xFF / self.side_frames,
-            2 => (self.side_frames - self.step_frame) * 0xFF / self.side_frames,
-            _ => 0xFF,
-        };
-        a.clamp(0, 0xFF)
-    }
-
     /// Model matrix of the small cube (before the world matrix), plus the
     /// world-space height to lift it by.
     pub fn small_cube_mtx(&self, world: &Mtx) -> Mtx {
