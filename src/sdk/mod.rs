@@ -3,9 +3,11 @@
 //!
 //! * [`mtx`]: `PSMTX*` / `C_MTX*` matrix math.
 //! * [`gx`]: GX state and immediate-mode drawing on the CPU rasterizer.
+//! * [`os`]: `OSGetTick`.
 //!
-//! VI, OS, PAD, DVD and CARD follow as their callers are ported (see
+//! VI, the rest of OS, PAD, DVD and CARD follow as their callers are ported (see
 //! docs/PORT.md).
 
 pub mod gx;
 pub mod mtx;
+pub mod os;

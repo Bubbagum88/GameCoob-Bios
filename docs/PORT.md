@@ -48,10 +48,10 @@ app counterpart yet.
 | `scene.c`, `scene_intro.c`, `scene_spinout.c` | `bs2/scene.rs` (`Scene`), `bs2/mod.rs` (`Intro`: the state machine and draws) | ported for the no-disc boot and the spin-out; the disc, SRAM-lost and cover-open states and the dialog texts wait for a drive. GameCoob lingers 60 frames on the logo (`HOLD_FRAMES`) |
 | `backdrop.c` | `bs2/menu/mod.rs`, `bs2/menu/card.rs` | behavioral |
 | `pad.c` | `boot_intro.rs` (keyboard to pad) | behavioral |
-| `rnd.c` | none | missing |
+| `rnd.c` | `bs2/rnd.rs` over `sdk::os::get_tick` | ported; the host tools' tick is a fixed counter so renders repeat, UEFI uses the TSC |
 | `menu/menu.c` | `bs2/menu/mod.rs` | update ported: `Work` is `MenuWork` (less the mosaic's fields), made at boot by the scene and wobbled by the spin-out; `Menu::update` runs `Menu_Update`'s steps in its order (rotation, icons, slot glow, guide, sub faders, one-shots, latch, cube or zoom-in). No SRAM-lost flag or fatal-error text yet (dummy disc). Draw side close |
 | `menu/menu_fx*.c` | `bs2/fx.rs`, `ipl/fx.rs` | close; `Fx_Draw` ported (both AA-half passes in one frame) |
-| `menu/menu_icon_*.c` | `bs2/menu/icons.rs` | close; the cubes draw as the C does (tint in material 0's tevColor) |
+| `menu/menu_icon_*.c` | `bs2/menu/icons.rs` | ported: one gMR instance per cube, `*Icon_CalcMtx` run from `Menu_UpdateIcons` (so on last frame's cube matrix), the C's draw order and settled flags. Cubes at alpha 0 are skipped (they draw nothing) |
 | `menu/game.c`, `game_params.c` | `bs2/menu/game.rs` | close; START opens the firmware boot list |
 | `menu/options.c`, `option_params.c` | `bs2/menu/mod.rs` | behavioral; edits the boot timeout |
 | `menu/calendar.c`, `clock_params.c` | `bs2/menu/mod.rs` | behavioral; sets the firmware clock |

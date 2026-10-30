@@ -206,7 +206,7 @@ fn main() {
                     eject: has("eject"),
                     slot: [has("slot1"), has("slot2")],
                 };
-                if let Some(act) = m.update(&ma, &pad) {
+                if let Some(act) = m.update(&ma, &intro.camera_view(), &pad) {
                     println!("frame {f}: action {act:?}");
                 }
                 m.tick_guide();

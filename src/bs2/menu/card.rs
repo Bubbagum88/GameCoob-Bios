@@ -11,7 +11,7 @@
 //! noted as `SE n` comments; there is no sound yet.
 
 use super::backend::{CardError, CardOp, MemCards, Save, SlotState, DIR_ENTRIES};
-use crate::bs2::gbase;
+use crate::bs2::{gbase, rnd};
 use crate::bs2::mtx::{self, cos_s, sin_s};
 use crate::sdk::mtx::{self as psmtx, Mtx};
 use super::super::gmr::{self, Instance};
@@ -340,7 +340,6 @@ pub struct Card {
     erasing: bool,
     bursting: bool,
     sparks: [Spark; 12],
-    rng: u32,
 }
 
 impl Card {
@@ -399,17 +398,11 @@ impl Card {
             erasing: false,
             bursting: false,
             sparks: [Spark::default(); 12],
-            rng: 0x2D9B_1C47,
         };
         for s in 0..2 {
             c.sort(cards, s);
         }
         c
-    }
-
-    fn rand(&mut self) -> i32 {
-        self.rng = self.rng.wrapping_mul(1_103_515_245).wrapping_add(12345);
-        ((self.rng >> 16) & 0x7FFF) as i32
     }
 
     /// While browsing the guide reads Select, Finish, Confirm.
@@ -520,8 +513,8 @@ impl Card {
         self.rebuild_grid();
         for s in 0..2 {
             for i in 0..N {
-                let r = self.rand();
-                let start = (self.rand() & 15) as i16;
+                let r = rnd::rand() as u16 as i32;
+                let start = (rnd::rand() & 15) as i16;
                 let (sn, cs) = sin_cos(r);
                 let t = &mut self.tiles[s][i];
                 t.pos = [292.0, 224.0];
@@ -623,7 +616,7 @@ impl Card {
             self.erasing = true;
             self.bursting = false;
         } else {
-            let (sn, cs) = sin_cos(self.rand());
+            let (sn, cs) = sin_cos(rnd::rand() as i32);
             t.from = t.pos;
             t.from_v = t.vel;
             t.to = [292.0 + 40.0 * sn, 200.0 + 40.0 * cs];
@@ -691,8 +684,8 @@ impl Card {
             if !self.flying && shrunk {
                 if !self.bursting {
                     for i in 0..12 {
-                        let delay = (self.rand() & 3) as i16;
-                        let angle = self.rand() as i16;
+                        let delay = (rnd::rand() & 3) as i16;
+                        let angle = rnd::rand() as u16 as i16;
                         self.sparks[i] = Spark { frame: 0, len: 10, delay, angle };
                     }
                 }
