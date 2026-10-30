@@ -1,8 +1,8 @@
 //! Rolling-cube intro drawing (`cube_draw.c`, 0x813108B8..0x81310F58): the
 //! trail tiles the cube leaves on the three faces of the big cube.
 //!
-//! `Cube_DrawBig` also draws the small cube model; that part stays with the
-//! caller until the model renderer (gMR) runs on [`Gx`] too.
+//! `Cube_DrawBig` also draws the small cube model, through [`super::gmr`];
+//! the caller does that part.
 
 use super::cube::{self, Cube, GRID};
 use super::ginit;
@@ -28,8 +28,7 @@ fn draw_tiles<'a>(gx: &mut Gx<'a>, c: &Cube, world: &Mtx, view: &Mtx, alpha: u8,
     let mut m = mtx::rot_trans(0, 0, 0, [center; 3]);
     m = psmtx::concat(world, &m);
     m = psmtx::concat(view, &m);
-    // The C loads the plain 3x3 inverse (not transposed) as the normal
-    // matrix; the tiles are unlit, so it never shows.
+    // The tiles are unlit, so the normal matrix never shows.
     let nrm = mtx::inverse33(&m).unwrap_or(psmtx::IDENTITY);
     gx.load_pos_mtx_imm(&m, GX_PNMTX0);
     gx.load_nrm_mtx_imm(&nrm, GX_PNMTX0);

@@ -15,8 +15,11 @@
 //!
 //! Vertices are sent in immediate mode (`GXBegin`, `GXPosition*`, ...), with
 //! the fixed-point scale of `GXSetVtxAttrFmt`. Display lists, indexed
-//! arrays, konst colors (read as 1.0) and the second color channel in TEV
-//! (read as white) are not there yet.
+//! arrays and the second color channel in TEV (read as white) are not there
+//! yet.
+//!
+//! The registers ([`GxRegs`]) outlive a frame, as on the hardware: start
+//! the next frame's [`Gx`] from [`Gx::regs`].
 
 // The SDK surface BS2 uses; not every call has a ported caller yet.
 #![allow(dead_code)]
@@ -143,6 +146,14 @@ pub enum TevMode {
     Replace,
     PassClr,
 }
+
+/// `GXTevKColorSel` / `GXTevKAlphaSel` (the ones BS2 uses).
+pub const GX_TEV_KCSEL_1_4: u8 = 6;
+pub const GX_TEV_KASEL_1: u8 = 0;
+pub const GX_TEV_KASEL_K0_A: u8 = 0x1C;
+
+/// `GXTevKColorID`
+pub const GX_KCOLOR0: u8 = 0;
 
 /// `GXCompare`
 pub const GX_NEVER: u8 = 0;
@@ -309,13 +320,13 @@ struct VtxIn {
     tex: [[f32; 2]; 8],
 }
 
-/// The GX state machine and the frame's triangle list.
-pub struct Gx<'a> {
-    arena: &'a GxArena<'a>,
-    /// The frame's triangles, in draw order. Other renderers may push here
-    /// too, so GX draws and theirs stay in order.
-    pub list: Vec<Prim<'a>>,
-
+/// The GX registers: everything a GX call sets, kept from one frame to the
+/// next as on the hardware (BS2 relies on that: the logo text is drawn
+/// before the frame's `fn_81304CE8` reset, and the spin-out never resets).
+/// Texture maps are not here; they point into the frame's assets and are
+/// loaded again each frame.
+#[derive(Clone, Copy)]
+pub struct GxRegs {
     // XF
     viewport: [f32; 4],
     proj: Mtx44,
@@ -338,12 +349,63 @@ pub struct Gx<'a> {
     tev_orders: [TevOrder; 16],
     tev_stages: [TevStage; 16],
     tev_regs: [[i16; 4]; 4],
-    tex_maps: [Option<&'a FastTex>; 8],
+    kcolor: [[u8; 4]; 4],
+    kcsel: [u8; 16],
+    kasel: [u8; 16],
     alpha_compare: AlphaCompare,
     blend: (u8, u8, u8),
     z_mode: (bool, u8, bool),
     cull: u8,
     color_update: bool,
+}
+
+impl GxRegs {
+    /// The state `GXInit` leaves, drawing into a `w` x `h` viewport.
+    pub fn init(w: f32, h: f32) -> GxRegs {
+        let tg = |i: u8| TexGen { kind: GX_TG_MTX2X4, src: GX_TG_TEX0 + i, mtx: GX_IDENTITY as u8 };
+        let order = |i: u8| match i {
+            0..=7 => TevOrder { texcoord: i, texmap: i, channel: GX_COLOR0A0 },
+            _ => TevOrder { texcoord: GX_TEXCOORD_NULL, texmap: GX_TEXMAP_NULL, channel: GX_COLOR_NULL },
+        };
+        GxRegs {
+            viewport: [0.0, 0.0, w, h],
+            proj: mtx::ortho(1.0, -1.0, -1.0, 1.0, 0.0, 1.0),
+            pos_mtx: [mtx::IDENTITY; 10],
+            nrm_mtx: [mtx::IDENTITY; 10],
+            tex_mtx: [mtx::IDENTITY; 10],
+            cur_mtx: GX_PNMTX0,
+            attr_fmt: [[(GX_F32, 0); 13]; 8],
+            num_chans: 0,
+            chans: [ChanCtrl::default(); 4],
+            mat_color: [[255; 4]; 2],
+            amb_color: [[0; 4]; 2],
+            lights: [LightObj::default(); 8],
+            num_tex_gens: 0,
+            tex_gens: core::array::from_fn(|i| tg(i as u8)),
+            num_tev_stages: 1,
+            tev_orders: core::array::from_fn(|i| order(i as u8)),
+            tev_stages: [PASS_STAGE; 16],
+            tev_regs: [[0; 4]; 4],
+            kcolor: [[0; 4]; 4],
+            kcsel: [GX_TEV_KCSEL_1_4; 16],
+            kasel: [GX_TEV_KASEL_1; 16],
+            alpha_compare: AlphaCompare { comp0: GX_ALWAYS, ref0: 0, op: 0, comp1: GX_ALWAYS, ref1: 0 },
+            blend: (GX_BM_NONE, GX_BL_ONE, GX_BL_ZERO),
+            z_mode: (true, GX_LEQUAL, true),
+            cull: GX_CULL_BACK,
+            color_update: true,
+        }
+    }
+}
+
+/// The GX state machine and the frame's triangle list.
+pub struct Gx<'a> {
+    arena: &'a GxArena<'a>,
+    /// The frame's triangles, in draw order. Other renderers may push here
+    /// too, so GX draws and theirs stay in order.
+    pub list: Vec<Prim<'a>>,
+    r: GxRegs,
+    tex_maps: [Option<&'a FastTex>; 8],
     shader: Option<&'a GxDraw<'a>>,
 
     // Immediate mode
@@ -370,36 +432,18 @@ const PASS_STAGE: TevStage = TevStage {
 };
 
 impl<'a> Gx<'a> {
-    /// The state `GXInit` leaves, drawing into a `w` x `h` viewport.
+    /// GX as `GXInit` leaves it, drawing into a `w` x `h` viewport.
     pub fn new(arena: &'a GxArena<'a>, w: f32, h: f32) -> Gx<'a> {
-        let tg = |i: u8| TexGen { kind: GX_TG_MTX2X4, src: GX_TG_TEX0 + i, mtx: GX_IDENTITY as u8 };
+        Gx::with_regs(arena, GxRegs::init(w, h))
+    }
+
+    /// GX with the registers a previous frame left (see [`Gx::regs`]).
+    pub fn with_regs(arena: &'a GxArena<'a>, r: GxRegs) -> Gx<'a> {
         Gx {
             arena,
             list: Vec::new(),
-            viewport: [0.0, 0.0, w, h],
-            proj: mtx::ortho(1.0, -1.0, -1.0, 1.0, 0.0, 1.0),
-            pos_mtx: [mtx::IDENTITY; 10],
-            nrm_mtx: [mtx::IDENTITY; 10],
-            tex_mtx: [mtx::IDENTITY; 10],
-            cur_mtx: GX_PNMTX0,
-            attr_fmt: [[(GX_F32, 0); 13]; 8],
-            num_chans: 0,
-            chans: [ChanCtrl::default(); 4],
-            mat_color: [[255; 4]; 2],
-            amb_color: [[0; 4]; 2],
-            lights: [LightObj::default(); 8],
-            num_tex_gens: 0,
-            tex_gens: core::array::from_fn(|i| tg(i as u8)),
-            num_tev_stages: 1,
-            tev_orders: [TevOrder { texcoord: GX_TEXCOORD_NULL, texmap: GX_TEXMAP_NULL, channel: GX_COLOR0A0 }; 16],
-            tev_stages: [PASS_STAGE; 16],
-            tev_regs: [[0; 4]; 4],
+            r,
             tex_maps: [None; 8],
-            alpha_compare: AlphaCompare { comp0: GX_ALWAYS, ref0: 0, op: 0, comp1: GX_ALWAYS, ref1: 0 },
-            blend: (GX_BM_NONE, GX_BL_ONE, GX_BL_ZERO),
-            z_mode: (true, GX_LEQUAL, true),
-            cull: GX_CULL_BACK,
-            color_update: true,
             shader: None,
             prim: None,
             verts: Vec::new(),
@@ -409,42 +453,47 @@ impl<'a> Gx<'a> {
         }
     }
 
+    /// The registers as they stand, to start the next frame from.
+    pub fn regs(&self) -> GxRegs {
+        self.r
+    }
+
     // ---- Transform ----
 
     /// `GXSetViewport` (the near/far depth range is always 0..1 here).
     pub fn set_viewport(&mut self, x: f32, y: f32, w: f32, h: f32) {
-        self.viewport = [x, y, w, h];
+        self.r.viewport = [x, y, w, h];
     }
 
     /// `GXSetProjection`
     pub fn set_projection(&mut self, m: &Mtx44) {
-        self.proj = *m;
+        self.r.proj = *m;
     }
 
     /// `GXLoadPosMtxImm`
     pub fn load_pos_mtx_imm(&mut self, m: &Mtx, id: u32) {
-        if let Some(s) = self.pos_mtx.get_mut((id / 3) as usize) {
+        if let Some(s) = self.r.pos_mtx.get_mut((id / 3) as usize) {
             *s = *m;
         }
     }
 
     /// `GXLoadNrmMtxImm`
     pub fn load_nrm_mtx_imm(&mut self, m: &Mtx, id: u32) {
-        if let Some(s) = self.nrm_mtx.get_mut((id / 3) as usize) {
+        if let Some(s) = self.r.nrm_mtx.get_mut((id / 3) as usize) {
             *s = *m;
         }
     }
 
     /// `GXLoadTexMtxImm`
     pub fn load_tex_mtx_imm(&mut self, m: &Mtx, id: u32) {
-        if let Some(s) = id.checked_sub(GX_TEXMTX0).and_then(|i| self.tex_mtx.get_mut((i / 3) as usize)) {
+        if let Some(s) = id.checked_sub(GX_TEXMTX0).and_then(|i| self.r.tex_mtx.get_mut((i / 3) as usize)) {
             *s = *m;
         }
     }
 
     /// `GXSetCurrentMtx`
     pub fn set_current_mtx(&mut self, id: u32) {
-        self.cur_mtx = id;
+        self.r.cur_mtx = id;
     }
 
     // ---- Vertex format ----
@@ -456,14 +505,14 @@ impl<'a> Gx<'a> {
     /// `GXSetVtxAttrFmt`: only the component type and fraction bits matter
     /// for immediate mode.
     pub fn set_vtx_attr_fmt(&mut self, fmt: u8, attr: u8, _cnt: u8, ty: u8, frac: u8) {
-        if let Some(a) = attr.checked_sub(GX_VA_POS).and_then(|i| self.attr_fmt.get_mut(fmt as usize)?.get_mut(i as usize)) {
+        if let Some(a) = attr.checked_sub(GX_VA_POS).and_then(|i| self.r.attr_fmt.get_mut(fmt as usize)?.get_mut(i as usize)) {
             *a = (ty, frac);
         }
     }
 
     fn fixed(&self, attr: u8, raw: i32) -> f32 {
         let fmt = self.prim.map(|p| p.1).unwrap_or(0) as usize;
-        let (ty, frac) = self.attr_fmt[fmt][(attr - GX_VA_POS) as usize];
+        let (ty, frac) = self.r.attr_fmt[fmt][(attr - GX_VA_POS) as usize];
         // The wire carries the low bits; the format says how to read them.
         let v = match ty {
             GX_U8 => raw as u8 as i32,
@@ -479,7 +528,7 @@ impl<'a> Gx<'a> {
 
     /// `GXSetNumChans`
     pub fn set_num_chans(&mut self, n: u8) {
-        self.num_chans = n;
+        self.r.num_chans = n;
     }
 
     /// `GXSetChanCtrl`
@@ -496,7 +545,7 @@ impl<'a> Gx<'a> {
             _ => &[],
         };
         for &i in idx {
-            self.chans[i] = c;
+            self.r.chans[i] = c;
         }
     }
 
@@ -512,14 +561,14 @@ impl<'a> Gx<'a> {
     /// ALPHA0 only alpha.
     pub fn set_chan_mat_color(&mut self, chan: u8, c: [u8; 4]) {
         for &i in Self::chan_regs(chan) {
-            Self::write_chan_color(&mut self.mat_color[i], chan, c);
+            Self::write_chan_color(&mut self.r.mat_color[i], chan, c);
         }
     }
 
     /// `GXSetChanAmbColor`
     pub fn set_chan_amb_color(&mut self, chan: u8, c: [u8; 4]) {
         for &i in Self::chan_regs(chan) {
-            Self::write_chan_color(&mut self.amb_color[i], chan, c);
+            Self::write_chan_color(&mut self.r.amb_color[i], chan, c);
         }
     }
 
@@ -534,7 +583,7 @@ impl<'a> Gx<'a> {
     /// `GXLoadLightObjImm`: `id` is the light's bit (GX_LIGHT0 = 1).
     pub fn load_light_obj_imm(&mut self, l: &LightObj, id: u8) {
         if id != 0 {
-            self.lights[id.trailing_zeros() as usize & 7] = *l;
+            self.r.lights[id.trailing_zeros() as usize & 7] = *l;
         }
     }
 
@@ -542,13 +591,13 @@ impl<'a> Gx<'a> {
 
     /// `GXSetNumTexGens`
     pub fn set_num_tex_gens(&mut self, n: u8) {
-        self.num_tex_gens = n;
+        self.r.num_tex_gens = n;
     }
 
     /// `GXSetTexCoordGen` / `GXSetTexCoordGen2` (no normalize or post
     /// matrix).
     pub fn set_tex_coord_gen(&mut self, dst: u8, kind: u8, src: u8, mtx: u32) {
-        if let Some(g) = self.tex_gens.get_mut(dst as usize) {
+        if let Some(g) = self.r.tex_gens.get_mut(dst as usize) {
             *g = TexGen { kind, src, mtx: mtx as u8 };
         }
     }
@@ -568,18 +617,18 @@ impl<'a> Gx<'a> {
 
     fn tev_mut(&mut self, stage: u8) -> Option<&mut TevStage> {
         self.shader = None;
-        self.tev_stages.get_mut(stage as usize)
+        self.r.tev_stages.get_mut(stage as usize)
     }
 
     /// `GXSetNumTevStages`
     pub fn set_num_tev_stages(&mut self, n: u8) {
-        self.num_tev_stages = n;
+        self.r.num_tev_stages = n;
         self.shader = None;
     }
 
     /// `GXSetTevOrder`
     pub fn set_tev_order(&mut self, stage: u8, coord: u8, map: u8, color: u8) {
-        if let Some(o) = self.tev_orders.get_mut(stage as usize) {
+        if let Some(o) = self.r.tev_orders.get_mut(stage as usize) {
             *o = TevOrder { texcoord: coord, texmap: map, channel: color };
             self.shader = None;
         }
@@ -632,9 +681,46 @@ impl<'a> Gx<'a> {
 
     /// `GXSetTevColor` / `GXSetTevColorS10`: `id` 0 is TEVPREV, 1..3 REG0..2.
     pub fn set_tev_color_s10(&mut self, id: u8, c: [i16; 4]) {
-        if let Some(r) = self.tev_regs.get_mut(id as usize) {
+        if let Some(r) = self.r.tev_regs.get_mut(id as usize) {
             *r = c;
             self.shader = None;
+        }
+    }
+
+    /// `GXSetTevKColor`
+    pub fn set_tev_kcolor(&mut self, id: u8, c: [u8; 4]) {
+        if let Some(k) = self.r.kcolor.get_mut(id as usize) {
+            *k = c;
+            self.shader = None;
+        }
+    }
+
+    /// `GXSetTevKColorSel`
+    pub fn set_tev_kcolor_sel(&mut self, stage: u8, sel: u8) {
+        if let Some(k) = self.r.kcsel.get_mut(stage as usize) {
+            *k = sel;
+            self.shader = None;
+        }
+    }
+
+    /// `GXSetTevKAlphaSel`
+    pub fn set_tev_kalpha_sel(&mut self, stage: u8, sel: u8) {
+        if let Some(k) = self.r.kasel.get_mut(stage as usize) {
+            *k = sel;
+            self.shader = None;
+        }
+    }
+
+    /// The value a konst selection reads: 0..7 are the fixed fractions
+    /// 1, 7/8 .. 1/8; 0x0C..0x0F a whole KCOLOR (color only); 0x10..0x1F one
+    /// component (R, G, B, A in groups of four) of KCOLOR0..3.
+    fn konst(&self, sel: u8) -> [f32; 4] {
+        let k = |i: u8| self.r.kcolor[(i & 3) as usize].map(|c| c as f32 / 255.0);
+        match sel {
+            0..=7 => [(8 - sel) as f32 / 8.0; 4],
+            0x0C..=0x0F => k(sel),
+            0x10..=0x1F => [k(sel)[((sel - 0x10) / 4) as usize]; 4],
+            _ => [0.0; 4],
         }
     }
 
@@ -642,29 +728,29 @@ impl<'a> Gx<'a> {
 
     /// `GXSetAlphaCompare`
     pub fn set_alpha_compare(&mut self, comp0: u8, ref0: u8, op: u8, comp1: u8, ref1: u8) {
-        self.alpha_compare = AlphaCompare { comp0, ref0, op, comp1, ref1 };
+        self.r.alpha_compare = AlphaCompare { comp0, ref0, op, comp1, ref1 };
         self.shader = None;
     }
 
     /// `GXSetBlendMode` (logic ops are not supported).
     pub fn set_blend_mode(&mut self, mode: u8, src: u8, dst: u8) {
-        self.blend = (mode, src, dst);
+        self.r.blend = (mode, src, dst);
     }
 
     /// `GXSetZMode`
     pub fn set_z_mode(&mut self, enable: bool, func: u8, update: bool) {
-        self.z_mode = (enable, func, update);
+        self.r.z_mode = (enable, func, update);
     }
 
     /// `GXSetCullMode`
     pub fn set_cull_mode(&mut self, mode: u8) {
-        self.cull = mode;
+        self.r.cull = mode;
     }
 
     /// `GXSetColorUpdate`. With color updates off nothing is drawn (the
     /// rasterizer has no depth-only pass).
     pub fn set_color_update(&mut self, on: bool) {
-        self.color_update = on;
+        self.r.color_update = on;
     }
 
     /// `GXSetAlphaUpdate`, `GXSetZCompLoc`: no destination alpha and no early
@@ -760,7 +846,7 @@ impl<'a> Gx<'a> {
             self.open = false;
         }
         let Some((prim, _)) = self.prim.take() else { return };
-        if !self.color_update || self.cull == GX_CULL_ALL {
+        if !self.r.color_update || self.r.cull == GX_CULL_ALL {
             return;
         }
         let verts = core::mem::take(&mut self.verts);
@@ -792,8 +878,8 @@ impl<'a> Gx<'a> {
     }
 
     fn pe_state(&self) -> State {
-        let (enable, _func, update) = self.z_mode;
-        let (mode, _src, dst) = self.blend;
+        let (enable, _func, update) = self.r.z_mode;
+        let (mode, _src, dst) = self.r.blend;
         State {
             z_compare: enable,
             z_update: enable && update,
@@ -802,7 +888,7 @@ impl<'a> Gx<'a> {
                 GX_BM_BLEND => BlendMode::Alpha,
                 _ => BlendMode::None,
             },
-            cull: match self.cull {
+            cull: match self.r.cull {
                 GX_CULL_FRONT => 1,
                 GX_CULL_BACK => 2,
                 _ => 0,
@@ -815,18 +901,23 @@ impl<'a> Gx<'a> {
         if let Some(s) = self.shader {
             return s;
         }
-        let n = (self.num_tev_stages as usize).clamp(1, 16);
-        let reg = |id: usize| Some(self.tev_regs[id]);
+        let n = (self.r.num_tev_stages as usize).clamp(1, 16);
+        let reg = |id: usize| Some(self.r.tev_regs[id]);
         let mat = Material {
-            tev_orders: self.tev_orders[..n].to_vec(),
-            tev_stages: self.tev_stages[..n].to_vec(),
+            tev_orders: self.r.tev_orders[..n].to_vec(),
+            tev_stages: self.r.tev_stages[..n].to_vec(),
             // Material order is REG0, REG1, REG2, PREV.
             tev_colors: [reg(1), reg(2), reg(3), reg(0)],
             textures: core::array::from_fn(|i| Some(i as u16)),
-            alpha_compare: self.alpha_compare,
+            alpha_compare: self.r.alpha_compare,
             ..Material::default()
         };
-        let d = self.arena.alloc(GxDraw { shader: Shader::new(&mat), maps: self.tex_maps });
+        let mut shader = Shader::new(&mat);
+        for i in 0..n {
+            let c = self.konst(self.r.kcsel[i]);
+            shader.set_konst(i, [c[0], c[1], c[2]], self.konst(self.r.kasel[i])[3]);
+        }
+        let d = self.arena.alloc(GxDraw { shader, maps: self.tex_maps });
         self.shader = Some(d);
         d
     }
@@ -834,27 +925,27 @@ impl<'a> Gx<'a> {
     /// XF: one vertex to screen space with its lit color and texcoords, or
     /// `None` when it is behind the eye.
     fn xf(&self, v: &VtxIn) -> Option<SVert> {
-        let m = &self.pos_mtx[(self.cur_mtx / 3) as usize % 10];
+        let m = &self.r.pos_mtx[(self.r.cur_mtx / 3) as usize % 10];
         let eye = mtx::mult_vec(m, v.pos);
-        let p = &self.proj;
+        let p = &self.r.proj;
         let clip: [f32; 4] = core::array::from_fn(|r| p[r][0] * eye[0] + p[r][1] * eye[1] + p[r][2] * eye[2] + p[r][3]);
         let w = clip[3];
         if w <= 1e-6 {
             return None;
         }
         let rw = 1.0 / w;
-        let [vx, vy, vw, vh] = self.viewport;
+        let [vx, vy, vw, vh] = self.r.viewport;
         let x = vx + (1.0 + clip[0] * rw) * 0.5 * vw;
         let y = vy + (1.0 - clip[1] * rw) * 0.5 * vh;
         let z = 1.0 + clip[2] * rw;
 
-        let nm = &self.nrm_mtx[(self.cur_mtx / 3) as usize % 10];
+        let nm = &self.r.nrm_mtx[(self.r.cur_mtx / 3) as usize % 10];
         let n = mtx::mult_vec_sr(nm, v.nrm);
-        let color = if self.num_chans > 0 { self.light(0, eye, n, v.clr[0]) } else { [1.0; 4] };
+        let color = if self.r.num_chans > 0 { self.light(0, eye, n, v.clr[0]) } else { [1.0; 4] };
 
         let mut uv = [[0.0; 2]; MAX_TC];
-        for (g, out) in uv.iter_mut().enumerate().take(self.num_tex_gens as usize) {
-            *out = self.tex_gen(g, v, n);
+        for (g, out) in uv.iter_mut().enumerate().take(self.r.num_tex_gens as usize) {
+            *out = self.tex_gen(g, v);
         }
         Some(SVert { x, y, z, rw, color, uv })
     }
@@ -862,16 +953,16 @@ impl<'a> Gx<'a> {
     /// One color channel (0 or 1) for a vertex at `eye` with normal `n`.
     fn light(&self, chan: usize, eye: Vec3, n: Vec3, vtx: [f32; 4]) -> [f32; 4] {
         let mut out = [0.0; 4];
-        for (ctl, range) in [(self.chans[chan], 0..3), (self.chans[chan + 2], 3..4)] {
+        for (ctl, range) in [(self.r.chans[chan], 0..3), (self.r.chans[chan + 2], 3..4)] {
             for i in range {
-                let mat = if ctl.mat_src == GX_SRC_VTX { vtx[i] } else { self.mat_color[chan][i] as f32 / 255.0 };
+                let mat = if ctl.mat_src == GX_SRC_VTX { vtx[i] } else { self.r.mat_color[chan][i] as f32 / 255.0 };
                 if !ctl.enable {
                     out[i] = mat;
                     continue;
                 }
-                let amb = if ctl.amb_src == GX_SRC_VTX { vtx[i] } else { self.amb_color[chan][i] as f32 / 255.0 };
+                let amb = if ctl.amb_src == GX_SRC_VTX { vtx[i] } else { self.r.amb_color[chan][i] as f32 / 255.0 };
                 let mut sum = amb;
-                for (l, light) in self.lights.iter().enumerate() {
+                for (l, light) in self.r.lights.iter().enumerate() {
                     if ctl.light_mask & (1 << l) != 0 {
                         sum += light.color[i] as f32 / 255.0 * Self::light_term(light, &ctl, eye, n);
                     }
@@ -917,11 +1008,13 @@ impl<'a> Gx<'a> {
         diffuse * attn
     }
 
-    fn tex_gen(&self, g: usize, v: &VtxIn, n: Vec3) -> [f32; 2] {
-        let tg = self.tex_gens[g];
+    fn tex_gen(&self, g: usize, v: &VtxIn) -> [f32; 2] {
+        let tg = self.r.tex_gens[g];
         let src = match tg.src {
             GX_TG_POS => [v.pos[0], v.pos[1], v.pos[2], 1.0],
-            GX_TG_NRM => [n[0], n[1], n[2], 1.0],
+            // The vertex's own normal, as sent: a normal-sourced texgen
+            // gets its transform from the texture matrix alone.
+            GX_TG_NRM => [v.nrm[0], v.nrm[1], v.nrm[2], 1.0],
             s if (GX_TG_TEX0..GX_TG_TEX0 + 8).contains(&s) => {
                 let t = v.tex[(s - GX_TG_TEX0) as usize];
                 [t[0], t[1], 1.0, 1.0]
@@ -931,7 +1024,7 @@ impl<'a> Gx<'a> {
         if tg.mtx as u32 == GX_IDENTITY {
             return [src[0], src[1]];
         }
-        let Some(m) = (tg.mtx as u32).checked_sub(GX_TEXMTX0).and_then(|i| self.tex_mtx.get((i / 3) as usize)) else {
+        let Some(m) = (tg.mtx as u32).checked_sub(GX_TEXMTX0).and_then(|i| self.r.tex_mtx.get((i / 3) as usize)) else {
             return [src[0], src[1]];
         };
         let row = |r: usize| m[r][0] * src[0] + m[r][1] * src[1] + m[r][2] * src[2] + m[r][3] * src[3];
