@@ -116,9 +116,9 @@ pub fn scale_cols(m: &mut Mtx, s: Vec3) {
     }
 }
 
-/// `MtxInverse33` (0x81307820): inverse of the 3x3 part with the translation
-/// cleared, or `None` when it is singular.
-#[allow(dead_code)] // no caller ported yet
+/// `MtxInverse33` (0x81307820): the transposed inverse of the 3x3 part
+/// (the normal matrix) with the translation cleared, or `None` when it is
+/// singular.
 pub fn inverse33(a: &Mtx) -> Option<Mtx> {
     let det = a[0][0] * a[1][1] * a[2][2] + a[0][1] * a[1][2] * a[2][0] + a[0][2] * a[1][0] * a[2][1]
         - a[2][0] * a[1][1] * a[0][2]

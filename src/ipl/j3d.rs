@@ -141,6 +141,9 @@ pub struct Shape {
     pub has_uv: bool,
     /// Joint of the first packet (all IPL shapes have one packet).
     pub joint: u16,
+    /// The joint BS2 draws the whole shape with (`fn_81304854`): DRW1 entry
+    /// of the first packet's "use matrix" index.
+    pub draw_joint: u16,
     pub bbox_min: [f32; 3],
     pub bbox_max: [f32; 3],
 }
@@ -505,6 +508,21 @@ pub struct Draw {
     pub joint: u16,
 }
 
+/// A scene graph node, as BS2's `fn_81303838` links the INF1 entries:
+/// `child` is the first node under it, `next` its next sibling.
+#[derive(Clone, Copy, Debug)]
+pub struct Node {
+    /// 0x10 joint, 0x11 material, 0x12 shape.
+    pub ty: u16,
+    pub index: u16,
+    pub child: Option<u16>,
+    pub next: Option<u16>,
+}
+
+pub const NODE_JOINT: u16 = 0x10;
+pub const NODE_MATERIAL: u16 = 0x11;
+pub const NODE_SHAPE: u16 = 0x12;
+
 /// A parsed J3D model.
 #[derive(Clone, Debug)]
 pub struct Model {
@@ -515,6 +533,8 @@ pub struct Model {
     pub materials: Vec<Material>,
     pub textures: Vec<Texture>,
     pub draws: Vec<Draw>,
+    /// The INF1 hierarchy as BS2 links it; node 0 is the root.
+    pub nodes: Vec<Node>,
     /// Whether MAT1 materials were decoded (false for MAT3 files).
     pub materials_decoded: bool,
 }
@@ -793,6 +813,7 @@ fn parse_shp1(b: &[u8], s: usize, vtx: &Vtx, drw: &[u16]) -> Result<Vec<Shape>> 
             has_color: has(11) && vtx.col0.is_some(),
             has_uv: has(13) && vtx.tex0.is_some(),
             joint: 0,
+            draw_joint: 0,
             bbox_min: f3(0x10)?,
             bbox_max: f3(0x1C)?,
         };
@@ -810,6 +831,7 @@ fn parse_shp1(b: &[u8], s: usize, vtx: &Vtx, drw: &[u16]) -> Result<Vec<Shape>> 
             }
             if p == 0 {
                 shape.joint = mtx_list[0];
+                shape.draw_joint = drw.get(be16(b, md)? as usize).copied().unwrap_or(0);
             }
             let pl = packets + (first_pkt + p) * 8;
             let size = be32(b, pl)? as usize;
@@ -1075,6 +1097,47 @@ fn parse_tex1(b: &[u8], s: usize) -> Result<Vec<Texture>> {
 
 // ---------------------------------------------------------------- INF1
 
+/// `fn_81303838`: one node per joint, material and shape entry, in file
+/// order. A "down" entry makes the last node the parent of the ones that
+/// follow; "up" goes back to that parent's parent (`fn_813054D4`). Nodes
+/// with no open parent (the root and anything after it at the top level)
+/// are left unlinked, as in BS2.
+fn inf1_nodes(b: &[u8], s: usize) -> Result<Vec<Node>> {
+    let mut p = at(s, be32(b, s + 0x14)?)?;
+    let mut nodes: Vec<Node> = Vec::new();
+    let mut parent_of: Vec<Option<u16>> = Vec::new();
+    let mut cur: Option<u16> = None;
+    for _ in 0..0x10000 {
+        let ty = be16(b, p)?;
+        let index = be16(b, p + 2)?;
+        p += 4;
+        match ty {
+            0x00 => return Ok(nodes),
+            0x01 => cur = nodes.len().checked_sub(1).map(|n| n as u16),
+            0x02 => cur = cur.and_then(|c| parent_of[c as usize]),
+            NODE_JOINT | NODE_MATERIAL | NODE_SHAPE => {
+                let n = nodes.len() as u16;
+                nodes.push(Node { ty, index, child: None, next: None });
+                parent_of.push(cur);
+                if let Some(c) = cur {
+                    // fn_81305410: first child, or appended to its siblings.
+                    match nodes[c as usize].child {
+                        None => nodes[c as usize].child = Some(n),
+                        Some(mut sib) => {
+                            while let Some(nx) = nodes[sib as usize].next {
+                                sib = nx;
+                            }
+                            nodes[sib as usize].next = Some(n);
+                        }
+                    }
+                }
+            }
+            _ => return Err(Error::BadValue(p - 4)),
+        }
+    }
+    Ok(nodes)
+}
+
 fn walk_inf1(b: &[u8], s: usize, joints: &mut [Joint], draws: &mut Vec<Draw>) -> Result<()> {
     let mut p = at(s, be32(b, s + 0x14)?)?;
     // Stack of open nodes: (type, index).
@@ -1146,6 +1209,10 @@ impl Model {
             (None, Some(m)) => (parse_mat3_names(b, m)?, false),
             _ => (Vec::new(), false),
         };
+        let nodes = match s.inf1 {
+            Some(i) => inf1_nodes(b, i)?,
+            None => Vec::new(),
+        };
         let mut draws = Vec::new();
         match s.inf1 {
             Some(i) => walk_inf1(b, i, &mut joints, &mut draws)?,
@@ -1160,7 +1227,7 @@ impl Model {
         }
         // Drop draws that point outside the tables rather than fail later.
         draws.retain(|d| (d.shape as usize) < shapes.len());
-        Ok(Model { kind, joints, shapes, materials, textures, draws, materials_decoded })
+        Ok(Model { kind, joints, shapes, materials, textures, draws, nodes, materials_decoded })
     }
 
     /// Bind-pose world matrix of `joint` (identity when out of range).

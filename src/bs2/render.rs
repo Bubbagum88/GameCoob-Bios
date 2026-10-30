@@ -92,6 +92,11 @@ impl Prepared {
         self.shaders.get(i)
     }
 
+    /// Texture `i` of the model, decoded.
+    pub fn tex(&self, i: u16) -> Option<&FastTex> {
+        self.texs.get(i as usize)
+    }
+
     pub fn new(model: Model) -> Prepared {
         let shaders = model.materials.iter().map(Shader::new).collect();
         let texs = model.textures.iter().map(FastTex::new).collect();
@@ -253,30 +258,4 @@ fn draw_model_impl<'a>(
             list.push(Prim { v: [a, b, c], st, sh });
         }
     }
-}
-
-/// Joint matrices for an animated pose: `local(j)` gives each joint's
-/// (scale, rotation, translation); parents are composed in order.
-pub fn pose(m: &Model, local: impl Fn(usize) -> Option<([f32; 3], [i16; 3], [f32; 3])>) -> Vec<Mtx> {
-    let mut out: Vec<Option<Mtx>> = alloc::vec![None; m.joints.len()];
-    fn resolve(m: &Model, i: usize, out: &mut Vec<Option<Mtx>>, local: &dyn Fn(usize) -> Option<([f32; 3], [i16; 3], [f32; 3])>, depth: u32) -> Mtx {
-        if let Some(x) = out[i] {
-            return x;
-        }
-        let j = &m.joints[i];
-        let l = match local(i) {
-            Some((s, r, t)) => j3d::srt_mtx(s, r, t),
-            None => j.local(),
-        };
-        let w = match j.parent {
-            Some(p) if (p as usize) < m.joints.len() && depth < 64 => psmtx::concat(&resolve(m, p as usize, out, local, depth + 1), &l),
-            _ => l,
-        };
-        out[i] = Some(w);
-        w
-    }
-    for i in 0..m.joints.len() {
-        resolve(m, i, &mut out, &local, 0);
-    }
-    out.into_iter().map(|x| x.unwrap_or(psmtx::IDENTITY)).collect()
 }

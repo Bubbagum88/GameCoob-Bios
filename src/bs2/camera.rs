@@ -2,6 +2,7 @@
 
 use super::bs2main::DispSettings;
 use super::mtx::{self, Srt};
+use crate::sdk::gx::{Gx, LightObj};
 use crate::sdk::mtx::{self as psmtx, Mtx, Vec3};
 
 /// Eye distance at which 448 units fill the screen height: 224 / tan(fovy / 2).
@@ -40,10 +41,22 @@ pub fn view(disp: &DispSettings, y: f32) -> Mtx {
     psmtx::look_at([0.0, y, eye_dist(disp)], [0.0, 1.0, 0.0], [0.0, y, 0.0])
 }
 
-/// `fn_81302FA0`: GX_LIGHT0, white, at (400, 500, 200) in world space;
-/// returns its view-space position.
+/// The view-space position of GX_LIGHT0, at (400, 500, 200) in world
+/// space.
 pub fn light_pos(view: &Mtx) -> Vec3 {
     psmtx::mult_vec(view, [400.0, 500.0, 200.0])
+}
+
+/// `fn_81302FA0`: load GX_LIGHT0, white, at [`light_pos`], its direction
+/// the view's origin (unused: BS2's channels have no spot attenuation).
+pub fn load_light(gx: &mut Gx, view: &Mtx) {
+    let mut light = LightObj::default();
+    let pos = light_pos(view);
+    let dir = psmtx::mult_vec(view, [0.0; 3]);
+    light.init_pos(pos[0], pos[1], pos[2]);
+    light.init_dir(dir[0], dir[1], dir[2]);
+    light.init_color([255; 4]);
+    gx.load_light_obj_imm(&light, 1);
 }
 
 /// `GX_Setup2DView` (0x813030B0): the 2D model-view, 584 x 448 layout units

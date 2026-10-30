@@ -1,6 +1,7 @@
 //! A material's TEV stages compiled once into a compact form, and textures
 //! converted to float texels, so the per-pixel path is plain arithmetic.
-//! Semantics follow `Material::shade` (konst inputs read as 1.0).
+//! Semantics follow `Material::shade` (konst inputs read as 1.0 unless
+//! [`Shader::set_konst`] sets them).
 
 use crate::ipl::gx::{self, Texture};
 use crate::ipl::j3d::{Material, TevStage};
@@ -146,6 +147,9 @@ struct Stage {
     cbias: f32,
     ascale: f32,
     abias: f32,
+    /// What GX_CC_KONST and GX_CA_KONST read (1.0 unless set).
+    kc: [f32; 3],
+    ka: f32,
 }
 
 #[derive(Clone)]
@@ -213,6 +217,8 @@ impl Shader {
                     cbias: bias(st.color_bias),
                     ascale: scale(st.alpha_scale),
                     abias: bias(st.alpha_bias),
+                    kc: [1.0; 3],
+                    ka: 1.0,
                 }
             })
             .collect();
@@ -227,6 +233,15 @@ impl Shader {
         let r = if i == 3 { 0 } else { i + 1 };
         if let Some(reg) = self.regs.get_mut(r) {
             *reg = c;
+        }
+    }
+
+    /// Set the konst color and alpha stage `i` reads (`GXSetTevKColorSel`,
+    /// `GXSetTevKAlphaSel`).
+    pub fn set_konst(&mut self, i: usize, c: [f32; 3], a: f32) {
+        if let Some(s) = self.stages.get_mut(i) {
+            s.kc = c;
+            s.ka = a;
         }
     }
 
@@ -259,8 +274,9 @@ impl Shader {
                     9 => [t[3]; 4],
                     10 => r,
                     11 => [r[3]; 4],
-                    12 | 14 => [1.0; 4],
+                    12 => [1.0; 4],
                     13 => [0.5; 4],
+                    14 => return s.kc,
                     _ => [0.0; 4],
                 };
                 [v[0], v[1], v[2]]
@@ -270,7 +286,7 @@ impl Shader {
                     0..=3 => regs[id as usize][3],
                     4 => t[3],
                     5 => r[3],
-                    6 => 1.0,
+                    6 => s.ka,
                     _ => 0.0,
                 }
             };
