@@ -550,10 +550,10 @@ impl Menu {
             frame: 0,
             info,
             fx: Mosaic::new(),
-            game_icon: icons::GameIcon::new(),
-            card_icon: icons::CardIcon::new(),
-            clock_icon: icons::ClockIcon::new(),
-            option_icon: icons::OptionIcon::new(),
+            game_icon: icons::GameIcon::new(&ma.icons),
+            card_icon: icons::CardIcon::new(&ma.icons),
+            clock_icon: icons::ClockIcon::new(&ma.icons),
+            option_icon: icons::OptionIcon::new(&ma.icons),
         };
         m.calc_cube_mtx();
         m
@@ -696,8 +696,9 @@ impl Menu {
     }
 
     /// Menu_UpdateIcons (0x813123B0): face, enter or hide for each
-    /// submenu's icon cube, then their matrices.
-    fn update_icons(&mut self, d: &icons::IconData) {
+    /// submenu's icon cube, then their matrices. It runs before
+    /// Menu_AnimCube, so the icons sit in last frame's cube matrix.
+    fn update_icons(&mut self, d: &icons::IconData, view: &Mtx) {
         let phase = |face: St, sub: St| match self.state {
             st if st == face => icons::Phase::Face,
             st if st == sub => icons::Phase::Enter,
@@ -711,6 +712,10 @@ impl Menu {
         self.option_icon.update(p, d);
         let p = phase(St::ClockFace, St::Clock);
         self.clock_icon.update(p, &self.info.time);
+        self.card_icon.calc_mtx(d, &self.cube, view);
+        self.game_icon.calc_mtx(d, &self.cube, view);
+        self.option_icon.calc_mtx(d, &self.cube, view);
+        self.clock_icon.calc_mtx(d, &self.cube, view);
     }
 
     /// Menu_UpdateSlotGlow (0x8131247C): a slot's picture on the card face
@@ -821,8 +826,9 @@ impl Menu {
     }
 
     /// One menu frame: Menu_Update (Scene state 5), plus GameCoob's own
-    /// keys and dialog first. Returns an action for the firmware.
-    pub fn update(&mut self, ma: &MenuAssets, pad: &Pad) -> core::option::Option<Action> {
+    /// keys and dialog first. `view` is the camera's (`Camera_GetView`).
+    /// Returns an action for the firmware.
+    pub fn update(&mut self, ma: &MenuAssets, view: &Mtx, pad: &Pad) -> core::option::Option<Action> {
         // GameCoob: the fake drive's tray, the fake card slots and the
         // system dialog, which takes the input while it is up. The card
         // and drive backends stand in for the card thread and the DVD
@@ -849,7 +855,7 @@ impl Menu {
         // sErrorMsg) don't happen with the dummy backends. disp->menuFlag
         // is cleared by the scene (Intro::update).
         self.update_rotation();
-        self.update_icons(&ma.icons);
+        self.update_icons(&ma.icons, view);
         self.update_slot_glow();
         self.update_guide();
         self.update_sub_faders();
@@ -1086,10 +1092,10 @@ impl Menu {
             }
         };
         glass(gx, &mut cube, BIG_CUBE_BACK);
-        self.card_icon.draw(gx, &ma.icons, view, &self.cube);
-        self.game_icon.draw(gx, &ma.icons, view, &self.cube);
-        self.option_icon.draw(gx, &ma.icons, view, &self.cube);
-        self.clock_icon.draw(gx, &ma.icons, view, &self.cube);
+        self.card_icon.draw(gx, &ma.icons);
+        self.game_icon.draw(gx, &ma.icons);
+        self.option_icon.draw(gx, &ma.icons);
+        self.clock_icon.draw(gx, &ma.icons);
         glass(gx, &mut cube, BIG_CUBE_FRONT);
         let mut ui = Ui { gx, view, mv: psmtx::IDENTITY };
         self.draw_faces(&mut ui, ma, view, bg);

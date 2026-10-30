@@ -28,6 +28,7 @@ use core::sync::atomic::{AtomicU16, Ordering};
 static CUR_MAT: AtomicU16 = AtomicU16::new(0xFFFF);
 
 /// `GMRInstance`: one placed model.
+#[derive(Clone)]
 pub struct Instance {
     /// Model-view matrix of each joint, from [`calc_joints`] or
     /// [`animate_joints`].

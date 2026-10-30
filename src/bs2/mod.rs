@@ -21,6 +21,7 @@ pub mod menu;
 pub mod mtx;
 pub mod raster;
 pub mod render;
+pub mod rnd;
 pub mod scene;
 pub mod shader;
 pub mod ui;
@@ -131,6 +132,7 @@ impl Intro {
     /// `Scene_Init(TRUE)` on a boot with no disc.
     pub fn new(a: &Assets) -> Intro {
         mtx::sin_table_init(12);
+        rnd::rand_init();
         let disp = bs2main::disp_settings();
         Intro {
             cube: Cube::new(a.path.clone()),
@@ -322,6 +324,11 @@ impl Intro {
 
     /// The frame's camera (`Camera_GetView`), light and projection
     /// (`fn_81301100`).
+    /// `Camera_GetView`: the view `fn_81302DF0` set up this frame.
+    pub fn camera_view(&self) -> Mtx {
+        View::intro(self.cam_y, self.ortho).view
+    }
+
     pub fn view(&self, vp: [f32; 2]) -> View {
         let mut view = View::intro(self.cam_y, self.ortho);
         view.vp = vp;
