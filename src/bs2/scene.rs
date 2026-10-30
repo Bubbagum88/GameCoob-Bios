@@ -5,6 +5,7 @@
 //! machine around them is [`super::Intro`].
 
 use super::gbase;
+use super::menu::Work;
 use super::mtx::{self, cos_s, sin_s, to_s16};
 use crate::sdk::mtx::{self as psmtx, Mtx};
 
@@ -401,34 +402,32 @@ impl Scene {
 
     /// `Scene_CalcSpinOutMtx` (0x8130EA34): the spin-out cube matrix, the
     /// intro wobble blended into the menu cube's idle wobble as the spin
-    /// slows down. `frame` is `MenuWork.wobbleFrame`, advanced by 7 when
-    /// `advance` is set.
-    pub fn calc_spin_out_mtx(&self, frame: &mut i16, advance: bool) -> Mtx {
-        let mut fr = *frame;
+    /// slows down. Advances `menu.wobble_frame` by 7 when `advance` is set.
+    pub fn calc_spin_out_mtx(&self, menu: &mut Work, advance: bool) -> Mtx {
+        let mut frame = menu.wobble_frame;
         let phase = self.wobble_phase as i32;
         let amp = self.wobble_amp as f32;
         let k = self.spin_speed / self.spin_threshold as f32;
         let tilt = 1.0 - self.spin_tilt;
         if self.out_frame == 1 {
-            fr = 0;
+            frame = 0;
         }
         let a = tilt * k;
         let b = 1.0 - a;
-        // MenuWork's wobble defaults (Menu_Init).
-        let f = fr as i32;
-        let ty = 6.0 * sin_s(50 * f);
-        let tx = 15.0 * sin_s(-0x4000 + 25 * f);
+        let f = frame as i32;
+        let ty = menu.wobble_amp_ty as f32 * sin_s(menu.wobble_speed_ty as i32 * f);
+        let tx = menu.wobble_amp_tx as f32 * sin_s(menu.wobble_phase_tx as i32 + menu.wobble_speed_tx as i32 * f);
         let s16 = |x: f32| x as i32 as i16 as i32;
         let m = mtx::rot_trans(
-            to_s16(a * (8191.0 + amp * sin_s(s16(90.0 * phase as f32))) + b * (350.0 * cos_s(50 * f))) as i32,
-            to_s16(a * (-6371.0 + amp * sin_s(s16(60.0 * phase as f32))) + b * (1000.0 * cos_s(-15000 + 25 * f))) as i32,
-            to_s16(a * (-5461.0 + amp * sin_s(s16(70.0 * phase as f32))) + b * (1000.0 * cos_s(25 * f))) as i32,
+            to_s16(a * (8191.0 + amp * sin_s(s16(90.0 * phase as f32))) + b * (menu.wobble_amp[0] as f32 * cos_s(menu.wobble_speed[0] as i32 * f))) as i32,
+            to_s16(a * (-6371.0 + amp * sin_s(s16(60.0 * phase as f32))) + b * (menu.wobble_amp[1] as f32 * cos_s(menu.wobble_phase_ry as i32 + menu.wobble_speed[1] as i32 * f))) as i32,
+            to_s16(a * (-5461.0 + amp * sin_s(s16(70.0 * phase as f32))) + b * (menu.wobble_amp[2] as f32 * cos_s(menu.wobble_speed[2] as i32 * f))) as i32,
             [tx, ty, 0.0],
         );
         if advance {
-            fr = fr.wrapping_add(7);
+            frame = frame.wrapping_add(7);
         }
-        *frame = fr;
+        menu.wobble_frame = frame;
         m
     }
 
