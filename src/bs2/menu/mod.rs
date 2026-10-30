@@ -149,71 +149,7 @@ impl MenuAssets {
 // Faders
 // ---------------------------------------------------------------------
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum Fade {
-    In,
-    Out,
-    Half,
-}
-
-/// `Fader`: an alpha ramp of `length` frames after `delay` frames.
-#[derive(Clone, Copy, Debug)]
-pub struct Fader {
-    pub frame: i16,
-    pub length: i16,
-    pub delay: i16,
-    pub max: u8,
-}
-
-impl Default for Fader {
-    fn default() -> Self {
-        Fader { frame: 0, length: 20, delay: 0, max: 255 }
-    }
-}
-
-impl Fader {
-    pub fn with_delay(delay: i16) -> Fader {
-        Fader { delay, ..Default::default() }
-    }
-
-    pub fn step(&mut self, mode: Fade) {
-        let end = self.delay + self.length;
-        match mode {
-            Fade::In => self.frame = (self.frame + 1).min(end),
-            Fade::Out => {
-                if self.frame > 0 {
-                    self.frame -= 1;
-                }
-                if self.frame < self.delay {
-                    self.frame = 0;
-                }
-            }
-            Fade::Half => {
-                let mid = self.delay + self.length / 2;
-                if self.frame < mid {
-                    self.frame = if self.frame < self.delay { self.delay } else { self.frame + 1 };
-                } else if self.frame > mid {
-                    self.frame -= 1;
-                }
-            }
-        }
-    }
-
-    pub fn alpha(&self) -> i32 {
-        if self.frame <= self.delay {
-            return 0;
-        }
-        self.max as i32 * (self.frame - self.delay) as i32 / self.length as i32
-    }
-
-    pub fn reset(&mut self) {
-        self.frame = 0;
-    }
-
-    pub fn step_if(&mut self, on: bool) {
-        self.step(if on { Fade::In } else { Fade::Out });
-    }
-}
+pub use super::fader::{Fade, Fader};
 
 // ---------------------------------------------------------------------
 // Cube motion

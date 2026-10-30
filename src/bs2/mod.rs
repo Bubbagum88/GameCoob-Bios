@@ -10,6 +10,7 @@ pub mod bs2main;
 pub mod camera;
 pub mod cube;
 pub mod cube_draw;
+pub mod fader;
 pub mod fx;
 pub mod gbase;
 pub mod ginit;
