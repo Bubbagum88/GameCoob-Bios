@@ -42,6 +42,8 @@ pub struct Pic {
     pub w: f32,
     pub h: f32,
     pub tex: u16,
+    /// How the image fills the pane (`Glh_Fit`).
+    pub fit: u8,
     pub flags: u8,
 }
 
@@ -103,6 +105,7 @@ impl Layout {
                 w: fx(be16(b, o + 8)?),
                 h: fx(be16(b, o + 10)?),
                 tex: be16(b, o + 12)?,
+                fit: be8(b, o + 14)?,
                 flags: be8(b, o + 15)?,
             });
         }
@@ -210,6 +213,7 @@ pub struct Font {
     pub first: u16,
     pub last: u16,
     pub ascent: u16,
+    pub descent: u16,
     pub cell_w: u16,
     pub cell_h: u16,
     pub cols: u16,
@@ -256,6 +260,7 @@ impl Font {
             first,
             last,
             ascent: be16(f, 8)?,
+            descent: be16(f, 0xA)?,
             cell_w: be16(f, 0x10)?,
             cell_h: be16(f, 0x12)?,
             cols: be16(f, 0x1A)?,

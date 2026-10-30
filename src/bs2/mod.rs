@@ -11,8 +11,10 @@ pub mod camera;
 pub mod cube;
 pub mod cube_draw;
 pub mod fader;
+pub mod font;
 pub mod fx;
 pub mod gbase;
+pub mod glh;
 pub mod ginit;
 pub mod gmr;
 pub mod menu;
@@ -259,7 +261,7 @@ impl Intro {
         let vp = [t.w as f32, t.h as f32];
         let mut gx = self.frame_gx(&arena, a, vp);
         match m {
-            Some(m) => m.draw(&mut gx.list, a, ma, &self.spin_out_view(vp)),
+            Some(m) => m.draw(&mut gx, a, ma, &self.spin_out_view(vp)),
             None => {
                 self.draw(&mut gx, a, vp);
                 // Scene_Draw2DSpinOut: the front face fades in over the
@@ -267,7 +269,7 @@ impl Intro {
                 let f = self.spin_frame - (SPINOUT_END - SPINOUT_FACE);
                 if self.state != State0::Intro && f >= 0 {
                     let alpha = (255 * f.min(SPINOUT_FACE) / SPINOUT_FACE) as u8;
-                    menu::Menu::draw_spin_out_face(&mut gx.list, ma, &self.spin_out_view(vp), &self.spin_out_mtx(), alpha);
+                    menu::Menu::draw_spin_out_face(&mut gx, ma, &self.spin_out_view(vp), &self.spin_out_mtx(), alpha);
                 }
             }
         }

@@ -1333,7 +1333,7 @@ impl Card {
         v.vp = ui.view.vp;
         v.light = psmtx::mult_vec(&v.view, [light[0] - 292.0, 224.0 - light[1], LIGHT_Z]);
         for k in [cur, cur ^ 1] {
-            self.draw_blocks(ui.list, &v, ma, cards, k, al[0]);
+            self.draw_blocks(&mut ui.gx.list, &v, ma, cards, k, al[0]);
         }
         let st = &ma.card_str[lang];
         for k in [cur ^ 1, cur] {
