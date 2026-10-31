@@ -17,6 +17,7 @@
 pub mod backend;
 mod card;
 mod game;
+mod options;
 pub mod icons;
 mod system;
 
@@ -160,7 +161,6 @@ pub use super::fader::{Fade, Fader};
 const FACE_HALF: f32 = 144.0;
 const FACE_SHOW: i16 = 0x2E3A;
 const FACE_FADE: i32 = 5000;
-const MAX_TIMEOUT: u16 = 30;
 
 /// `MenuWork` (0x1B8 bytes, `gMenuWork`): the cube's motion and the
 /// menu's tunables. The mosaic's text layout and colours (`fx*`,
@@ -403,10 +403,7 @@ pub struct Menu {
     slot_glow: [i16; 2],
     // Submenus.
     boot_sel: usize,
-    opt_row: usize,
-    opt_edit: bool,
-    opt_timeout: u16,
-    opt_lang: usize,
+    options: options::Options,
     clock: ClockEdit,
     highlight: i16,
     highlight_up: bool,
@@ -414,8 +411,6 @@ pub struct Menu {
     frame: u32,
     pub info: SysInfo,
     fx: Fx,
-    /// `sOptPrevSub`: the Options sub-state at the start of the frame.
-    opt_shown_sub: i16,
     game_icon: icons::GameIcon,
     card_icon: icons::CardIcon,
     clock_icon: icons::ClockIcon,
@@ -513,6 +508,7 @@ impl Menu {
     /// wobbling since.
     pub fn new(info: SysInfo, ma: &MenuAssets, drive: Box<dyn DiscDrive>, cards: Box<dyn MemCards>, w: Work) -> Menu {
         let card = card::Card::new(ma, &*cards);
+        let timeout = info.timeout;
         let delay = w.sub_fade_delay;
         let mut m = Menu {
             w,
@@ -538,10 +534,7 @@ impl Menu {
             lang: 0,
             slot_glow: [0; 2],
             boot_sel: 0,
-            opt_row: 0,
-            opt_edit: false,
-            opt_timeout: 0,
-            opt_lang: 0,
+            options: options::Options::new(&ma.option, 0, timeout),
             clock: ClockEdit::default(),
             highlight: 50,
             highlight_up: true,
@@ -549,7 +542,6 @@ impl Menu {
             frame: 0,
             info,
             fx: Fx::new(),
-            opt_shown_sub: 0,
             game_icon: icons::GameIcon::new(&ma.icons),
             card_icon: icons::CardIcon::new(&ma.icons),
             clock_icon: icons::ClockIcon::new(&ma.icons),
@@ -754,7 +746,7 @@ impl Menu {
             St::Game => [o, o, o, o, o, Some(!self.game.fatal()), o, o],
             St::Option | St::Clock => {
                 // Option_IsTop, Clock_IsTop.
-                let top = if self.state == St::Option { !self.opt_edit } else { self.clock.sub == 0 };
+                let top = if self.state == St::Option { self.options.is_top() } else { self.clock.sub == 0 };
                 [o, o, o, Some(top), Some(!top), Some(!top), Some(top), i]
             }
             St::Card => {
@@ -868,7 +860,7 @@ impl Menu {
         if self.state == St::GameFace && self.next == St::Game {
             self.game.enter();
             // Game_Enter
-            let env = self.fx_env(ma);
+            let env = self.fx_env();
             self.fx.game_update(&ma.fx, env, self.game.starting(), game::Game::fx_message(&*self.drive) as i16);
         }
         if self.state == St::Game && self.next == St::GameFace {
@@ -879,8 +871,7 @@ impl Menu {
         // GameCoob: Options opens on its top row; a note belongs to the
         // submenu it was shown in.
         if self.state == St::OptionFace && self.next == St::Option {
-            self.opt_row = 0;
-            self.opt_edit = false;
+            self.options.enter();
         }
         if self.state != self.next {
             self.message = None;
@@ -926,70 +917,28 @@ impl Menu {
             let next = self.card.update(p, &mut *self.cards, self.w.zoomed_in(), fade_done);
             return (next, None);
         }
+        if self.state == St::Option {
+            let mut note = None;
+            let mut c = options::Ctx {
+                fx_ready: self.fx.is_ready(0),
+                zoomed_in: self.w.zoomed_in(),
+                lang: &mut self.lang,
+                guide_lang: &mut self.guide_lang,
+                timeout: &mut self.info.timeout,
+                note: &mut note,
+            };
+            let r = self.options.update(p, &mut c);
+            if let Some(n) = note {
+                self.notify(n);
+            }
+            return r;
+        }
         // Input waits until the zoom is complete, and in Options and
         // Calendar until the mosaic has assembled (Fx_IsReady(0)).
         if !self.w.zoomed_in() || (matches!(self.state, St::Option | St::Clock) && !self.fx.is_ready(0)) {
             return (self.state, None);
         }
         match self.state {
-            St::Option => {
-                if !self.opt_edit {
-                    if p.b {
-                        return (St::OptionFace, None);
-                    }
-                    if p.up && self.opt_row > 0 {
-                        self.opt_row -= 1;
-                    }
-                    if p.down && self.opt_row < 1 {
-                        self.opt_row += 1;
-                    }
-                    if p.a {
-                        self.opt_edit = true;
-                        self.opt_timeout = self.info.timeout;
-                        self.opt_lang = self.lang;
-                    }
-                    return (St::Option, None);
-                }
-                match self.opt_row {
-                    0 => {
-                        if p.left {
-                            self.opt_timeout = self.opt_timeout.saturating_sub(1);
-                        }
-                        if p.right {
-                            self.opt_timeout = (self.opt_timeout + 1).min(MAX_TIMEOUT);
-                        }
-                        if p.b {
-                            self.opt_edit = false;
-                        }
-                        if p.a {
-                            self.opt_edit = false;
-                            if self.opt_timeout != self.info.timeout {
-                                self.info.timeout = self.opt_timeout;
-                                self.notify(format!("Firmware boot timeout: {} s", self.opt_timeout));
-                                return (St::Option, Some(Action::SetTimeout(self.opt_timeout)));
-                            }
-                        }
-                    }
-                    _ => {
-                        if p.left && self.opt_lang > 0 {
-                            self.opt_lang -= 1;
-                        }
-                        if p.right && self.opt_lang + 1 < LANGS {
-                            self.opt_lang += 1;
-                        }
-                        self.guide_lang = self.opt_lang;
-                        if p.b {
-                            self.opt_edit = false;
-                            self.guide_lang = self.lang;
-                        }
-                        if p.a {
-                            self.opt_edit = false;
-                            self.lang = self.opt_lang;
-                        }
-                    }
-                }
-                (St::Option, None)
-            }
             St::Clock => self.update_clock(p),
             _ => (self.state, None),
         }
@@ -1306,7 +1255,7 @@ impl Menu {
                 SUB_CARD => self.card.draw(ui, ma, &self.w, &*self.cards, self.lang, al),
                 SUB_OPTION => {
                     draw_backdrop(ui, ma, &self.w, al[1]);
-                    self.draw_options(ui, ma, al);
+                    self.options.draw_text(ui, ma, f[2].alpha());
                 }
                 _ => {
                     draw_backdrop(ui, ma, &self.w, al[1]);
@@ -1338,54 +1287,6 @@ impl Menu {
     /// the status lines.
     fn draw_game<'a>(&'a self, ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, al: [f32; 3]) {
         self.game.draw(ui, ma, &self.w, &*self.drive, &self.info, self.lang, al);
-    }
-
-    /// Options: the firmware boot timeout and the menu language.
-    fn draw_options<'a>(&'a self, ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, al: [f32; 3]) {
-        let g = &ma.option;
-        let green = rgb(0, 255, 120);
-        let pairs = [(rgb(180, 255, 0), rgb(20, 100, 50)), (rgb(120, 220, 35), rgb(0, 80, 25))];
-        if let Some(p) = g.text(tag(b"mesg")) {
-            ui.text(&ma.font, p, &cp1252("Choose GameCoob boot settings."), with_a(WHITE, al[2]), 0.0, 0.0);
-        }
-        let hl = self.highlight as f32 / 120.0;
-        // Row 0: timeout.
-        if let Some(p) = g.text(tag(b"txt1")) {
-            let k = if self.opt_row == 0 { 1.0 } else { 0.55 };
-            ui.text(&ma.font, p, &cp1252("Boot Timeout"), with_a(scale(green, k), al[2]), 0.0, 0.0);
-        }
-        // Row 1: language.
-        let lang = if self.opt_edit && self.opt_row == 1 { self.opt_lang } else { self.lang };
-        if let Some(p) = g.text(tag(b"txt3")) {
-            let k = if self.opt_row == 1 { 1.0 } else { 0.55 };
-            let s = ma.option_str[self.guide_lang].get(3).map(|s| s.text.clone()).unwrap_or_else(|| cp1252("Language"));
-            ui.text(&ma.font, p, &s, with_a(scale(green, k), al[2]), 0.0, 0.0);
-        }
-        let (l, d) = pairs[1];
-        for i in 0..LANGS {
-            let t = [b'l', b'a', b'n', b'1' + i as u8];
-            let a = if i == lang { 1.0 } else { 0.45 };
-            for p in g.pic(tag(&t)) {
-                if let Some(tex) = ma.bank.get(p.tex as usize) {
-                    ui.pic(p, tex, with_a(WHITE, a * al[2]), 0.0, 0.0);
-                }
-                if i == lang {
-                    ui.fill(p.x - 30.0, p.y + 16.0, 60.0, 4.0, with_a(l, al[0] * if self.opt_row == 1 { 1.0 } else { 0.5 }));
-                    ui.fill(p.x - 30.0, p.y + 20.0, 60.0, 2.0, with_a(d, al[0]));
-                }
-            }
-        }
-        for i in 0..5u8 {
-            for p in g.pic(tag(&[b's', b'l', b'a', b'1' + i])) {
-                if let Some(tex) = ma.bank.get(p.tex as usize) {
-                    ui.pic(p, tex, with_a(WHITE, 0.5 * al[2]), 0.0, 0.0);
-                }
-            }
-        }
-        // Selection marker on the current row.
-        let y = if self.opt_row == 0 { 102.0 } else { 316.0 };
-        ui.fill(150.0, y - 2.0, 6.0, 6.0, with_a(green, hl * al[2]));
-        ui.fill(432.0, y - 2.0, 6.0, 6.0, with_a(green, hl * al[2]));
     }
 
     /// Calendar: the firmware clock.
@@ -1464,19 +1365,13 @@ impl Menu {
 
     /// What the mosaic reads from the menu: the languages, the Options
     /// language rows and the calendar time.
-    fn fx_env(&self, ma: &MenuAssets) -> fx::Env {
-        let mut lang_y = [0i16; 6];
-        for (i, y) in lang_y.iter_mut().enumerate() {
-            if let Some(p) = ma.option.pic(tag(&[b'l', b'a', b'n', b'1' + i as u8])).next() {
-                *y = libm::floorf(p.y) as i16;
-            }
-        }
+    fn fx_env(&self) -> fx::Env {
         let mut now = self.info.time;
         now[1] -= 1;
         fx::Env {
             lang: self.lang,
-            opt_lang: if self.opt_edit && self.opt_row == 1 { self.opt_lang } else { self.lang },
-            lang_y,
+            opt_lang: self.options.lang,
+            lang_y: self.options.lang_y,
             now,
         }
     }
@@ -1484,20 +1379,15 @@ impl Menu {
     /// The mosaic's frame: the submenus' Fx*_Update (Fx_Update is part of
     /// the draw). Call once per frame after [`Menu::update`].
     pub fn update_fx(&mut self, ma: &MenuAssets) {
-        let env = self.fx_env(ma);
+        let env = self.fx_env();
         match self.state {
             St::Game if self.game_icon.settled() => {
                 let msg = game::Game::fx_message(&*self.drive) as i16;
                 self.fx.game_update(&ma.fx, env, self.game.starting(), msg);
             }
             St::Option if self.option_icon.settled() => {
-                // Ours has two rows and no sound: the boot timeout sits in
-                // the IPL's screen-position row, the language in its
-                // language row.
-                let row = self.opt_row as i16 + 1;
-                let t = if self.opt_edit && self.opt_row == 0 { self.opt_timeout } else { self.info.timeout };
-                self.fx.option_update(&ma.fx, env, self.opt_shown_sub, row, t as i16, 0x7F);
-                self.opt_shown_sub = if self.opt_edit { row + 1 } else { 0 };
+                let o = &self.options;
+                self.fx.option_update(&ma.fx, env, o.prev_sub, o.row, o.offset, o.sound);
             }
             St::Clock if self.clock_icon.settled() => {
                 let k = &mut self.clock;
@@ -1599,10 +1489,6 @@ fn with_a(c: Rgba, a: f32) -> Rgba {
 
 fn rgb(r: u8, g: u8, b: u8) -> Rgba {
     ui::rgba8([r, g, b, 255])
-}
-
-fn scale(c: Rgba, k: f32) -> Rgba {
-    [c[0] * k, c[1] * k, c[2] * k, c[3]]
 }
 
 /// Cut `s` with "..." so it fits `w` at glyph size `size`.
