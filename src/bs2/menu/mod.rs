@@ -21,7 +21,7 @@ pub mod icons;
 mod system;
 
 use super::backdrop;
-use super::fx::{self, screen, Mosaic, MosaicData};
+use super::fx::{self, Fx, FxData};
 use crate::bs2::{bs2main, camera};
 use crate::bs2::mtx::{self, cos_s, sin_s, to_s16};
 use crate::sdk::mtx::{self as psmtx, Mtx};
@@ -98,7 +98,7 @@ pub struct MenuAssets {
     pub dialog: Layout,
     pub backdrop: FastTex,
     pub font: UiFont,
-    pub fx: MosaicData,
+    pub fx: FxData,
     pub icons: icons::IconData,
 }
 
@@ -141,7 +141,7 @@ impl MenuAssets {
             dialog: layout(res::DIALOG)?,
             backdrop,
             font: UiFont::new(glh::Font::parse_rom(ipl.rom()).ok()?),
-            fx: MosaicData::load(ipl)?,
+            fx: FxData::load(ipl)?,
             icons: icons::IconData::load(ipl)?,
         })
     }
@@ -413,7 +413,9 @@ pub struct Menu {
     message: Option<(String, u32)>,
     frame: u32,
     pub info: SysInfo,
-    fx: Mosaic,
+    fx: Fx,
+    /// `sOptPrevSub`: the Options sub-state at the start of the frame.
+    opt_shown_sub: i16,
     game_icon: icons::GameIcon,
     card_icon: icons::CardIcon,
     clock_icon: icons::ClockIcon,
@@ -479,10 +481,6 @@ impl ClockEdit {
 
     /// The time the mosaic shows: `now`, with the field group being edited
     /// taken from the edit buffer.
-    fn shown(&self, now: [i32; 6]) -> [i32; 6] {
-        self.shown_with(self.sub, now)
-    }
-
     fn shown_with(&self, sub: u8, now: [i32; 6]) -> [i32; 6] {
         let mut t = now;
         match sub {
@@ -550,7 +548,8 @@ impl Menu {
             message: None,
             frame: 0,
             info,
-            fx: Mosaic::new(),
+            fx: Fx::new(),
+            opt_shown_sub: 0,
             game_icon: icons::GameIcon::new(&ma.icons),
             card_icon: icons::CardIcon::new(&ma.icons),
             clock_icon: icons::ClockIcon::new(&ma.icons),
@@ -868,6 +867,9 @@ impl Menu {
         }
         if self.state == St::GameFace && self.next == St::Game {
             self.game.enter();
+            // Game_Enter
+            let env = self.fx_env(ma);
+            self.fx.game_update(&ma.fx, env, self.game.starting(), game::Game::fx_message(&*self.drive) as i16);
         }
         if self.state == St::Game && self.next == St::GameFace {
             self.disc_banner.reset();
@@ -926,7 +928,7 @@ impl Menu {
         }
         // Input waits until the zoom is complete, and in Options and
         // Calendar until the mosaic has assembled (Fx_IsReady(0)).
-        if !self.w.zoomed_in() || (matches!(self.state, St::Option | St::Clock) && !self.fx.ready(0)) {
+        if !self.w.zoomed_in() || (matches!(self.state, St::Option | St::Clock) && !self.fx.is_ready(0)) {
             return (self.state, None);
         }
         match self.state {
@@ -1311,13 +1313,13 @@ impl Menu {
                     self.draw_clock(ui, ma, al);
                 }
             }
-            let set = match k {
-                SUB_GAME => Some(fx::set::GAME),
-                SUB_OPTION => Some(fx::set::OPTION),
-                SUB_CLOCK => Some(fx::set::CLOCK),
-                _ => None,
+            let settled = match k {
+                SUB_GAME => self.game_icon.settled(),
+                SUB_OPTION => self.option_icon.settled(),
+                SUB_CLOCK => self.clock_icon.settled(),
+                _ => false,
             };
-            if set.is_some() && set == self.fx.screen() {
+            if settled {
                 self.fx.draw(ui.gx, &ma.fx, ui.view, fx_alpha);
             }
             self.draw_message(ui, ma, al[2]);
@@ -1460,36 +1462,51 @@ impl Menu {
         }
     }
 
-    /// The mosaic's frame (the submenus' Fx*_Update + Fx_Update). Call
-    /// once per frame after [`Menu::update`].
+    /// What the mosaic reads from the menu: the languages, the Options
+    /// language rows and the calendar time.
+    fn fx_env(&self, ma: &MenuAssets) -> fx::Env {
+        let mut lang_y = [0i16; 6];
+        for (i, y) in lang_y.iter_mut().enumerate() {
+            if let Some(p) = ma.option.pic(tag(&[b'l', b'a', b'n', b'1' + i as u8])).next() {
+                *y = libm::floorf(p.y) as i16;
+            }
+        }
+        let mut now = self.info.time;
+        now[1] -= 1;
+        fx::Env {
+            lang: self.lang,
+            opt_lang: if self.opt_edit && self.opt_row == 1 { self.opt_lang } else { self.lang },
+            lang_y,
+            now,
+        }
+    }
+
+    /// The mosaic's frame: the submenus' Fx*_Update (Fx_Update is part of
+    /// the draw). Call once per frame after [`Menu::update`].
     pub fn update_fx(&mut self, ma: &MenuAssets) {
-        let d = &ma.fx;
+        let env = self.fx_env(ma);
         match self.state {
-            St::Game if !self.game.starting() && self.game_icon.settled() => {
-                let msg = game::Game::fx_message(&*self.drive);
-                self.fx.frame(d, fx::set::GAME, self.lang, &fx::GAME_COLORS, |b| screen::game(b, msg));
+            St::Game if self.game_icon.settled() => {
+                let msg = game::Game::fx_message(&*self.drive) as i16;
+                self.fx.game_update(&ma.fx, env, self.game.starting(), msg);
             }
             St::Option if self.option_icon.settled() => {
-                // Ours has two rows: the boot timeout sits in the IPL's
-                // screen-position row, the language in its language row.
-                let row = self.opt_row as u8 + 1;
+                // Ours has two rows and no sound: the boot timeout sits in
+                // the IPL's screen-position row, the language in its
+                // language row.
+                let row = self.opt_row as i16 + 1;
                 let t = if self.opt_edit && self.opt_row == 0 { self.opt_timeout } else { self.info.timeout };
-                let o = screen::Options { sub: if self.opt_edit { row + 1 } else { 0 }, row, stereo: None, offset: Some(t as i32), lang: true };
-                self.fx.frame(d, fx::set::OPTION, self.lang, &fx::OPTION_COLORS, |b| screen::options(b, &o));
+                self.fx.option_update(&ma.fx, env, self.opt_shown_sub, row, t as i16, 0x7F);
+                self.opt_shown_sub = if self.opt_edit { row + 1 } else { 0 };
             }
             St::Clock if self.clock_icon.settled() => {
                 let k = &mut self.clock;
-                let c = screen::Clock {
-                    sub: k.sub,
-                    prev_sub: k.shown_sub,
-                    row: k.row,
-                    date_field: k.date_field,
-                    time_field: k.time_field,
-                    time: k.shown(self.info.time),
-                    keep_sway: true,
-                };
+                let v = k.value;
+                // gClockEdit keeps the month 0..11.
+                let e = if k.sub == 1 { [v[0], v[1] - 1, v[2]] } else { v };
+                let sub = k.shown_sub as i16;
+                self.fx.clock_update(&ma.fx, env, sub, k.row as i16, k.date_field as i16, k.time_field as i16, e.map(|x| x as i16));
                 k.shown_sub = k.sub;
-                self.fx.frame(d, fx::set::CLOCK, self.lang, &fx::CLOCK_COLORS, |b| screen::clock(b, &c));
             }
             _ => {}
         }
