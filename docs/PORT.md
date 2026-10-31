@@ -53,7 +53,7 @@ app counterpart yet.
 | `menu/menu_fx*.c` | `bs2/fx/` (one module per unit: `mod.rs` = `menu_fx.c`, `shape`, `anim`, `draw`, `spark`, `grid`, `wipe`, `morph`), `ipl/fx.rs` | ported: the cube pool and its five eased values, the three `Fx*_Update` in the C order, the sway, digit flights, word wipes and side columns. Shape and glyph data are read raw, as BS2 reads them. `Fx_Draw` draws both AA passes in one frame. GameCoob drives Options with its two rows (boot timeout in the screen-position row, no sound row) |
 | `menu/menu_icon_*.c` | `bs2/menu/icons.rs` | ported: one gMR instance per cube, `*Icon_CalcMtx` run from `Menu_UpdateIcons` (so on last frame's cube matrix), the C's draw order and settled flags. Cubes at alpha 0 are skipped (they draw nothing) |
 | `menu/game.c`, `game_params.c` | `bs2/menu/game.rs` | close; START opens the firmware boot list |
-| `menu/options.c`, `option_params.c` | `bs2/menu/mod.rs` | behavioral; edits the boot timeout |
+| `menu/options.c`, `option_params.c` | `bs2/menu/options.rs` | ported: the three rows and four sub-states, the language faders and `Option_DrawText`. The screen-position row edits the firmware boot timeout (0..30 s, its title says so); the sound mode is kept in RAM until there is audio |
 | `menu/calendar.c`, `clock_params.c` | `bs2/menu/mod.rs` | behavioral; sets the firmware clock |
 | `menu/memcard*.c` | `bs2/menu/card.rs`, `bs2/menu/backend.rs` | close; fake cards in RAM. `CardBlock_DrawFile`/`DrawEmpty` ported |
 | `BS2Mach.c` (boot state machine, DVD) | none | dummy disc for now |
