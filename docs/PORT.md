@@ -50,7 +50,7 @@ app counterpart yet.
 | `pad.c` | `boot_intro.rs` (keyboard to pad) | behavioral |
 | `rnd.c` | `bs2/rnd.rs` over `sdk::os::get_tick` | ported; the host tools' tick is a fixed counter so renders repeat, UEFI uses the TSC |
 | `menu/menu.c` | `bs2/menu/mod.rs` | update ported: `Work` is `MenuWork` (less the mosaic's fields), made at boot by the scene and wobbled by the spin-out; `Menu::update` runs `Menu_Update`'s steps in its order (rotation, icons, slot glow, guide, sub faders, one-shots, latch, cube or zoom-in). No SRAM-lost flag or fatal-error text yet (dummy disc). Draw side close |
-| `menu/menu_fx*.c` | `bs2/fx.rs`, `ipl/fx.rs` | close; `Fx_Draw` ported (both AA-half passes in one frame) |
+| `menu/menu_fx*.c` | `bs2/fx/` (one module per unit: `mod.rs` = `menu_fx.c`, `shape`, `anim`, `draw`, `spark`, `grid`, `wipe`, `morph`), `ipl/fx.rs` | ported: the cube pool and its five eased values, the three `Fx*_Update` in the C order, the sway, digit flights, word wipes and side columns. Shape and glyph data are read raw, as BS2 reads them. `Fx_Draw` draws both AA passes in one frame. GameCoob drives Options with its two rows (boot timeout in the screen-position row, no sound row) |
 | `menu/menu_icon_*.c` | `bs2/menu/icons.rs` | ported: one gMR instance per cube, `*Icon_CalcMtx` run from `Menu_UpdateIcons` (so on last frame's cube matrix), the C's draw order and settled flags. Cubes at alpha 0 are skipped (they draw nothing) |
 | `menu/game.c`, `game_params.c` | `bs2/menu/game.rs` | close; START opens the firmware boot list |
 | `menu/options.c`, `option_params.c` | `bs2/menu/mod.rs` | behavioral; edits the boot timeout |
@@ -69,8 +69,7 @@ app counterpart yet.
    moved over too and `render.rs` keeps only `View` and `Prepared`).
 3. `glh.c`, `font.c`, `fader.c` on `sdk::gx`, under `ui.rs` (done).
 4. The intro: `cube.c`, `cube_draw.c`, `scene*.c` (done; `backdrop.c` goes with the menu).
-5. The menu core, `menu_fx*.c` and the icon units (their model draws and
-   `Menu_Update` done).
+5. The menu core, `menu_fx*.c` and the icon units (done).
 6. Options, Calendar, Game Play and Memory Card, keeping their UEFI and
    dummy backends at the edges.
 7. `gInit.c` and the `BS2Main` loop over `sdk::vi` and `sdk::pad`, replacing

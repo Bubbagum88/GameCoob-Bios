@@ -153,7 +153,6 @@ pub fn inverse33(a: &Mtx) -> Option<Mtx> {
 /// `VecHermite` (0x813079FC): [`hermite`](super::gbase::hermite) per
 /// component between key times `t0` and `t1`, holding the end points outside.
 #[allow(clippy::too_many_arguments)]
-#[allow(dead_code)] // no caller ported yet
 pub fn vec_hermite(p0: Vec3, v0: Vec3, p1: Vec3, v1: Vec3, t: f32, t0: f32, t1: f32) -> Vec3 {
     if t < t0 {
         p0
