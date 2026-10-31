@@ -54,7 +54,7 @@ app counterpart yet.
 | `menu/menu_icon_*.c` | `bs2/menu/icons.rs` | ported: one gMR instance per cube, `*Icon_CalcMtx` run from `Menu_UpdateIcons` (so on last frame's cube matrix), the C's draw order and settled flags. Cubes at alpha 0 are skipped (they draw nothing) |
 | `menu/game.c`, `game_params.c` | `bs2/menu/game.rs` | close; START opens the firmware boot list |
 | `menu/options.c`, `option_params.c` | `bs2/menu/options.rs` | ported: the three rows and four sub-states, the language faders and `Option_DrawText`. The screen-position row edits the firmware boot timeout (0..30 s, its title says so); the sound mode is kept in RAM until there is audio |
-| `menu/calendar.c`, `clock_params.c` | `bs2/menu/mod.rs` | behavioral; sets the firmware clock |
+| `menu/calendar.c`, `clock_params.c` | `bs2/menu/calendar.rs` | ported: the three sub-states, `Clock_FixDate`/`FixTime` (month kept 0..11 as in `gClockEdit`), PAL field order and `Clock_Draw`'s text (title, then the row labels in `textColor`; no bars). `Clock_Commit` sets the firmware clock instead of the SRAM counter bias, and the title says so |
 | `menu/memcard*.c` | `bs2/menu/card.rs`, `bs2/menu/backend.rs` | close; fake cards in RAM. `CardBlock_DrawFile`/`DrawEmpty` ported |
 | `BS2Mach.c` (boot state machine, DVD) | none | dummy disc for now |
 | JAudio, SDK (`dolphin/`), runtime, MSL | none | replaced by `src/sdk/` stand-ins; sound later |
