@@ -9,6 +9,9 @@ extern crate alloc;
 
 mod boot_intro;
 mod bs2;
+// Used by the memory card explorer and card backend (next steps).
+#[allow(dead_code, unused_imports)]
+mod card;
 mod clock;
 mod firmware;
 mod gfx;

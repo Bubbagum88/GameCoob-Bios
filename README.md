@@ -151,13 +151,16 @@ src/
   bs2/       the intro and cube menu rebuilt from BS2: cube and scene state machines,
              GX-style TEV renderer and banded rasterizer, J3D animations, menus
   ipl/       ipl.bin parsing: descrambling, resource archive, Yay0, J3D, textures
+  card/      memory card images (.raw/.mcp/.gcp, 59 to 2043 blocks) and saves
+             (.gci, .gcs, .sav): read, write, convert, banners and icons
   gfx.rs     backbuffer: scales each frame to a 4:3 picture, one GOP blit
   firmware.rs  menu actions: BootNext, Timeout, firmware setup, restart, power off
   vars.rs    UEFI variables: Boot####, BootOrder, BootNext, Timeout, OsIndications
   clock.rs   TSC-based timer for frame-rate-independent animation
 scripts/     build.ps1 (Windows build), QEMU runner, screenshot automation
 local/       your own dump and reference files, never committed
-tools/       host-side checks: ipl-preview (models to PNG), intro-render and menu-render (frames to PNG)
+tools/       host-side checks: ipl-preview (models to PNG), intro-render and menu-render (frames to PNG),
+             card-tool (memory card images and saves on the PC; `cargo test` there tests src/card)
 docs/        roadmap
 ```
 
