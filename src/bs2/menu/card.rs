@@ -1,5 +1,5 @@
-//! Memory Card (BS2 `memcard.c` 0x813157B8..0x8131BC00 and its block
-//! renderer 0x8131ECC4..0x81321714): two slots side by side, every save a
+//! Memory Card (BS2 `memcard.c` 0x813157B8..0x8131BC00; the blocks are
+//! [`super::card_blocks`]): two slots side by side, every save a
 //! small glass block with its icon, the banner and comment of the chosen
 //! save, and Move / Copy / Erase / Format with BS2's dialogs, messages and
 //! block animations. The cards come from [`MemCards`]: fake ones in RAM
@@ -11,12 +11,9 @@
 //! noted as `SE n` comments; there is no sound yet.
 
 use super::backend::{CardError, CardOp, MemCards, Save, SlotState, DIR_ENTRIES};
-use crate::bs2::{gbase, rnd};
-use crate::bs2::mtx::{self, cos_s, sin_s};
-use crate::sdk::mtx::{self as psmtx, Mtx};
-use super::super::gmr::{self, Instance};
-use super::super::render::{Prepared, View};
-use crate::sdk::gx::Gx;
+use super::card_blocks::{Blocks, Sel, SlotInfo};
+use crate::bs2::gbase;
+use super::super::render::View;
 use super::super::shader::FastTex;
 use super::super::ui::{self, Rgba, Ui, UiFont};
 use super::{rgb, with_a, Fade, Fader, MenuAssets, Pad, St, Work, WHITE};
@@ -29,12 +26,6 @@ use alloc::vec::Vec;
 // ---------------------------------------------------------------------
 
 const N: usize = DIR_ENTRIES;
-/// Block zoom: resting and chosen.
-const ZOOM_MIN: f32 = 1.3;
-const ZOOM_MAX: f32 = 2.0;
-const ZOOM_LEN: i16 = 6;
-/// Frames a block takes to reach its grid cell.
-const MOVE_LEN: i16 = 40;
 /// Light height over the grid.
 const LIGHT_Z: f32 = 320.0;
 /// Dialog padding.
@@ -78,40 +69,6 @@ const ENTER_RESET: [usize; 30] = [19, 20, 21, 22, 23, 24, 27, 28, 29, 30, 7, 8, 
 /// Messages `CardDraw_Messages` draws.
 const RESULT_MSGS: [usize; 26] = [19, 20, 21, 22, 23, 24, 27, 28, 29, 30, 7, 8, 9, 10, 11, 12, 15, 16, 17, 18, 31, 32, 43, 44, 45, 46];
 
-/// Sector sizes a card can have, and the block colours for each
-/// (TEVREG0): chosen save, save, chosen free entry, free entry.
-const SIZES: [u32; 6] = [0x2000, 0x4000, 0x8000, 0x10000, 0x20000, 0x40000];
-const COLORS: [[[i16; 3]; 4]; 6] = [
-    [[100, 150, 255], [20, 50, 200], [30, 80, 100], [0, 20, 60]],
-    [[100, 255, 110], [0, 105, 70], [50, 120, 80], [0, 37, 0]],
-    [[200, 255, 75], [80, 120, 0], [90, 110, 0], [28, 34, 0]],
-    [[255, 180, 50], [160, 100, 0], [100, 80, 0], [50, 30, 0]],
-    [[255, 110, 100], [160, 45, 50], [150, 60, 50], [50, 20, 0]],
-    [[200, 80, 190], [90, 30, 170], [100, 40, 90], [45, 0, 60]],
-];
-/// The browser's block models: a save (res 88) and an empty block (res 87).
-pub struct Models {
-    file: Prepared,
-    empty: Prepared,
-}
-
-impl Models {
-    pub fn new(file: Prepared, empty: Prepared) -> Models {
-        Models { file, empty }
-    }
-}
-
-/// `CardBlock_Color(sectorSize, kind, slot)`: 0 the chosen save, 1 another
-/// save, 2 the chosen empty block, 3 another empty block.
-fn block_color(size: usize, kind: usize) -> [i16; 4] {
-    let c = COLORS[size][kind];
-    [c[0], c[1], c[2], 255]
-}
-
-fn size_index(bytes: u32) -> usize {
-    SIZES.iter().position(|&s| s == bytes).unwrap_or(0)
-}
-
 fn map_error(e: CardError) -> i32 {
     match e {
         CardError::NoPermission => NOT_ALLOWED,
@@ -122,126 +79,6 @@ fn map_error(e: CardError) -> i32 {
         CardError::WrongType => WRONG_TYPE,
         CardError::Failed => FAILED,
     }
-}
-
-// ---------------------------------------------------------------------
-// Blocks
-// ---------------------------------------------------------------------
-
-/// One directory entry's block (0x5C bytes on the console).
-#[derive(Clone, Copy)]
-struct Tile {
-    /// Frames to wait before moving, and the frame of the move.
-    start: i16,
-    frame: i16,
-    len: i16,
-    alpha: i16,
-    /// Fading in (true) or out.
-    on: bool,
-    /// Zoom timer and its length.
-    zt: i16,
-    zlen: i16,
-    zoom: f32,
-    zoom_from: f32,
-    zoom_to: f32,
-    pos: [f32; 2],
-    vel: [f32; 2],
-    from: [f32; 2],
-    from_v: [f32; 2],
-    to: [f32; 2],
-}
-
-impl Default for Tile {
-    fn default() -> Tile {
-        Tile {
-            start: 0,
-            frame: 0,
-            len: MOVE_LEN,
-            alpha: 0,
-            on: false,
-            zt: 0,
-            zlen: ZOOM_LEN,
-            zoom: ZOOM_MIN,
-            zoom_from: ZOOM_MIN,
-            zoom_to: ZOOM_MAX,
-            pos: [292.0, 224.0],
-            vel: [0.0; 2],
-            from: [292.0, 224.0],
-            from_v: [0.0; 2],
-            to: [292.0, 224.0],
-        }
-    }
-}
-
-impl Tile {
-    /// One step of the Hermite move (VecHermite clamps outside the range).
-    fn advance(&mut self) {
-        let new = if self.frame >= self.start {
-            let f = (self.frame as f32).min(self.len as f32);
-            [0, 1].map(|k| gbase::hermite(f, self.start as f32, self.from[k], self.from_v[k], self.len as f32, self.to[k], 0.0))
-        } else {
-            self.from
-        };
-        self.vel = [new[0] - self.pos[0], new[1] - self.pos[1]];
-        self.pos = new;
-        self.frame = (self.frame + 1).min(self.len);
-    }
-
-    /// Start a new move to `to` from where the block is now.
-    fn retarget(&mut self) {
-        self.start = 0;
-        self.frame = 0;
-        self.len = MOVE_LEN;
-        self.from = self.pos;
-        self.from_v = self.vel;
-    }
-
-    fn settled(&self) -> bool {
-        self.frame == self.len
-    }
-
-    /// The block's model matrix: its spot, a wobble that grows with the
-    /// zoom, and the zoom.
-    fn mtx(&self, c: i32) -> Mtx {
-        let k = (self.zoom - ZOOM_MIN) / (ZOOM_MAX - ZOOM_MIN);
-        let t = [
-            self.pos[0] - 292.0 + 10.0 * k * sin_s(-0x4000 + 35 * c),
-            224.0 - self.pos[1] - 5.0 * k * sin_s(70 * c),
-            2.0 * k,
-        ];
-        let rx = (350.0 * k * cos_s(70 * c)) as i32;
-        let ry = (1000.0 * k * cos_s(-15000 + 35 * c)) as i32;
-        let rz = (1000.0 * k * cos_s(35 * c)) as i32;
-        psmtx::concat(&mtx::rot_trans(rx, ry, rz, t), &psmtx::scale(self.zoom, self.zoom, self.zoom))
-    }
-}
-
-/// A burst piece of an erased block.
-#[derive(Clone, Copy, Default)]
-struct Spark {
-    frame: i16,
-    len: i16,
-    delay: i16,
-    angle: i16,
-}
-
-impl Spark {
-    /// Progress 0..1 while it flies, `None` before and after.
-    fn t(&self) -> Option<f32> {
-        let d = self.frame - self.delay;
-        (self.frame > self.delay && d <= self.len).then(|| d as f32 / self.len as f32)
-    }
-}
-
-/// The block that leaves its cell while Copy, Move or Erase runs.
-#[derive(Clone, Copy, Default)]
-struct Fly {
-    slot: usize,
-    file: usize,
-    /// Grid cell (col + row * 4) it left.
-    cell: usize,
-    kind: u8,
-    t: Tile,
 }
 
 // ---------------------------------------------------------------------
@@ -314,8 +151,8 @@ pub struct Card {
     busy_frames: u32,
     /// Directory index at each grid position.
     sorted: [Vec<usize>; 2],
-    /// Per directory index.
-    tiles: [Vec<Tile>; 2],
+    /// The blocks (`memcard_draw.c`).
+    blocks: Blocks,
     icon_t: [Vec<i16>; 2],
     icon_dir: [Vec<i8>; 2],
     /// Grid cells ia00..ia15 / ib00..ib15 (layout units).
@@ -332,14 +169,6 @@ pub struct Card {
     /// Arrow bob 0..15 and header pulse 0..30, each bouncing.
     bob: (i16, i16),
     pulse: (i16, i16),
-    /// Wobble clock of the chosen block (+7 a frame).
-    clock: i16,
-    entering: bool,
-    fly: Fly,
-    flying: bool,
-    erasing: bool,
-    bursting: bool,
-    sparks: [Spark; 12],
 }
 
 impl Card {
@@ -354,6 +183,9 @@ impl Card {
                 }
             }
         }
+        // sCardAnchorX / Y: the cells in 12.4.
+        let grid_x = cells.map(|c| c.map(|v| (v[0] * 16.0) as i16));
+        let grid_y = cells.map(|c| c.map(|v| (v[1] * 16.0) as i16));
         let cursor = Fader { length: 10, ..Default::default() };
         let mut c = Card {
             ui: 1,
@@ -376,7 +208,7 @@ impl Card {
             op_slot: 0,
             busy_frames: 0,
             sorted: [(0..N).collect(), (0..N).collect()],
-            tiles: [vec![Tile::default(); N], vec![Tile::default(); N]],
+            blocks: Blocks::new(grid_x, grid_y),
             icon_t: [vec![0; N], vec![0; N]],
             icon_dir: [vec![1; N], vec![1; N]],
             cells,
@@ -391,13 +223,6 @@ impl Card {
             dialog: [DialogFader::default(); 2],
             bob: (0, 1),
             pulse: (0, 1),
-            clock: 0,
-            entering: false,
-            fly: Fly::default(),
-            flying: false,
-            erasing: false,
-            bursting: false,
-            sparks: [Spark::default(); 12],
         };
         for s in 0..2 {
             c.sort(cards, s);
@@ -506,240 +331,36 @@ impl Card {
     // Entering (Card_Enter, CardUi_Reset, CardIcon_ResetFiles)
     // -----------------------------------------------------------------
 
+    /// Card_Enter, CardUi_Reset (the grid) and CardIcon_ResetFiles.
     pub fn enter(&mut self) {
         for i in ENTER_RESET {
             self.msg[i].reset();
         }
         self.rebuild_grid();
-        for s in 0..2 {
-            for i in 0..N {
-                let r = rnd::rand() as u16 as i32;
-                let start = (rnd::rand() & 15) as i16;
-                let (sn, cs) = sin_cos(r);
-                let t = &mut self.tiles[s][i];
-                t.pos = [292.0, 224.0];
-                t.vel = [350.0 / 16.0 * sn, 350.0 / 16.0 * cs];
-                t.from = t.pos;
-                t.from_v = t.vel;
-                t.alpha = 0;
-                t.frame = 0;
-                t.start = start;
-                t.len = start + 33;
-            }
-        }
-        self.entering = true;
+        self.blocks.reset_files();
     }
 
-    /// fn_8132056C: send every block to its cell (or just off the grid,
-    /// fading, when scrolled away).
+    /// fn_8132056C on the current order and scroll.
     fn rebuild_grid(&mut self) {
-        for s in 0..2 {
-            let first = self.scroll[s] as usize * 4;
-            for k in 0..N {
-                let idx = self.sorted[s][k];
-                let cells = self.cells[s];
-                let t = &mut self.tiles[s][idx];
-                t.retarget();
-                if (first..=first + 15).contains(&k) {
-                    t.on = true;
-                    t.to = cells[k - first];
-                } else {
-                    t.on = false;
-                    if k < first {
-                        let c = cells[k & 3];
-                        t.to = [c[0], c[1] - 32.0];
-                    } else {
-                        let c = cells[12 + (k & 3)];
-                        t.to = [c[0], c[1] + 32.0];
-                    }
-                }
-            }
-        }
+        self.blocks.arrange(&self.sorted, self.scroll);
     }
 
-    /// fn_81320920: a slot with no usable card fades its blocks out, then
-    /// gathers them in the middle of its grid for next time.
-    fn hide_slot(&mut self, s: usize) {
-        let c = self.cells[s];
-        let mid = [(c[5][0] + c[6][0]) / 2.0, (c[5][1] + c[9][1]) / 2.0];
-        let tiles = &mut self.tiles[s];
-        for t in tiles.iter_mut() {
-            t.on = false;
-        }
-        if tiles.iter().all(|t| t.alpha == 0) {
-            for t in tiles.iter_mut() {
-                t.pos = mid;
-                t.vel = [0.0; 2];
-                t.from = mid;
-                t.from_v = [0.0; 2];
-                t.frame = 0;
-            }
-        }
-    }
-
-    /// fn_81320ABC: every block is home and the screen has faded in. Also
-    /// commits each block's place as the start of its next move.
+    /// fn_81320ABC with this frame's card states.
     fn settled(&mut self, cards: &dyn MemCards, fade_done: bool) -> bool {
-        if !fade_done || self.erasing {
-            return false;
-        }
         let ready = [self.ready(cards, 0), self.ready(cards, 1)];
-        if (0..2).any(|s| ready[s] && !self.tiles[s].iter().all(Tile::settled)) {
-            return false;
-        }
-        for (tiles, _) in self.tiles.iter_mut().zip(ready).filter(|(_, r)| *r) {
-            for t in tiles.iter_mut() {
-                t.from = t.pos;
-                t.from_v = t.vel;
-            }
-        }
-        true
+        self.blocks.settled(fade_done, ready)
     }
 
-    // -----------------------------------------------------------------
-    // Block animation (fn_81320094 dispatch, fn_8132030C land,
-    // fn_813204B0 cancel, fn_8131F8F8 update)
-    // -----------------------------------------------------------------
+    /// The cursor, for the blocks.
+    fn sel(&self) -> Sel {
+        Sel { slot: self.slot, file: self.selected(self.slot) }
+    }
 
+    /// fn_81320094 on the chosen save.
     fn dispatch(&mut self, kind: u8) {
         let s = self.slot;
-        let file = self.selected(s);
-        let src = &mut self.tiles[s][file];
-        let mut t = *src;
-        src.alpha = 0;
-        src.on = false;
-        self.fly = Fly { slot: s, file, cell: self.cell_index(s), kind, t };
-        if kind == K_ERASE {
-            self.fly.t.zt = 20;
-            self.fly.t.zlen = 20;
-            self.fly.t.zoom_from = 0.0;
-            self.erasing = true;
-            self.bursting = false;
-        } else {
-            let (sn, cs) = sin_cos(rnd::rand() as i32);
-            t.from = t.pos;
-            t.from_v = t.vel;
-            t.to = [292.0 + 40.0 * sn, 200.0 + 40.0 * cs];
-            t.start = 0;
-            t.frame = 0;
-            t.len = MOVE_LEN;
-            self.fly.t = t;
-        }
-        self.flying = true;
-    }
-
-    fn land(&mut self, cards: &dyn MemCards) {
-        if !matches!(self.fly.kind, K_COPY | K_MOVE | K_ERASE) {
-            return;
-        }
-        self.flying = false;
-        let f = self.fly;
-        if f.kind != K_ERASE {
-            if let Some(dst) = cards.dest_file() {
-                let d = &mut self.tiles[f.slot ^ 1][dst];
-                d.pos = f.t.pos;
-                d.vel = if f.cell < 8 { [0.0, 150.0 / 16.0] } else { [0.0, -150.0 / 16.0] };
-                d.zoom = d.zoom_to;
-                d.zt = d.zlen;
-                d.alpha = 255;
-                d.on = true;
-                d.len = 60;
-            }
-            if f.kind == K_COPY {
-                self.tiles[f.slot][f.file].pos = f.t.pos;
-            }
-        }
-        if f.kind != K_COPY {
-            let s = &mut self.tiles[f.slot][f.file];
-            s.alpha = 0;
-            s.on = false;
-        }
-    }
-
-    fn cancel(&mut self) {
-        if !self.flying {
-            return;
-        }
-        self.flying = false;
-        self.erasing = false;
-        self.bursting = false;
-        let f = self.fly;
-        let t = &mut self.tiles[f.slot][f.file];
-        t.pos = f.t.pos;
-        t.from = f.t.pos;
-        t.frame = 0;
-        t.len = MOVE_LEN;
-        t.alpha = 255;
-        t.on = true;
-    }
-
-    fn update_tiles(&mut self, cards: &dyn MemCards, fade_done: bool) {
-        if self.erasing {
-            let f = &mut self.fly.t;
-            f.zoom = gbase::hermite(f.zt as f32, 0.0, f.zoom_from, 0.0, f.zlen as f32, f.zoom_to, 0.0);
-            f.zt -= 1;
-            let shrunk = f.zt < 0;
-            f.zt = f.zt.clamp(0, f.zlen);
-            // The burst waits for the card (land() clears `flying`).
-            if !self.flying && shrunk {
-                if !self.bursting {
-                    for i in 0..12 {
-                        let delay = (rnd::rand() & 3) as i16;
-                        let angle = rnd::rand() as u16 as i16;
-                        self.sparks[i] = Spark { frame: 0, len: 10, delay, angle };
-                    }
-                }
-                self.bursting = true;
-                let mut done = 0;
-                for sp in self.sparks.iter_mut() {
-                    sp.frame += 1;
-                    if sp.frame > sp.delay && sp.frame - sp.delay > sp.len {
-                        sp.frame = sp.len + sp.delay;
-                        done += 1;
-                    }
-                }
-                if done == 12 {
-                    self.bursting = false;
-                    self.erasing = false;
-                }
-            }
-        } else {
-            let step = if self.entering { 25 } else { 8 };
-            let sel = (self.slot, self.selected(self.slot));
-            for s in 0..2 {
-                for (i, t) in self.tiles[s].iter_mut().enumerate() {
-                    if t.frame >= t.start {
-                        t.alpha += if t.on { step } else { -step };
-                    }
-                    t.alpha = t.alpha.clamp(0, 255);
-                    t.advance();
-                    t.zoom = gbase::hermite(t.zt as f32, 0.0, t.zoom_from, 0.0, t.zlen as f32, t.zoom_to, 0.0);
-                    t.zt += if (s, i) == sel && !self.entering { 1 } else { -1 };
-                    t.zt = t.zt.clamp(0, t.zlen);
-                }
-            }
-            if self.flying {
-                let f = &mut self.fly.t;
-                f.advance();
-                if f.frame >= f.len - 5 {
-                    f.from = f.pos;
-                    f.from_v = f.vel;
-                    // Orbit through the point mirrored about (292, 200).
-                    f.to = [584.0 - f.to[0], 400.0 - f.to[1]];
-                    f.frame = 0;
-                    f.len = 180;
-                }
-            }
-        }
-        if self.entering && self.settled(cards, fade_done) {
-            for t in self.tiles.iter_mut().flatten() {
-                t.start = 0;
-                t.len = MOVE_LEN;
-                t.frame = MOVE_LEN;
-            }
-            self.entering = false;
-        }
-        self.clock = self.clock.wrapping_add(7);
+        let (cell, file) = (self.cell_index(s), self.selected(s));
+        self.blocks.start(s, cell as u16, file, kind as u16);
     }
 
     // -----------------------------------------------------------------
@@ -748,7 +369,9 @@ impl Card {
 
     /// One frame. `zoom_full`: the cube has zoomed all the way in;
     /// `fade_done`: the screen's three faders are past 172.
-    pub fn update(&mut self, p: &Pad, cards: &mut dyn MemCards, zoom_full: bool, fade_done: bool) -> St {
+    /// `w` and `icon_settled` drive the blocks (CardIcon_IsSettled).
+    #[allow(clippy::too_many_arguments)]
+    pub fn update(&mut self, p: &Pad, cards: &mut dyn MemCards, w: &Work, icon_settled: bool, zoom_full: bool, fade_done: bool) -> St {
         self.update_faders(cards);
         self.update_icon_anim(cards);
         let cur = self.slot;
@@ -769,11 +392,12 @@ impl Card {
         self.update_result_msg();
         bounce(&mut self.bob, 15);
         self.update_cursor(cards);
-        self.ui_update(p, cards, zoom_full, fade_done)
+        self.ui_update(p, cards, w, icon_settled, zoom_full, fade_done)
     }
 
     /// CardUi_Update.
-    fn ui_update(&mut self, p: &Pad, cards: &mut dyn MemCards, zoom_full: bool, fade_done: bool) -> St {
+    #[allow(clippy::too_many_arguments)]
+    fn ui_update(&mut self, p: &Pad, cards: &mut dyn MemCards, w: &Work, icon_settled: bool, zoom_full: bool, fade_done: bool) -> St {
         self.ui = self.ui_next;
         self.op = self.op_next;
         self.fmt = self.fmt_next;
@@ -786,10 +410,10 @@ impl Card {
         }
         self.poll_slot(cards, 0);
         self.poll_slot(cards, 1);
-        // The blocks wait for the cube to finish zooming in.
-        if !(self.entering && !zoom_full) {
-            self.update_tiles(cards, fade_done);
-        }
+        // fn_8131F8F8
+        let sel = self.sel();
+        let ready = [self.ready(cards, 0), self.ready(cards, 1)];
+        self.blocks.update(w, icon_settled, &sel, fade_done, ready);
         match self.ui {
             1 => self.browse(p, cards, zoom_full, fade_done),
             2 => {
@@ -852,7 +476,7 @@ impl Card {
         }
         self.poll_op_result(cards);
         if !self.ready(cards, s) {
-            self.hide_slot(s);
+            self.blocks.hide_slot(s);
         }
         match self.code(cards, self.slot) {
             0 => {
@@ -876,7 +500,7 @@ impl Card {
                 self.op_err = self.result(cards);
             }
             if self.op_err == 0 {
-                self.land(cards);
+                self.blocks.land(cards.dest_file().unwrap_or(0));
                 self.op_kind = match self.op_kind {
                     // SE 20 (from A) / SE 21 (from B)
                     K_MOVE => K_MOVE_DONE,
@@ -885,7 +509,7 @@ impl Card {
                     _ => K_COPY_DONE,
                 };
             } else {
-                self.cancel();
+                self.blocks.cancel();
             }
         }
         self.rebuild_grid();
@@ -913,7 +537,7 @@ impl Card {
                     K_ERASE => K_ERASE_DONE,
                     _ => K_COPY_DONE,
                 };
-                self.cancel();
+                self.blocks.cancel();
                 // SE 13
             }
         } else if self.op_kind == K_FORMAT {
@@ -929,7 +553,7 @@ impl Card {
 
     /// CardUi_Browse.
     fn browse(&mut self, p: &Pad, cards: &dyn MemCards, zoom_full: bool, fade_done: bool) -> St {
-        if self.entering {
+        if !self.blocks.entered() {
             return St::Card;
         }
         let s = self.slot;
@@ -1318,8 +942,14 @@ impl Card {
         let cur = self.slot;
         let mut v = View::intro(0.0, false);
         v.vp = ui.view.vp;
+        // fn_813216F4, cursor slot first.
+        let fx_alpha = (al[0] * 255.0 + 0.5) as u8;
+        let sel = self.sel();
+        let used = [0, 1].map(|k| move |i: usize| Self::save(cards, k, i).is_some());
+        let icon = [0, 1].map(|k| move |i: usize| Self::save(cards, k, i).and_then(|save| self.icon(save, k, i)));
+        let info = [0, 1].map(|k| SlotInfo { used: &used[k], icon: &icon[k], sector_size: cards.sector_size(k) });
         for k in [cur, cur ^ 1] {
-            self.draw_blocks(ui.gx, &v, ma, cards, k, al[0]);
+            self.blocks.draw_slot(ui.gx, &v, &ma.card_models, k, fx_alpha, &sel, &info);
         }
         let st = &ma.card_str[lang];
         for k in [cur ^ 1, cur] {
@@ -1336,67 +966,6 @@ impl Card {
         }
         for i in RESULT_MSGS {
             self.draw_msg(ui, ma, st, i, al[2]);
-        }
-    }
-
-    /// fn_81321378: one slot's blocks; the chosen one and the flying one last.
-    #[allow(clippy::too_many_arguments)]
-    fn draw_blocks<'a>(&'a self, gx: &mut Gx<'a>, v: &View, ma: &'a MenuAssets, cards: &'a dyn MemCards, k: usize, a: f32) {
-        if a <= 0.0 {
-            return;
-        }
-        let m = &ma.card_models;
-        let size = size_index(cards.sector_size(k));
-        let c = self.clock as i32;
-        let alpha = |t: &Tile| (a * t.alpha as f32) as u8;
-        let chosen = (k == self.slot && !self.entering).then(|| self.selected(k));
-        for (i, t) in self.tiles[k].iter().enumerate() {
-            let al = alpha(t);
-            if al == 0 {
-                continue;
-            }
-            match Self::save(cards, k, i) {
-                Some(save) => {
-                    if (self.flying && k == self.fly.slot && i == self.fly.file) || chosen == Some(i) {
-                        continue;
-                    }
-                    draw_file(gx, &m.file, &t.mtx(c), v, al, block_color(size, 1), self.icon(save, k, i));
-                }
-                None => {
-                    let kind = if chosen == Some(i) { 2 } else { 3 };
-                    draw_empty(gx, &m.empty, &t.mtx(c), v, al, block_color(size, kind));
-                }
-            }
-        }
-        if self.flying && !self.erasing && k == self.fly.slot {
-            if let Some(save) = Self::save(cards, k, self.fly.file) {
-                let t = &self.fly.t;
-                draw_file(gx, &m.file, &t.mtx(c), v, alpha(t), block_color(size, 1), self.icon(save, k, self.fly.file));
-            }
-        } else if let Some((i, save)) = chosen.filter(|_| !self.flying).and_then(|i| Some((i, Self::save(cards, k, i)?))) {
-            let t = &self.tiles[k][i];
-            draw_file(gx, &m.file, &t.mtx(c), v, alpha(t), block_color(size, 0), self.icon(save, k, i));
-        }
-        if self.erasing && k == self.fly.slot {
-            let t = &self.fly.t;
-            let p = &m.file;
-            if !self.bursting {
-                if t.zoom > 0.0 {
-                    draw_file(gx, p, &t.mtx(c), v, alpha(t), block_color(size, 1), None);
-                }
-            } else {
-                for sp in self.sparks.iter() {
-                    let Some(f) = sp.t() else { continue };
-                    let al = (a * 255.0 * (1.0 - f)) as u8;
-                    if al == 0 {
-                        continue;
-                    }
-                    let r = 48.0 * (0.25 + 0.75 * f);
-                    let off = [r * sin_s(sp.angle as i32), r * cos_s(sp.angle as i32)];
-                    let at = psmtx::trans(t.pos[0] - 292.0 + off[0], 224.0 - t.pos[1] + off[1], 0.0);
-                    draw_file(gx, p, &psmtx::concat(&at, &psmtx::scale(0.3, 0.3, 0.3)), v, al, block_color(size, 1), None);
-                }
-            }
         }
     }
 
@@ -1617,46 +1186,6 @@ fn bounce(v: &mut (i16, i16), max: i16) {
     }
 }
 
-/// A block placed with the view without the camera's height offset
-/// (`fn_81302F94`).
-fn block<'a>(p: &'a Prepared, m: &Mtx, v: &View, alpha: u8, color: [i16; 4], mats: [u16; 2]) -> Instance {
-    let mut inst = Instance::new(&p.model);
-    gmr::set_model_mtx(&mut inst, m, [1.0; 3]);
-    gmr::set_view_mtx(&mut inst, &v.view);
-    gmr::calc_joints(&p.model, &mut inst);
-    inst.alpha = alpha;
-    inst.tev_color = vec![(mats[0], 0, color), (mats[1], 0, color)];
-    inst
-}
-
-/// `CardBlock_DrawFile` (0x81320FD8): a save's block in `color` (materials
-/// 0 and 2), packets 0x30 and 0xF0, then its icon on the face (packet 0x90
-/// with material 1 drawing whatever TEXMAP0 holds).
-fn draw_file<'a>(gx: &mut Gx<'a>, p: &'a Prepared, m: &Mtx, v: &View, alpha: u8, color: [i16; 4], icon: Option<&'a FastTex>) {
-    if alpha == 0 {
-        return;
-    }
-    let mut inst = block(p, m, v, alpha, color, [0, 2]);
-    gmr::draw_packet(gx, p, &mut inst, 0x30 / 0x18);
-    gmr::draw_packet(gx, p, &mut inst, 0xF0 / 0x18);
-    if let Some(tex) = icon {
-        inst.tev_color.clear();
-        inst.no_tex0 = Some(1);
-        gx.load_tex_obj(tex, 0);
-        gmr::draw_packet(gx, p, &mut inst, 0x90 / 0x18);
-    }
-}
-
-/// `CardBlock_DrawEmpty` (0x81321168): an empty block in `color`
-/// (materials 0 and 1).
-fn draw_empty<'a>(gx: &mut Gx<'a>, p: &'a Prepared, m: &Mtx, v: &View, alpha: u8, color: [i16; 4]) {
-    if alpha == 0 {
-        return;
-    }
-    let mut inst = block(p, m, v, alpha, color, [0, 1]);
-    gmr::draw(gx, p, &mut inst);
-}
-
 /// CardDraw_LoadTexture: a number from the 110 x 14 digit strip (res 90),
 /// digit centres 12 units apart around `x`.
 fn draw_number<'a>(ui: &mut Ui<'a, '_>, strip: &'a FastTex, x: f32, y: f32, n: u32, c: Rgba) {
@@ -1706,10 +1235,4 @@ fn text_line<'a>(ui: &mut Ui<'a, '_>, font: &'a UiFont, p: &Text, s: &[u8], c: R
         }
     }
     ui.text(font, p, s, c, 0.0, 0.0);
-}
-
-/// SinS / CosS of a 16-bit angle.
-fn sin_cos(a: i32) -> (f32, f32) {
-    let r = a as i16 as f32 * core::f32::consts::TAU / 65536.0;
-    (libm::sinf(r), libm::cosf(r))
 }

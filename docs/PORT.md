@@ -55,7 +55,8 @@ app counterpart yet.
 | `menu/game.c`, `game_params.c` | `bs2/menu/game.rs` (params in `icons.rs`) | ported: `Game_HandleInput`'s gates (icon settled, mosaic ready, not fatal; B on full zoom), `Game_UpdateMessages`, `Game_DrawBanner` with `Glh_DrawBannerLine`/`Box`, and `Game_Draw`'s order (backdrop, banner, mosaic, then status lines 1, 2, 4, 5). START opens the firmware boot list in `Disc_StartGame`'s place |
 | `menu/options.c`, `option_params.c` | `bs2/menu/options.rs` | ported: the three rows and four sub-states, the language faders and `Option_DrawText`. The screen-position row edits the firmware boot timeout (0..30 s, its title says so); the sound mode is kept in RAM until there is audio |
 | `menu/calendar.c`, `clock_params.c` | `bs2/menu/calendar.rs` | ported: the three sub-states, `Clock_FixDate`/`FixTime` (month kept 0..11 as in `gClockEdit`), PAL field order and `Clock_Draw`'s text (title, then the row labels in `textColor`; no bars). `Clock_Commit` sets the firmware clock instead of the SRAM counter bias, and the title says so |
-| `menu/memcard*.c` | `bs2/menu/card.rs`, `bs2/menu/backend.rs` | close; fake cards in RAM. `CardBlock_DrawFile`/`DrawEmpty` ported |
+| `menu/memcard_draw.c` | `bs2/menu/card_blocks.rs` | ported: `CardBlock` in 12.4 units, `CardBlock_CalcMtx` at the start of the update (so the draw lags a frame, as in BS2) with the menu's wobble, the flights, the Erase shrink and burst off the fly matrix, `fn_8132056C` / `CardIcon_ResetFiles` / `fn_81320920` / `fn_81320ABC`, and `CardBlock_DrawSlot` (the chosen and flying blocks are drawn on both slots' calls, as in BS2) |
+| `menu/memcard.c`, `memcard_card.c` | `bs2/menu/card.rs`, `bs2/menu/backend.rs` | close; fake cards in RAM |
 | `BS2Mach.c` (boot state machine, DVD) | none | dummy disc for now |
 | JAudio, SDK (`dolphin/`), runtime, MSL | none | replaced by `src/sdk/` stand-ins; sound later |
 
