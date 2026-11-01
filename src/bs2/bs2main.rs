@@ -131,6 +131,14 @@ impl Bs2Main {
         Bs2Main { intro: Intro::new(a), menu: None, pads: Pads::new(), backends: Some((drive, cards)) }
     }
 
+    /// The memory cards, held by the menu or waiting for it.
+    pub fn cards_mut(&mut self) -> Option<&mut dyn MemCards> {
+        match &mut self.menu {
+            Some(m) => Some(&mut *m.cards),
+            None => self.backends.as_mut().map(|b| &mut *b.1 as &mut dyn MemCards),
+        }
+    }
+
     /// Run the intro to its end at once (a skip).
     pub fn skip_intro(&mut self) {
         while !self.intro.finished() {

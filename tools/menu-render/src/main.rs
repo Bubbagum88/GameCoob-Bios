@@ -14,7 +14,8 @@
 //! Env: THREADS=n rasterizes on n threads; SKIP=1 skips the intro;
 //! PADTRACE=1 prints the pad code's new presses;
 //! RES=WxH renders at that size instead of 640x448;
-//! CARDS=a,b sets each slot to saves, none or a blank card of N blocks;
+//! CARDS=a,b sets each slot to saves, none or a blank card of N blocks, or
+//! to a card image file (.raw/.mcp/.gcp) loaded as a real card (both slots then);
 //! DUMP=layout:N, strings:N, model:N or raw:N prints that resource and exits
 //! (raw writes the decompressed bytes to stdout).
 
@@ -27,6 +28,10 @@ mod ipl;
 #[path = "../../../src/sdk/mod.rs"]
 #[allow(dead_code)]
 mod sdk;
+
+#[path = "../../../src/card/mod.rs"]
+#[allow(dead_code)]
+mod card;
 
 #[path = "../../../src/bs2/mod.rs"]
 #[allow(dead_code)]
@@ -155,18 +160,29 @@ fn main() {
     let last = *frames.iter().max().unwrap();
     let threads: usize = std::env::var("THREADS").ok().and_then(|s| s.parse().ok()).unwrap_or(1);
 
-    let mut cards = FakeCards::new();
-    // CARDS=a,b sets each slot to `saves`, `none` or a blank card of N blocks.
-    if let Ok(v) = std::env::var("CARDS") {
-        for (i, c) in v.split(',').enumerate().take(2) {
-            match c {
-                "saves" => {}
-                "none" => cards.set_blank(i, None),
-                n => cards.set_blank(i, Some(n.parse().expect("CARDS=saves|none|blocks"))),
+    // CARDS=a,b sets each slot to `saves`, `none` or a blank card of N blocks,
+    // or (for both slots then) a card image file loaded as a real card.
+    let spec: Vec<String> = std::env::var("CARDS").map(|v| v.split(',').map(String::from).collect()).unwrap_or_default();
+    let cards: Box<dyn bs2::menu::backend::MemCards> = if spec.iter().any(|c| std::path::Path::new(c).is_file()) {
+        let mut cards = bs2::menu::card_image::ImageCards::new();
+        for (i, c) in spec.iter().enumerate().take(2) {
+            if c != "none" {
+                cards.insert(i, c.clone(), std::fs::read(c).expect("read card image"));
             }
         }
-    }
-    let mut bs = Bs2Main::new(&assets, Box::new(FakeDrive::new()), Box::new(cards));
+        Box::new(cards)
+    } else {
+        let mut cards = FakeCards::new();
+        for (i, c) in spec.iter().enumerate().take(2) {
+            match c.as_str() {
+                "saves" => {}
+                "none" => cards.set_blank(i, None),
+                n => cards.set_blank(i, Some(n.parse().expect("CARDS=saves|none|blocks|image file"))),
+            }
+        }
+        Box::new(cards)
+    };
+    let mut bs = Bs2Main::new(&assets, Box::new(FakeDrive::new()), cards);
     if std::env::var("SKIP").is_ok() {
         bs.skip_intro();
     }

@@ -40,6 +40,15 @@ The matching decompilation of the IPL's BS2 program lives in [decomp/](decomp/RE
   the firmware boot menu timeout (the `Timeout` variable). F10 opens the
   system dialog: Firmware Setup (reboots into your vendor's BIOS setup via
   `OsIndications`), Restart and Power Off.
+- **Your own memory cards.** Put card images (`.raw`, `.mcp` or `.gcp` from
+  Dolphin, Nintendont, a MemCard PRO GC and the like, any size from 59 to
+  2043 blocks) at `\EFI\GameCoob\cards\slot-a.raw` and `slot-b.raw` and the
+  Memory Card screen shows their saves, banners and icons; Copy, Move, Erase
+  and Format work on them and are written back to the files (the first
+  change of each boot keeps the old file as `slot-a.raw.bak`). Without card
+  images, both slots hold made-up test cards. `tools/card-tool` converts
+  saves between `.gci`, `.gcs` and `.sav` and builds or unpacks card images
+  on the PC.
 - **No dump, no show.** Without `ipl.bin`, GameCoob says where to put it and
   hands back to the firmware, which boots its next entry.
 

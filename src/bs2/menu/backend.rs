@@ -228,6 +228,12 @@ pub trait MemCards {
     fn dest_file(&self) -> Option<usize>;
     /// Insert or pull the card in `slot` (a stand-in for the real thing).
     fn cycle(&mut self, _slot: usize) {}
+    /// If the card in `slot` changed since the last call, the handle of
+    /// the file it came from and its new bytes, for the driver to write
+    /// back. Cards that live only in RAM return `None`.
+    fn take_changed(&mut self, _slot: usize) -> Option<(String, Vec<u8>)> {
+        None
+    }
 }
 
 struct FakeCard {
