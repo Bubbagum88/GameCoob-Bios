@@ -56,7 +56,8 @@ app counterpart yet.
 | `menu/options.c`, `option_params.c` | `bs2/menu/options.rs` | ported: the three rows and four sub-states, the language faders and `Option_DrawText`. The screen-position row edits the firmware boot timeout (0..30 s, its title says so); the sound mode is kept in RAM until there is audio |
 | `menu/calendar.c`, `clock_params.c` | `bs2/menu/calendar.rs` | ported: the three sub-states, `Clock_FixDate`/`FixTime` (month kept 0..11 as in `gClockEdit`), PAL field order and `Clock_Draw`'s text (title, then the row labels in `textColor`; no bars). `Clock_Commit` sets the firmware clock instead of the SRAM counter bias, and the title says so |
 | `menu/memcard_draw.c` | `bs2/menu/card_blocks.rs` | ported: `CardBlock` in 12.4 units, `CardBlock_CalcMtx` at the start of the update (so the draw lags a frame, as in BS2) with the menu's wobble, the flights, the Erase shrink and burst off the fly matrix, `fn_8132056C` / `CardIcon_ResetFiles` / `fn_81320920` / `fn_81320ABC`, and `CardBlock_DrawSlot` (the chosen and flying blocks are drawn on both slots' calls, as in BS2) |
-| `menu/memcard.c`, `memcard_card.c` | `bs2/menu/card.rs`, `bs2/menu/backend.rs` | close; fake cards in RAM |
+| `menu/memcard.c` | `bs2/menu/card.rs` | close, checked line by line: the UI states, slot polling, faders and result lines follow the C (`Card_CheckCopy`/`Move` error order, `CardUi_UpdateResultMsg` holding while an operation runs, A on "No" cancelling the format question). Shaped as one `Card` struct; draw side close |
+| `menu/memcard_card.c` (card thread) | `bs2/menu/backend.rs` | replaced on purpose: fake cards in RAM behind `MemCards` |
 | `BS2Mach.c` (boot state machine, DVD) | none | dummy disc for now |
 | JAudio, SDK (`dolphin/`), runtime, MSL | none | replaced by `src/sdk/` stand-ins; sound later |
 
