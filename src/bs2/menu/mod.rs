@@ -16,6 +16,7 @@
 
 pub mod backend;
 mod card;
+mod card_blocks;
 mod game;
 mod calendar;
 mod options;
@@ -91,7 +92,7 @@ pub struct MenuAssets {
     pub dialog_str: Vec<Strings>,
     pub card: Layout,
     pub card_bar: FastTex,
-    pub card_models: card::Models,
+    pub card_models: card_blocks::Models,
     pub digits: Vec<FastTex>,
     pub weekday: Vec<Vec<FastTex>>,
     pub clock: Layout,
@@ -134,7 +135,7 @@ impl MenuAssets {
             dialog_str: per_lang_s(&res::DIALOG_STR)?,
             card: layout(res::CARD)?,
             card_bar: tex(res::CARD_BAR)?,
-            card_models: card::Models::new(model(res::CARD_FILE)?, model(res::CARD_EMPTY)?),
+            card_models: card_blocks::Models::new(model(res::CARD_FILE)?, model(res::CARD_EMPTY)?),
             digits: (0..10).map(|i| tex(res::DIGITS + i)).collect::<Option<Vec<_>>>()?,
             weekday: res::WEEKDAY.iter().map(|&b| (0..7).map(|i| tex(b + i)).collect::<Option<Vec<_>>>()).collect::<Option<Vec<_>>>()?,
             clock: layout(res::CLOCK)?,
@@ -834,7 +835,7 @@ impl Menu {
         }
         if self.state == St::Card {
             let fade_done = self.sub[SUB_CARD].iter().all(|f| f.alpha() > 172);
-            let next = self.card.update(p, &mut *self.cards, self.w.zoomed_in(), fade_done);
+            let next = self.card.update(p, &mut *self.cards, &self.w, self.card_icon.settled(), self.w.zoomed_in(), fade_done);
             return (next, None);
         }
         if self.state == St::Option {
