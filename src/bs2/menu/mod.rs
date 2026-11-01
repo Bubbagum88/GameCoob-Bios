@@ -15,6 +15,7 @@
 //! Firmware Setup, Restart and Power Off are in a system dialog (F10).
 
 pub mod backend;
+pub mod card_image;
 mod card;
 mod card_blocks;
 mod game;

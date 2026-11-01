@@ -3,7 +3,8 @@
 //! menu. Without a usable dump, `main` explains where to put it.
 
 use crate::bs2::bs2main::{Bs2Main, FrameInput};
-use crate::bs2::menu::backend::{FakeCards, FakeDrive};
+use crate::bs2::menu::backend::{FakeCards, FakeDrive, MemCards};
+use crate::bs2::menu::card_image::ImageCards;
 use crate::bs2::menu::{Action, MenuAssets, SysInfo};
 use alloc::boxed::Box;
 use crate::bs2::{Assets, raster::{Job, Target, Work}, render};
@@ -30,6 +31,53 @@ fn read_dump() -> Option<Vec<u8>> {
     let sfs = boot::get_image_file_system(boot::image_handle()).ok()?;
     let mut fs = FileSystem::new(sfs);
     PATHS.iter().find_map(|p| fs.read(*p).ok())
+}
+
+/// Card images loaded into slots A and B at boot, on the partition
+/// GameCoob booted from. The first name found per slot is used.
+const CARD_PATHS: [[&uefi::CStr16; 3]; 2] = [
+    [cstr16!("\\EFI\\GameCoob\\cards\\slot-a.raw"), cstr16!("\\EFI\\GameCoob\\cards\\slot-a.mcp"), cstr16!("\\EFI\\GameCoob\\cards\\slot-a.gcp")],
+    [cstr16!("\\EFI\\GameCoob\\cards\\slot-b.raw"), cstr16!("\\EFI\\GameCoob\\cards\\slot-b.mcp"), cstr16!("\\EFI\\GameCoob\\cards\\slot-b.gcp")],
+];
+
+fn boot_fs() -> Option<FileSystem> {
+    boot::get_image_file_system(boot::image_handle()).ok().map(FileSystem::new)
+}
+
+/// Real cards when the boot partition holds card images, else the
+/// made-up stand-ins.
+fn load_cards() -> Box<dyn MemCards> {
+    let mut found = false;
+    let mut cards = ImageCards::new();
+    if let Some(mut fs) = boot_fs() {
+        for (slot, paths) in CARD_PATHS.iter().enumerate() {
+            if let Some((p, b)) = paths.iter().find_map(|p| fs.read(*p).ok().map(|b| (p, b))) {
+                log::info!("memory card in slot {}: {p}", ["A", "B"][slot]);
+                cards.insert(slot, p.to_string(), b);
+                found = true;
+            }
+        }
+    }
+    if found { Box::new(cards) } else { Box::new(FakeCards::new()) }
+}
+
+/// Write a changed card back to its file. The first write of a boot keeps
+/// the file as it was as `<name>.bak`.
+fn save_card(path: &str, bytes: &[u8], backed_up: &mut bool) {
+    let (Ok(p), Some(mut fs)) = (uefi::CString16::try_from(path), boot_fs()) else { return };
+    if !*backed_up {
+        let Ok(bak) = uefi::CString16::try_from(alloc::format!("{path}.bak").as_str()) else { return };
+        if let Ok(old) = fs.read(p.as_ref()) {
+            if let Err(e) = fs.write(bak.as_ref(), &old) {
+                log::warn!("{path}: no backup written ({e:?}); not saving the card");
+                return;
+            }
+        }
+        *backed_up = true;
+    }
+    if let Err(e) = fs.write(p.as_ref(), bytes) {
+        log::warn!("{path}: card not saved ({e:?})");
+    }
 }
 
 /// Load the dump and its intro and menu assets, if present and valid.
@@ -164,10 +212,12 @@ impl Cores {
 /// controllers) held at boot picks an easter-egg jingle. Escape also skips
 /// the intro. F10 opens the system dialog (firmware setup, restart, power
 /// off); D opens and closes the stand-in disc drive's tray, 1 / 2 pull,
-/// format-break and re-insert the stand-in memory cards, R is the
+/// format-break and re-insert the stand-in memory cards (or pull and put
+/// back the card images), R is the
 /// console's reset switch and F3 shows frame timings.
 pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &Assets, ma: &MenuAssets) -> ! {
-    let mut bs2 = Bs2Main::new(assets, Box::new(FakeDrive::new()), Box::new(FakeCards::new()));
+    let mut bs2 = Bs2Main::new(assets, Box::new(FakeDrive::new()), load_cards());
+    let mut backed_up = [false; 2];
     let cores = Cores::open();
     // Rendered at the screen's resolution, adjusted to keep 60 fps.
     let mut res = ResScale::new(cv);
@@ -220,6 +270,13 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
             }
             if bs2.menu.is_some() {
                 keys.unlatch();
+            }
+        }
+        if let Some(cards) = bs2.cards_mut() {
+            for slot in 0..2 {
+                if let Some((path, bytes)) = cards.take_changed(slot) {
+                    save_card(&path, &bytes, &mut backed_up[slot]);
+                }
             }
         }
         if let Some(m) = &mut bs2.menu {
