@@ -3,7 +3,7 @@
 //! and update switches. Frames are built as a display list on one processor
 //! and rasterized in bands, possibly on several.
 
-use super::shader::FastTex;
+use super::shader::{FastTex, F4};
 use crate::sdk::gx::GxDraw;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -97,6 +97,20 @@ impl Sh<'_> {
         }
     }
 
+    /// [`Sh::shade`] for four pixels: R, G, B, A and which lanes are kept.
+    #[inline]
+    fn shade4(&self, color: [F4; 4], uv: &[[F4; 2]; MAX_TC]) -> ([F4; 4], [bool; 4]) {
+        match *self {
+            Sh::Modulate { tex } => {
+                let t = tex.sample4(uv[0][0], uv[0][1]);
+                ([color[0] * t[0], color[1] * t[1], color[2] * t[2], color[3] * t[3]], [true; 4])
+            }
+            Sh::Flat => (color, [true; 4]),
+            Sh::Gx(d) => d.shader.eval4(color, &uv[..], &d.maps[..]),
+        }
+    }
+
+    #[allow(dead_code)] // the one-pixel reference for shade4
     #[inline]
     fn shade(&self, f: &Frag) -> Option<[f32; 4]> {
         match *self {
@@ -222,7 +236,7 @@ impl<'a> Job<'a> {
         let (e0, e1) = (e(&b, &c), e(&c, &a));
         let flat_w = a.rw == b.rw && b.rw == c.rw;
         let tcs = p.sh.texcoords();
-        let mut frag = Frag { color: [0.0; 4], uv: [[0.0; 2]; MAX_TC] };
+        let (zero, one) = (F4::splat(0.0), F4::splat(1.0));
         for y in miny..=maxy {
             let fy = y as f32 + 0.5;
             // Clip the row to where all three weights are >= 0.
@@ -248,18 +262,31 @@ impl<'a> Job<'a> {
             }
             let xa = (ceilf(lo - 0.5) as i64).max(minx);
             let xb = (floorf(hi - 0.5) as i64).min(maxx);
-            for x in xa..=xb {
-                let fx = x as f32 + 0.5;
-                let w0 = (e0.0 * fx + e0.1 * fy + e0.2).max(0.0);
-                let w1 = (e1.0 * fx + e1.1 * fy + e1.2).max(0.0);
-                let w2 = (1.0 - w0 - w1).max(0.0);
-                let z = w0 * a.z + w1 * b.z + w2 * c.z;
-                if !(0.0..=1.0).contains(&z) {
-                    continue;
+            // Four pixels at a time, one per SIMD lane, in the same order of
+            // operations as one at a time.
+            let row = y as usize * self.w;
+            let ey0 = F4::splat(e0.1 * fy);
+            let ey1 = F4::splat(e1.1 * fy);
+            let mut x = xa;
+            while x <= xb {
+                let n = ((xb - x + 1) as usize).min(4);
+                let fx = F4::splat(x as f32) + F4::from([0.5, 1.5, 2.5, 3.5]);
+                let w0 = (F4::splat(e0.0) * fx + ey0 + F4::splat(e0.2)).max(zero);
+                let w1 = (F4::splat(e1.0) * fx + ey1 + F4::splat(e1.2)).max(zero);
+                let w2 = (one - w0 - w1).max(zero);
+                let z = w0 * F4::splat(a.z) + w1 * F4::splat(b.z) + w2 * F4::splat(c.z);
+                let za = z.to_array();
+                let i0 = row + x as usize;
+                let mut live = [false; 4];
+                let mut any = false;
+                for l in 0..n {
+                    let zl = za[l];
+                    // SAFETY: lane l < n stays on this row and band.
+                    live[l] = (0.0..=1.0).contains(&zl) && !(st.z_compare && zl > unsafe { *self.depth.add(i0 + l) });
+                    any |= live[l];
                 }
-                let i = y as usize * self.w + x as usize;
-                let dz = unsafe { &mut *self.depth.add(i) };
-                if st.z_compare && z > *dz {
+                x += 4;
+                if !any {
                     continue;
                 }
                 // Perspective-correct weights (2D and orthographic
@@ -267,38 +294,44 @@ impl<'a> Job<'a> {
                 let (p0, p1, p2) = if flat_w {
                     (w0, w1, w2)
                 } else {
-                    let (p0, p1, p2) = (w0 * a.rw, w1 * b.rw, w2 * c.rw);
-                    let s = 1.0 / (p0 + p1 + p2);
+                    let (p0, p1, p2) = (w0 * F4::splat(a.rw), w1 * F4::splat(b.rw), w2 * F4::splat(c.rw));
+                    let s = one / (p0 + p1 + p2);
                     (p0 * s, p1 * s, p2 * s)
                 };
-                let f = &mut frag;
-                for k in 0..4 {
-                    f.color[k] = p0 * a.color[k] + p1 * b.color[k] + p2 * c.color[k];
-                }
+                let lerp = |va: f32, vb: f32, vc: f32| p0 * F4::splat(va) + p1 * F4::splat(vb) + p2 * F4::splat(vc);
+                let color: [F4; 4] = core::array::from_fn(|k| lerp(a.color[k], b.color[k], c.color[k]));
+                let mut uv = [[zero; 2]; MAX_TC];
                 for t in 0..tcs {
                     for k in 0..2 {
-                        f.uv[t][k] = p0 * a.uv[t][k] + p1 * b.uv[t][k] + p2 * c.uv[t][k];
+                        uv[t][k] = lerp(a.uv[t][k], b.uv[t][k], c.uv[t][k]);
                     }
                 }
-                let Some(out) = p.sh.shade(f) else { continue };
-                let d = unsafe { &mut *self.color.add(i) };
-                match st.blend {
-                    BlendMode::None => *d = [out[0], out[1], out[2]],
-                    BlendMode::Alpha => {
-                        let al = out[3].clamp(0.0, 1.0);
-                        for k in 0..3 {
-                            d[k] = out[k] * al + d[k] * (1.0 - al);
+                let (out, pass) = p.sh.shade4(color, &uv);
+                let out = out.map(|v| v.to_array());
+                for l in 0..n {
+                    if !live[l] || !pass[l] {
+                        continue;
+                    }
+                    let i = i0 + l;
+                    let d = unsafe { &mut *self.color.add(i) };
+                    match st.blend {
+                        BlendMode::None => *d = [out[0][l], out[1][l], out[2][l]],
+                        BlendMode::Alpha => {
+                            let al = out[3][l].clamp(0.0, 1.0);
+                            for k in 0..3 {
+                                d[k] = out[k][l] * al + d[k] * (1.0 - al);
+                            }
+                        }
+                        BlendMode::Add => {
+                            let al = out[3][l].clamp(0.0, 1.0);
+                            for k in 0..3 {
+                                d[k] = (d[k] + out[k][l] * al).min(1.0);
+                            }
                         }
                     }
-                    BlendMode::Add => {
-                        let al = out[3].clamp(0.0, 1.0);
-                        for k in 0..3 {
-                            d[k] = (d[k] + out[k] * al).min(1.0);
-                        }
+                    if st.z_update {
+                        unsafe { *self.depth.add(i) = za[l] };
                     }
-                }
-                if st.z_update {
-                    *dz = z;
                 }
             }
         }
