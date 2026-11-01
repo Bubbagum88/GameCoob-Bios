@@ -8,6 +8,8 @@
 
 use super::menu::backend::{DiscDrive, MemCards};
 use super::menu::{Action, Menu, MenuAssets, Pad, SysInfo};
+use super::cube::Jingle;
+use super::pad::{self, PadStatus, Pads};
 use super::{raster, Assets, Input, Intro};
 use alloc::boxed::Box;
 
@@ -31,6 +33,10 @@ pub struct DispSettings {
     pub text_pad: u8,
     /// 0x2C: how far a line-end SJIS comma or period hangs out.
     pub punct_hang: i16,
+    /// 0x2E: frames a d-pad direction is held before it repeats.
+    pub repeat_delay: i16,
+    /// 0x30: frames between repeats.
+    pub repeat_rate: i16,
     /// 0x32, 0x34: text glow alpha range.
     pub glow_max: i16,
     pub glow_min: i16,
@@ -48,6 +54,8 @@ pub const DISP_DEFAULTS: DispSettings = DispSettings {
     ortho: true,
     text_pad: 8,
     punct_hang: 6,
+    repeat_delay: 35,
+    repeat_rate: 10,
     glow_max: 255,
     glow_min: 70,
     pulse_len: 35,
@@ -79,15 +87,27 @@ pub fn projection(disp: &DispSettings, ortho: bool) -> Projection {
     }
 }
 
-/// What the pad gave this frame (DEMOPadRead's result).
-#[derive(Clone, Copy, Default)]
+/// What the controllers and GameCoob's own keys gave this frame.
+#[derive(Clone, Copy)]
 pub struct FrameInput {
-    /// The intro's buttons (A held, the boot easter egg).
-    pub intro: Input,
-    /// The menu's presses.
-    pub pad: Pad,
+    /// The four controllers (`PADRead`).
+    pub pads: [PadStatus; 4],
+    /// GameCoob's own inputs, outside the pad: the system dialog, the
+    /// stand-in drive's tray and card slots.
+    pub system: bool,
+    pub eject: bool,
+    pub slot: [bool; 2],
     /// The reset switch is down (`OSGetResetSwitchState`).
     pub reset: bool,
+}
+
+impl Default for FrameInput {
+    /// Controller 1 plugged in, nothing pressed.
+    fn default() -> FrameInput {
+        let mut pads = [PadStatus::NONE; 4];
+        pads[0] = PadStatus::IDLE;
+        FrameInput { pads, system: false, eject: false, slot: [false; 2], reset: false }
+    }
 }
 
 /// The state the `BS2Main` loop runs: the scene (with the cube and the
@@ -98,6 +118,8 @@ pub struct FrameInput {
 pub struct Bs2Main {
     pub intro: Intro,
     pub menu: Option<Menu>,
+    /// pad.c's state (`gMenuPad`).
+    pub pads: Pads,
     /// The disc drive and memory cards while no menu holds them (the C's
     /// DVD and card threads outlive a reset).
     backends: Option<(Box<dyn DiscDrive>, Box<dyn MemCards>)>,
@@ -106,7 +128,7 @@ pub struct Bs2Main {
 impl Bs2Main {
     /// `BS2Main` up to the loop: the scene with `Scene_Init(TRUE)`.
     pub fn new(a: &Assets, drive: Box<dyn DiscDrive>, cards: Box<dyn MemCards>) -> Bs2Main {
-        Bs2Main { intro: Intro::new(a), menu: None, backends: Some((drive, cards)) }
+        Bs2Main { intro: Intro::new(a), menu: None, pads: Pads::new(), backends: Some((drive, cards)) }
     }
 
     /// Run the intro to its end at once (a skip).
@@ -116,23 +138,43 @@ impl Bs2Main {
         }
     }
 
-    /// The logic of one loop pass: `fn_81302DF0` and `Scene_Update` (the
+    /// The logic of one loop pass: `DEMOPadRead`, `fn_81302DF0` and `Scene_Update` (the
     /// intro, or Menu_Update with the guide and the mosaic once the menu
     /// is up), then the reset switch (`fn_81302368`). `info` gives the
     /// menu's view of the PC when it starts. Returns what the menu asks
     /// for; the caller carries it out.
     pub fn update(&mut self, a: &Assets, ma: &MenuAssets, input: &FrameInput, info: impl FnOnce() -> SysInfo) -> Option<Action> {
         let mut action = None;
+        self.pads.read(&input.pads);
+        let mp = &self.pads.menu;
         match &mut self.menu {
             Some(m) => {
                 // Scene_Update in state 5 runs Menu_Update.
                 self.intro.update(Input::default());
-                action = m.update(ma, &self.intro.camera_view(), &input.pad);
+                let p = Pad {
+                    a: mp.button_down & pad::PAD_BUTTON_A != 0,
+                    b: mp.button_down & pad::PAD_BUTTON_B != 0,
+                    start: mp.button_down & pad::PAD_BUTTON_START != 0,
+                    up: mp.dirs_new & pad::DIR_UP != 0,
+                    down: mp.dirs_new & pad::DIR_DOWN != 0,
+                    left: mp.dirs_new & pad::DIR_LEFT != 0,
+                    right: mp.dirs_new & pad::DIR_RIGHT != 0,
+                    system: input.system,
+                    eject: input.eject,
+                    slot: input.slot,
+                };
+                action = m.update(ma, &self.intro.camera_view(), &p);
                 m.tick_guide();
                 m.update_fx(ma);
             }
             None => {
-                self.intro.update(input.intro);
+                // The intro reads A held and, for the jingle, the Z eggs.
+                let egg = match self.pads.easter_egg() {
+                    2 => Some(Jingle::AllPadsZ),
+                    1 => Some(Jingle::Pad1Z),
+                    _ => None,
+                };
+                self.intro.update(Input { a: mp.pst.button & pad::PAD_BUTTON_A != 0, egg });
                 if self.intro.finished() {
                     if let Some((drive, cards)) = self.backends.take() {
                         self.menu = Some(Menu::new(info(), ma, drive, cards, self.intro.menu.clone()));
