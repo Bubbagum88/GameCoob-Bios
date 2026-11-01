@@ -10,3 +10,11 @@ local/*
 *.mp4
 # Local copy of the BS2 decomp; kept off GitHub for now
 
+# Memory card images and saves are your own data
+*.raw
+*.mcp
+*.gcp
+*.gci
+*.gcs
+*.sav
+*.raw.bak

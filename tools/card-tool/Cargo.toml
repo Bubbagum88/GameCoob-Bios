@@ -1,0 +1,11 @@
+[package]
+name = "card-tool"
+version = "0.1.0"
+edition = "2024"
+description = "Host-side memory card tool on src/card: inspect, convert and build card images and save files; `cargo test` runs src/card's tests"
+
+# Standalone: not part of the UEFI crate. Build with --target x86_64-unknown-linux-gnu.
+[workspace]
+
+[dependencies]
+libm = "0.2.16"
