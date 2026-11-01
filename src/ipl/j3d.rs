@@ -222,6 +222,29 @@ pub struct AlphaCompare {
     pub ref1: u8,
 }
 
+impl AlphaCompare {
+    /// Whether alpha `a` passes.
+    pub fn test(&self, a: u8) -> bool {
+        let cmp = |c: u8, r: u8| match c {
+            0 => false,
+            1 => a < r,
+            2 => a == r,
+            3 => a <= r,
+            4 => a > r,
+            5 => a != r,
+            6 => a >= r,
+            _ => true,
+        };
+        let (x, y) = (cmp(self.comp0, self.ref0), cmp(self.comp1, self.ref1));
+        match self.op {
+            0 => x && y,
+            1 => x || y,
+            2 => x != y,
+            _ => x == y,
+        }
+    }
+}
+
 /// `GXSetBlendMode`.
 #[derive(Clone, Copy, Debug)]
 pub struct Blend {
@@ -479,24 +502,7 @@ impl Material {
 
     /// Does the alpha test pass for fragment alpha `a` (0..255)?
     pub fn alpha_test(&self, a: u8) -> bool {
-        let cmp = |c: u8, r: u8| match c {
-            0 => false,
-            1 => a < r,
-            2 => a == r,
-            3 => a <= r,
-            4 => a > r,
-            5 => a != r,
-            6 => a >= r,
-            _ => true,
-        };
-        let ac = self.alpha_compare;
-        let (x, y) = (cmp(ac.comp0, ac.ref0), cmp(ac.comp1, ac.ref1));
-        match ac.op {
-            0 => x && y,
-            1 => x || y,
-            2 => x != y,
-            _ => x == y,
-        }
+        self.alpha_compare.test(a)
     }
 }
 

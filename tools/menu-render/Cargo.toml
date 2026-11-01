@@ -9,6 +9,9 @@ description = "Host-side check of src/bs2: runs the intro into the rebuilt menu 
 
 [dependencies]
 libm = "0.2.16"
+wide = { version = "0.7", default-features = false }
 
 [profile.release]
 opt-level = 3
+lto = true
+codegen-units = 1
