@@ -6,7 +6,8 @@ use crate::bs2::bs2main::{Bs2Main, FrameInput};
 use crate::bs2::menu::backend::{FakeCards, FakeDrive};
 use crate::bs2::menu::{Action, MenuAssets, SysInfo};
 use alloc::boxed::Box;
-use crate::bs2::{Assets, cube::Jingle, raster::{Job, Target, Work}, render};
+use crate::bs2::{Assets, raster::{Job, Target, Work}, render};
+use crate::input::{self, AppAction, KeyCode, Keyboard};
 use crate::clock::Clock;
 use crate::gfx::{Canvas, ResScale};
 use crate::ipl::Ipl;
@@ -157,13 +158,14 @@ impl Cores {
 /// Run [`Bs2Main`] at 60 logic frames per second: the intro, then the cube
 /// menu. Never returns: the menu's actions boot or reset.
 ///
-/// Intro: Enter, Space or A is the A button (hold to spin the cube); Z at
-/// boot picks the easter-egg jingle; Escape skips to the menu.
-/// Menu: the arrows are the d-pad, Enter is A, Escape or Backspace is B and
-/// Space or S is START. F10 opens the system dialog (firmware setup,
-/// restart, power off); D opens and closes the stand-in disc drive's tray
-/// and 1 / 2 pull, format-break and re-insert the stand-in memory cards.
-/// Anywhere: R is the console's reset switch (fade out, intro again).
+/// Keys go through [`input::DEFAULT_KEYS`]: the arrows are the d-pad, Enter
+/// or A is A (hold to spin the cube), Escape or Backspace is B, Space or S is
+/// START, X / Y / Q / E are X, Y, L and R, and z (shift-Z: all four
+/// controllers) held at boot picks an easter-egg jingle. Escape also skips
+/// the intro. F10 opens the system dialog (firmware setup, restart, power
+/// off); D opens and closes the stand-in disc drive's tray, 1 / 2 pull,
+/// format-break and re-insert the stand-in memory cards, R is the
+/// console's reset switch and F3 shows frame timings.
 pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &Assets, ma: &MenuAssets) -> ! {
     let mut bs2 = Bs2Main::new(assets, Box::new(FakeDrive::new()), Box::new(FakeCards::new()));
     let cores = Cores::open();
@@ -177,59 +179,18 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
     let mut target = Target::new(render::EFB_W, render::EFB_H);
     let t0 = clock.now();
     let mut done_frames = 0u32;
-    let mut a_until = -1.0f32;
-    let mut egg: Option<Jingle> = None;
-
-    let mut input = FrameInput::default();
+    let mut keys = Keyboard::new(input::DEFAULT_KEYS);
     let mut clock_at = 0.0;
 
     loop {
         let now = clock.now() - t0;
-        loop {
-            let key = match system::with_stdin(|i| i.read_key()) {
-                Ok(Some(k)) => k,
-                _ => break,
-            };
-            if let Key::Printable(c) = key {
-                if matches!(char::from(c), 'r' | 'R') {
-                    input.reset = true;
-                    continue;
-                }
-            }
-            if bs2.menu.is_some() {
-                // Presses are latched until the next logic frame.
-                let pad = &mut input.pad;
-                match key {
-                    Key::Printable(c) => match char::from(c) {
-                        '\r' => pad.a = true,
-                        '\u{8}' => pad.b = true,
-                        ' ' | 's' | 'S' => pad.start = true,
-                        'd' | 'D' => pad.eject = true,
-                        '1' => pad.slot[0] = true,
-                        '2' => pad.slot[1] = true,
-                        _ => {}
-                    },
-                    Key::Special(ScanCode::UP) => pad.up = true,
-                    Key::Special(ScanCode::DOWN) => pad.down = true,
-                    Key::Special(ScanCode::LEFT) => pad.left = true,
-                    Key::Special(ScanCode::RIGHT) => pad.right = true,
-                    Key::Special(ScanCode::ESCAPE) => pad.b = true,
-                    Key::Special(ScanCode::FUNCTION_10) => pad.system = true,
-                    Key::Special(ScanCode::FUNCTION_3) => show_stats = !show_stats,
-                    _ => {}
-                }
-                continue;
-            }
-            match key {
-                Key::Printable(c) => match char::from(c) {
-                    '\r' | ' ' | 'a' | 'A' => a_until = now + 0.15,
-                    'z' if bs2.intro.frame < 30 => egg = Some(Jingle::Pad1Z),
-                    'Z' if bs2.intro.frame < 30 => egg = Some(Jingle::AllPadsZ),
-                    _ => {}
-                },
-                // Skip straight to the menu.
-                Key::Special(ScanCode::ESCAPE) => bs2.skip_intro(),
-                _ => {}
+        while let Ok(Some(key)) = system::with_stdin(|i| i.read_key()) {
+            let Some(k) = key_code(key) else { continue };
+            keys.press(k, now);
+            // The easter eggs: Z pressed while the cube falls stays held
+            // until the menu, so the jingle can see it.
+            if matches!(k, KeyCode::Char('z' | 'Z')) && bs2.menu.is_none() && bs2.intro.frame < 30 {
+                keys.latch(k);
             }
         }
         // Catch logic up to real time, drawing only the latest frame.
@@ -238,9 +199,18 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
         while done_frames < due {
             done_frames += 1;
             stepped = true;
-            input.intro.a = now < a_until;
-            input.intro.egg = egg;
-            let in_menu = bs2.menu.is_some();
+            let mut input = FrameInput { pads: keys.pads(now), ..FrameInput::default() };
+            for a in keys.take_actions() {
+                match a {
+                    AppAction::System => input.system = true,
+                    AppAction::Eject => input.eject = true,
+                    AppAction::Slot(s) => input.slot[s as usize & 1] = true,
+                    AppAction::Reset => input.reset = true,
+                    AppAction::SkipIntro if bs2.menu.is_none() => bs2.skip_intro(),
+                    AppAction::SkipIntro => {}
+                    AppAction::Stats => show_stats = !show_stats,
+                }
+            }
             if let Some(act) = bs2.update(assets, ma, &input, sys_info) {
                 if let Some(msg) = perform(act) {
                     if let Some(m) = &mut bs2.menu {
@@ -248,14 +218,9 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
                     }
                 }
             }
-            if in_menu && bs2.menu.is_none() {
-                // Reset: the boot easter egg can be picked again.
-                egg = None;
+            if bs2.menu.is_some() {
+                keys.unlatch();
             }
-            // Presses are latched for one logic frame; keys pressed during
-            // the intro don't leak into the menu.
-            input.pad = Default::default();
-            input.reset = false;
         }
         if let Some(m) = &mut bs2.menu {
             if now - clock_at > 0.25 {
@@ -294,6 +259,24 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
     }
 }
 
+
+/// The firmware's key as a [`KeyCode`].
+fn key_code(key: Key) -> Option<KeyCode> {
+    Some(match key {
+        Key::Printable(c) => KeyCode::Char(char::from(c)),
+        Key::Special(ScanCode::UP) => KeyCode::Up,
+        Key::Special(ScanCode::DOWN) => KeyCode::Down,
+        Key::Special(ScanCode::LEFT) => KeyCode::Left,
+        Key::Special(ScanCode::RIGHT) => KeyCode::Right,
+        Key::Special(ScanCode::ESCAPE) => KeyCode::Esc,
+        Key::Special(s) if (ScanCode::FUNCTION_1.0..=ScanCode::FUNCTION_10.0).contains(&s.0) => {
+            KeyCode::F((s.0 - ScanCode::FUNCTION_1.0 + 1) as u8)
+        }
+        Key::Special(ScanCode::FUNCTION_11) => KeyCode::F(11),
+        Key::Special(ScanCode::FUNCTION_12) => KeyCode::F(12),
+        _ => return None,
+    })
+}
 
 /// Average frame timings, reported every couple of seconds.
 #[derive(Default)]

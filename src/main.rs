@@ -12,6 +12,7 @@ mod bs2;
 mod clock;
 mod firmware;
 mod gfx;
+mod input;
 mod ipl;
 mod sdk;
 mod vars;

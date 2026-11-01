@@ -6,9 +6,13 @@
 //!
 //! The script has one `frame button` pair per line (frames count from boot,
 //! like a Dolphin frame dump): button is one of up, down, left, right, a, b,
-//! start, system (F10), eject (D), slot1, slot2, reset (R). Lines starting with `#` are ignored. Without frames, every 10th
+//! start, x, y, z, system (F10), eject (D), slot1, slot2, reset (R). Pad
+//! buttons are held on controller 1 for that one frame and go through BS2's
+//! pad code, so the same button on back-to-back frames is one long press.
+//! Lines starting with `#` are ignored. Without frames, every 10th
 //! frame up to the last scripted frame + 200 is written.
 //! Env: THREADS=n rasterizes on n threads; SKIP=1 skips the intro;
+//! PADTRACE=1 prints the pad code's new presses;
 //! RES=WxH renders at that size instead of 640x448;
 //! CARDS=a,b sets each slot to saves, none or a blank card of N blocks;
 //! DUMP=layout:N, strings:N, model:N or raw:N prints that resource and exits
@@ -32,7 +36,8 @@ mod png;
 
 use bs2::menu::backend::{FakeCards, FakeDrive};
 use bs2::bs2main::{Bs2Main, FrameInput};
-use bs2::menu::{MenuAssets, Pad, SysInfo};
+use bs2::menu::{MenuAssets, SysInfo};
+use bs2::pad;
 use std::collections::HashMap;
 use sdk::mtx as psmtx;
 use std::path::PathBuf;
@@ -177,23 +182,28 @@ fn main() {
         if let Some(m) = &mut bs.menu {
             m.info.time = info(f).time;
         }
-        let input = FrameInput {
-            intro: bs2::Input { a: has("a"), egg: None },
-            pad: Pad {
-                a: has("a"),
-                b: has("b"),
-                start: has("start"),
-                up: has("up"),
-                down: has("down"),
-                left: has("left"),
-                right: has("right"),
-                system: has("system"),
-                eject: has("eject"),
-                slot: [has("slot1"), has("slot2")],
-            },
-            reset: has("reset"),
-        };
+        // Script keys hold their button on controller 1 for one frame.
+        let mut input = FrameInput { system: has("system"), eject: has("eject"), slot: [has("slot1"), has("slot2")], reset: has("reset"), ..FrameInput::default() };
+        for (k, b) in [
+            ("a", pad::PAD_BUTTON_A),
+            ("b", pad::PAD_BUTTON_B),
+            ("start", pad::PAD_BUTTON_START),
+            ("up", pad::PAD_BUTTON_UP),
+            ("down", pad::PAD_BUTTON_DOWN),
+            ("left", pad::PAD_BUTTON_LEFT),
+            ("right", pad::PAD_BUTTON_RIGHT),
+            ("x", pad::PAD_BUTTON_X),
+            ("y", pad::PAD_BUTTON_Y),
+            ("z", pad::PAD_TRIGGER_Z),
+        ] {
+            if has(k) {
+                input.pads[0].button |= b;
+            }
+        }
         let in_menu = bs.menu.is_some();
+        if std::env::var("PADTRACE").is_ok() && (bs.pads.menu.dirs_new | bs.pads.menu.button_down) != 0 {
+            println!("pad f{} dirs_new {:#06x} down {:#06x}", f - 1, bs.pads.menu.dirs_new, bs.pads.menu.button_down);
+        }
         if let Some(act) = bs.update(&assets, &ma, &input, || info(f)) {
             println!("frame {f}: action {act:?}");
         }

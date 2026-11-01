@@ -129,7 +129,11 @@ IPL=~/ipl.bin scripts/run-qemu.sh         # same, with a dump from somewhere oth
 scripts/screenshots.py out/               # headless run that saves PNGs (needs Pillow and your dump)
 ```
 
-In QEMU: arrow keys are the d-pad, Enter is A, Esc or Backspace is B, Space is START.
+Keys (`src/input.rs` has the full table): arrow keys are the d-pad, Enter or A is A
+(hold to spin the cube), Esc or Backspace is B, Space or S is START, X / Y / Q / E
+are X, Y, L and R, and z held at boot (shift-Z for all four controllers) picks an
+easter-egg jingle. Esc skips the intro, F10 opens the system dialog, R is the
+reset switch and F3 shows frame timings. Held arrows repeat at the IPL's own rate.
 
 ### On real hardware
 

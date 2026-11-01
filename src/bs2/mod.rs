@@ -20,6 +20,7 @@ pub mod ginit;
 pub mod gmr;
 pub mod menu;
 pub mod mtx;
+pub mod pad;
 pub mod raster;
 pub mod render;
 pub mod rnd;
@@ -90,7 +91,7 @@ impl Assets {
 pub struct Input {
     /// A held (spins the cube).
     pub a: bool,
-    /// Easter egg selection, latched at boot.
+    /// The Z easter egg held this frame (`Pad_GetEasterEgg`).
     pub egg: Option<Jingle>,
 }
 
