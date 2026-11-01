@@ -829,9 +829,8 @@ impl Menu {
     /// The submenus' input; returns the next menu state and any action.
     fn update_sub(&mut self, p: &Pad) -> (St, core::option::Option<Action>) {
         if self.state == St::Game {
-            // Game Play keeps its drive state and faders running.
-            let ready = self.w.zoomed_in();
-            return self.game.update(p, &*self.drive, &self.info, ready);
+            let c = game::Ctx { icon_settled: self.game_icon.settled(), fx_ready: self.fx.is_ready(0), zoomed_in: self.w.zoomed_in() };
+            return self.game.update(p, &c, &*self.drive, &self.info);
         }
         if self.state == St::Card {
             let fade_done = self.sub[SUB_CARD].iter().all(|f| f.alpha() > 172);
@@ -1110,7 +1109,7 @@ impl Menu {
             }
             let fx_alpha = f[0].alpha() as u8;
             match k {
-                SUB_GAME => self.draw_game(ui, ma, al),
+                SUB_GAME => self.game.draw_back(ui, ma, &self.w, &*self.drive, [0, 1, 2].map(|i| f[i].alpha())),
                 SUB_CARD => self.card.draw(ui, ma, &self.w, &*self.cards, self.lang, al),
                 SUB_OPTION => {
                     draw_backdrop(ui, ma, &self.w, al[1]);
@@ -1130,6 +1129,9 @@ impl Menu {
             if settled {
                 self.fx.draw(ui.gx, &ma.fx, ui.view, fx_alpha);
             }
+            if k == SUB_GAME {
+                self.game.draw_text(ui, ma, &self.info, self.lang, f[2].alpha());
+            }
             self.draw_message(ui, ma, al[2]);
         }
     }
@@ -1140,12 +1142,6 @@ impl Menu {
             let k = (1.0 - (age - 180.0) / 30.0).clamp(0.0, 1.0) * a;
             ui.label(&ma.font, 292.0, 372.0, 18.0, &cp1252(msg), [1.0, 0.93, 0.6, k], 0);
         }
-    }
-
-    /// Game Play: the drive screen, with the mosaic between the banner and
-    /// the status lines.
-    fn draw_game<'a>(&'a self, ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, al: [f32; 3]) {
-        self.game.draw(ui, ma, &self.w, &*self.drive, &self.info, self.lang, al);
     }
 
     /// Menu_DrawGuide: the button guide along the bottom.
