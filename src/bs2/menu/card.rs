@@ -752,8 +752,7 @@ impl Card {
                     self.op_kind = K_FORMAT;
                     self.op_err = BUSY;
                 }
-                3 => decline(self, &*cards),
-                _ => {}
+                _ => decline(self, &*cards),
             }
         }
         if p.b {
@@ -840,31 +839,49 @@ impl Card {
         }
     }
 
-    /// CardUi_UpdateResultMsg (+ CopyResultMsg, MoveResultMsg).
-    fn update_result_msg(&mut self) {
-        let e = self.op_err;
-        let k = self.op_kind;
-        let show = self.ui == 5 && e != BUSY;
-        let os = self.op_slot;
-        for (base, kinds) in [(19usize, [K_COPY, K_COPY_DONE]), (7, [K_MOVE, K_MOVE_DONE])] {
-            let on = show && kinds.contains(&k);
-            let map = [(base, 0), (base + 1, NOT_ALLOWED), (base + 3 - os, NO_CARD), (base + 5 - os, UNUSABLE), (base + 8, WRONG_TYPE), (base + 9, EXISTS), (base + 10, NO_SPACE), (base + 11, FAILED)];
-            // Indices the map doesn't pick fade out too.
-            for i in base..base + 12 {
-                if !map.iter().any(|&(m, _)| m == i) {
-                    self.msg[i].step(Fade::Out);
-                }
-            }
+    /// CardUi_CopyResultMsg / CardUi_MoveResultMsg: the result lines of
+    /// a Copy (from 19) or a Move (from 7).
+    fn xfer_result_msg(&mut self, base: usize, show: bool) {
+        let (e, os) = (self.op_err, self.op_slot);
+        let map = [(base, 0), (base + 1, NOT_ALLOWED), (base + 3 - os, NO_CARD), (base + 5 - os, UNUSABLE), (base + 8, WRONG_TYPE), (base + 9, EXISTS), (base + 10, NO_SPACE), (base + 11, FAILED)];
+        if show {
             for (i, err) in map {
-                self.msg[i].step_if(on && e == err);
+                self.msg[i].step_if(e == err);
+            }
+        } else {
+            for i in (base..base + 6).chain(base + 8..base + 12) {
+                self.msg[i].step(Fade::Out);
             }
         }
-        let erase = show && matches!(k, K_ERASE | K_ERASE_DONE);
-        self.msg[31].step_if(erase && e == 0);
-        self.msg[32].step_if(erase && e != 0);
-        let fmt = show && matches!(k, K_FORMAT | K_FORMAT_DONE);
-        self.msg[43 + os].step_if(fmt && e == 0);
-        self.msg[45 + os].step_if(fmt && e != 0);
+    }
+
+    /// CardUi_UpdateResultMsg. While the operation runs the lines hold.
+    fn update_result_msg(&mut self) {
+        let (e, k, os) = (self.op_err, self.op_kind, self.op_slot);
+        if self.ui == 5 {
+            if e != BUSY {
+                if matches!(k, K_COPY | K_COPY_DONE) {
+                    self.xfer_result_msg(19, true);
+                }
+                if matches!(k, K_MOVE | K_MOVE_DONE) {
+                    self.xfer_result_msg(7, true);
+                }
+                if matches!(k, K_ERASE | K_ERASE_DONE) {
+                    self.msg[31].step_if(e == 0);
+                    self.msg[32].step_if(e != 0);
+                }
+                if matches!(k, K_FORMAT | K_FORMAT_DONE) {
+                    self.msg[43 + os].step_if(e == 0);
+                    self.msg[45 + os].step_if(e != 0);
+                }
+            }
+        } else {
+            self.xfer_result_msg(19, false);
+            self.xfer_result_msg(7, false);
+            for i in [31, 32, 43 + os, 45 + os] {
+                self.msg[i].step(Fade::Out);
+            }
+        }
     }
 
     /// CardUi_UpdateCursor: the spot over the slot with the cursor.
