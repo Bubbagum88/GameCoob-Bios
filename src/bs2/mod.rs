@@ -130,10 +130,22 @@ pub struct Intro {
 }
 
 impl Intro {
-    /// `Scene_Init(TRUE)` on a boot with no disc.
+    /// BS2Main's SinTableInit and RandInit, then `Scene_Init(TRUE)` on a
+    /// boot with no disc.
     pub fn new(a: &Assets) -> Intro {
         mtx::sin_table_init(12);
         rnd::rand_init();
+        Intro::scene_init(a)
+    }
+
+    /// `Scene_Init(FALSE)` (0x8130BEE8), after the reset switch: the intro
+    /// again, with the random state left running.
+    pub fn restart(&mut self, a: &Assets) {
+        *self = Intro::scene_init(a);
+    }
+
+    /// `Scene_Init`: the scene, cube and menu work as at boot.
+    fn scene_init(a: &Assets) -> Intro {
         let disp = bs2main::disp_settings();
         Intro {
             cube: Cube::new(a.path.clone()),
@@ -296,6 +308,7 @@ impl Intro {
         let vp = [t.w as f32, t.h as f32];
         let mut gx = self.frame_gx(&arena, a, vp);
         self.draw(&mut gx, a, None, vp);
+        self.disc.draw_dim(&mut gx);
         self.gx_regs.set(Some(gx.regs()));
         t.clear([0.0; 3]);
         let job = raster::Job::new(t, &gx.list, 16);
@@ -317,6 +330,8 @@ impl Intro {
             }
             _ => self.draw(&mut gx, a, Some(ma), vp),
         }
+        // fn_813022C4 after Scene_Draw2D.
+        self.disc.draw_dim(&mut gx);
         self.gx_regs.set(Some(gx.regs()));
         t.clear([0.0; 3]);
         let job = raster::Job::new(t, &gx.list, 16);

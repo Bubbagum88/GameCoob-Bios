@@ -2,10 +2,11 @@
 //! `ipl.bin` is on the boot partition, and runs on into the rebuilt cube
 //! menu. Without a usable dump, `main` explains where to put it.
 
+use crate::bs2::bs2main::{Bs2Main, FrameInput};
 use crate::bs2::menu::backend::{FakeCards, FakeDrive};
-use crate::bs2::menu::{Action, Menu, MenuAssets, Pad, SysInfo};
+use crate::bs2::menu::{Action, MenuAssets, SysInfo};
 use alloc::boxed::Box;
-use crate::bs2::{Assets, Input, Intro, cube::Jingle, raster::{Job, Target, Work}, render};
+use crate::bs2::{Assets, cube::Jingle, raster::{Job, Target, Work}, render};
 use crate::clock::Clock;
 use crate::gfx::{Canvas, ResScale};
 use crate::ipl::Ipl;
@@ -153,8 +154,8 @@ impl Cores {
     }
 }
 
-/// Run the intro at 60 logic frames per second, then the cube menu. Never
-/// returns: the menu's actions boot or reset.
+/// Run [`Bs2Main`] at 60 logic frames per second: the intro, then the cube
+/// menu. Never returns: the menu's actions boot or reset.
 ///
 /// Intro: Enter, Space or A is the A button (hold to spin the cube); Z at
 /// boot picks the easter-egg jingle; Escape skips to the menu.
@@ -162,9 +163,9 @@ impl Cores {
 /// Space or S is START. F10 opens the system dialog (firmware setup,
 /// restart, power off); D opens and closes the stand-in disc drive's tray
 /// and 1 / 2 pull, format-break and re-insert the stand-in memory cards.
+/// Anywhere: R is the console's reset switch (fade out, intro again).
 pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &Assets, ma: &MenuAssets) -> ! {
-    let mut intro = Intro::new(assets);
-    let mut menu: Option<Menu> = None;
+    let mut bs2 = Bs2Main::new(assets, Box::new(FakeDrive::new()), Box::new(FakeCards::new()));
     let cores = Cores::open();
     // Rendered at the screen's resolution, adjusted to keep 60 fps.
     let mut res = ResScale::new(cv);
@@ -179,7 +180,7 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
     let mut a_until = -1.0f32;
     let mut egg: Option<Jingle> = None;
 
-    let mut pad = Pad::default();
+    let mut input = FrameInput::default();
     let mut clock_at = 0.0;
 
     loop {
@@ -189,8 +190,15 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
                 Ok(Some(k)) => k,
                 _ => break,
             };
-            if menu.is_some() {
+            if let Key::Printable(c) = key {
+                if matches!(char::from(c), 'r' | 'R') {
+                    input.reset = true;
+                    continue;
+                }
+            }
+            if bs2.menu.is_some() {
                 // Presses are latched until the next logic frame.
+                let pad = &mut input.pad;
                 match key {
                     Key::Printable(c) => match char::from(c) {
                         '\r' => pad.a = true,
@@ -215,16 +223,12 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
             match key {
                 Key::Printable(c) => match char::from(c) {
                     '\r' | ' ' | 'a' | 'A' => a_until = now + 0.15,
-                    'z' if intro.frame < 30 => egg = Some(Jingle::Pad1Z),
-                    'Z' if intro.frame < 30 => egg = Some(Jingle::AllPadsZ),
+                    'z' if bs2.intro.frame < 30 => egg = Some(Jingle::Pad1Z),
+                    'Z' if bs2.intro.frame < 30 => egg = Some(Jingle::AllPadsZ),
                     _ => {}
                 },
-                Key::Special(ScanCode::ESCAPE) => {
-                    // Skip straight to the menu.
-                    while !intro.finished() {
-                        intro.update(Input { a: false, egg: None });
-                    }
-                }
+                // Skip straight to the menu.
+                Key::Special(ScanCode::ESCAPE) => bs2.skip_intro(),
                 _ => {}
             }
         }
@@ -234,27 +238,26 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
         while done_frames < due {
             done_frames += 1;
             stepped = true;
-            if let Some(m) = &mut menu {
-                // Scene_Update in state 5 runs Menu_Update.
-                intro.update(Input::default());
-                if let Some(act) = m.update(ma, &intro.camera_view(), &pad) {
-                    if let Some(msg) = perform(act) {
+            input.intro.a = now < a_until;
+            input.intro.egg = egg;
+            let in_menu = bs2.menu.is_some();
+            if let Some(act) = bs2.update(assets, ma, &input, sys_info) {
+                if let Some(msg) = perform(act) {
+                    if let Some(m) = &mut bs2.menu {
                         m.notify(msg);
                     }
                 }
-                m.tick_guide();
-                m.update_fx(ma);
-                pad = Pad::default();
-                continue;
             }
-            intro.update(Input { a: now < a_until, egg });
-            if intro.finished() {
-                menu = Some(Menu::new(sys_info(), ma, Box::new(FakeDrive::new()), Box::new(FakeCards::new()), intro.menu.clone()));
-                // Keys pressed during the intro don't leak into the menu.
-                pad = Pad::default();
+            if in_menu && bs2.menu.is_none() {
+                // Reset: the boot easter egg can be picked again.
+                egg = None;
             }
+            // Presses are latched for one logic frame; keys pressed during
+            // the intro don't leak into the menu.
+            input.pad = Default::default();
+            input.reset = false;
         }
-        if let Some(m) = &mut menu {
+        if let Some(m) = &mut bs2.menu {
             if now - clock_at > 0.25 {
                 clock_at = now;
                 m.info.time = now_time();
@@ -276,7 +279,7 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
             target = Target::new(w, h);
         }
         let d0 = clock.now();
-        intro.render_with_menu(&mut target, assets, ma, menu.as_ref(), &par);
+        bs2.render(&mut target, assets, ma, &par);
         let d1 = clock.now();
         cv.blit_frame(&target.color, target.w, target.h, &|w| {
             run(w);

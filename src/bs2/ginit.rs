@@ -1,9 +1,11 @@
 //! BS2 graphics init and per-frame GX helpers (`gInit.c`,
-//! 0x813012D0..0x81302660). The GX setup helpers and the disc state the
-//! scene reads ([`Disc`], with no drive behind it yet) are ported; DEMOInit
-//! and the frame begin/end still live in `boot_intro.rs`.
+//! 0x813012D0..0x81302660): the GX setup helpers, the screen dim, the disc
+//! state the scene reads ([`Disc`], with no drive behind it yet) and the
+//! reset switch. DEMOInit and the frame begin/end are the UEFI glue's
+//! (`boot_intro.rs`): the app has no VI or EFB copy to set up.
 
 use crate::sdk::gx::*;
+use crate::sdk::mtx as psmtx;
 
 /// `GX_Setup2D` (0x8130180C): flat 2D drawing. Positions are s16 with 4
 /// fraction bits; `color` adds a per-vertex color (else the channel's
@@ -62,6 +64,38 @@ pub fn setup_2d(gx: &mut Gx, tex: bool, color: bool, modulate: bool) {
     gx.set_cull_mode(GX_CULL_BACK);
 }
 
+/// `Screen_Dim` (0x81301BEC): a black quad over the whole screen at
+/// `alpha`, seen from z 1700 under the frame's projection.
+pub fn screen_dim(gx: &mut Gx, alpha: u8) {
+    let m = psmtx::look_at([0.0, 0.0, 1700.0], [0.0, 1.0, 0.0], [0.0, 0.0, 0.0]);
+    gx.load_pos_mtx_imm(&m, GX_PNMTX0);
+    gx.set_current_mtx(GX_PNMTX0);
+    gx.clear_vtx_desc();
+    gx.set_vtx_attr_fmt(1, GX_VA_POS, 1, GX_S16, 0);
+    gx.set_num_chans(1);
+    gx.set_chan_ctrl(GX_COLOR0A0, false, GX_SRC_VTX, GX_SRC_VTX, 0, GX_DF_CLAMP, GX_AF_NONE);
+    gx.set_num_tex_gens(0);
+    gx.set_num_tev_stages(1);
+    gx.set_tev_order(0, GX_TEXCOORD_NULL, GX_TEXMAP_NULL, GX_COLOR0A0);
+    for s in 1..8 {
+        gx.set_tev_order(s, GX_TEXCOORD_NULL, GX_TEXMAP_NULL, GX_COLOR_NULL);
+    }
+    gx.set_tev_op(0, TevMode::PassClr);
+    gx.set_alpha_update(true);
+    gx.set_color_update(true);
+    gx.set_blend_mode(GX_BM_BLEND, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA);
+    gx.set_z_mode(false, GX_ALWAYS, false);
+    gx.set_cull_mode(GX_CULL_NONE);
+
+    let color = alpha as u32;
+    gx.begin(GX_QUADS, 1, 4);
+    for (x, y) in [(-400, 400), (400, 400), (400, -400), (-400, -400)] {
+        gx.position3s16(x, y, 10);
+        gx.color1u32(color);
+    }
+    gx.end();
+}
+
 /// The disc states `Disc_GetState` reports (`DVDStep`'s result).
 #[allow(dead_code)] // the dummy drive only reports `None`
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -88,11 +122,13 @@ pub struct Disc {
     state: DiscState,
     fade: i16,
     reset_fade: bool,
+    /// `lbl_814AD2FC`: the reset switch was down last frame.
+    reset_held: bool,
 }
 
 impl Disc {
     pub fn new() -> Disc {
-        Disc { state: DiscState::None, fade: 0, reset_fade: false }
+        Disc { state: DiscState::None, fade: 0, reset_fade: false, reset_held: false }
     }
 
     /// `InitDVDLoader` (0x813020C8) and `Disc_GetState` (0x813020EC).
@@ -113,5 +149,35 @@ impl Disc {
     /// `Disc_GetFadeAlpha` (0x81302130).
     pub fn fade_alpha(&self) -> u8 {
         self.fade as u8
+    }
+
+    /// `fn_813022C4` (0x813022C4): dim the frame by the fade alpha.
+    pub fn draw_dim(&self, gx: &mut Gx) {
+        if self.fade > 0 {
+            screen_dim(gx, self.fade as u8);
+        }
+    }
+
+    /// `fn_81302368` (0x81302368): the reset switch, `pressed` this frame.
+    /// Letting go of it (unless the disc failed for good, `fatal`) fades
+    /// the screen to black, 8 a frame; returns true once it is black and
+    /// the scene should restart (`Scene_Init(FALSE)`).
+    ///
+    /// GameCoob: the stand-in memory cards need no unmounting and the
+    /// stand-in drive no re-reading, so the restart is only the scene's.
+    pub fn reset_switch(&mut self, pressed: bool, fatal: bool) -> bool {
+        if self.reset_fade {
+            self.fade += 8;
+            if self.fade > 0xFF {
+                self.reset_fade = false;
+                self.fade = 0;
+                self.reset_held = false;
+                return true;
+            }
+        } else if self.reset_held && !pressed && !fatal {
+            self.reset_fade = true;
+        }
+        self.reset_held = pressed;
+        false
     }
 }
