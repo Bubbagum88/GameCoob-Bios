@@ -33,11 +33,12 @@ app counterpart yet.
 |-------------|------------|--------|
 | `mtx.c` | `bs2/mtx.rs` | ported |
 | `gBase.c` (Hermite) | `bs2/gbase.rs` | ported; heap is Rust's allocator |
-| `bs2main.c` (DispSettings, projection) | `bs2/bs2main.rs` | ported; the loop itself is still `boot_intro.rs` |
+| `bs2main.c` (DispSettings, projection, `BS2Main` loop) | `bs2/bs2main.rs` `Bs2Main` | ported; pad, 60 Hz pacing, raster cores and present stay in `boot_intro.rs` |
 | `camera.c` | `bs2/camera.rs` | ported |
 | `gInit.c` `GX_Setup2D` | `bs2/ginit.rs` | ported |
 | `gInit.c` disc state (`Disc_GetState`, the disc fade) | `bs2/ginit.rs` `Disc` | ported; no drive behind it, so always "no disc" |
-| `gInit.c` (DEMO init, frame begin/end, Screen_Dim) | `boot_intro.rs`, `gfx.rs` | behavioral |
+| `gInit.c` `Screen_Dim`, `fn_813022C4`, reset switch `fn_81302368` | `bs2/ginit.rs` | ported; reset is the R key, restarts the scene only |
+| `gInit.c` (DEMO init, frame begin/end, SRAM) | `boot_intro.rs`, `gfx.rs` | behavioral: no VI/EFB copy on UEFI |
 | `gMRbuild.c`, `gMRshape.c` (model load) | `ipl/j3d.rs` | close (parses the same J3D1 data; INF1 tree linked as `fn_81303838` does) |
 | `gMRdraw.c`, `gMRtexture.c` (joint calc, material and shape draw) | `bs2/gmr.rs` on `sdk::gx` | ported; every model (intro, glass cube, icons, mosaic, memory card blocks) draws through it, with the callers' material swaps (`tevColor`, cleared `texNo`) as instance overrides. Shapes go out in immediate mode instead of display lists |
 | `gMRanim.c` | `bs2/anim.rs` | close |
@@ -74,8 +75,9 @@ app counterpart yet.
 5. The menu core, `menu_fx*.c` and the icon units (done).
 6. Options, Calendar, Game Play and Memory Card, keeping their UEFI and
    dummy backends at the edges.
-7. `gInit.c` and the `BS2Main` loop over `sdk::vi` and `sdk::pad`, replacing
-   `boot_intro.rs`.
+7. `gInit.c` and the `BS2Main` loop (done: `Bs2Main` runs a loop pass,
+   `boot_intro.rs` keeps the UEFI glue; keys stay mapped to the pad until
+   real controller support).
 
 ## Not ported on purpose
 

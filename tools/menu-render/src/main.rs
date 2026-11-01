@@ -6,7 +6,7 @@
 //!
 //! The script has one `frame button` pair per line (frames count from boot,
 //! like a Dolphin frame dump): button is one of up, down, left, right, a, b,
-//! start, system (F10), eject (D), slot1, slot2. Lines starting with `#` are ignored. Without frames, every 10th
+//! start, system (F10), eject (D), slot1, slot2, reset (R). Lines starting with `#` are ignored. Without frames, every 10th
 //! frame up to the last scripted frame + 200 is written.
 //! Env: THREADS=n rasterizes on n threads; SKIP=1 skips the intro;
 //! RES=WxH renders at that size instead of 640x448;
@@ -31,7 +31,8 @@ mod bs2;
 mod png;
 
 use bs2::menu::backend::{FakeCards, FakeDrive};
-use bs2::menu::{Menu, MenuAssets, Pad, SysInfo};
+use bs2::bs2main::{Bs2Main, FrameInput};
+use bs2::menu::{MenuAssets, Pad, SysInfo};
 use std::collections::HashMap;
 use sdk::mtx as psmtx;
 use std::path::PathBuf;
@@ -149,13 +150,21 @@ fn main() {
     let last = *frames.iter().max().unwrap();
     let threads: usize = std::env::var("THREADS").ok().and_then(|s| s.parse().ok()).unwrap_or(1);
 
-    let mut intro = bs2::Intro::new(&assets);
-    if std::env::var("SKIP").is_ok() {
-        while !intro.finished() {
-            intro.update(bs2::Input { a: false, egg: None });
+    let mut cards = FakeCards::new();
+    // CARDS=a,b sets each slot to `saves`, `none` or a blank card of N blocks.
+    if let Ok(v) = std::env::var("CARDS") {
+        for (i, c) in v.split(',').enumerate().take(2) {
+            match c {
+                "saves" => {}
+                "none" => cards.set_blank(i, None),
+                n => cards.set_blank(i, Some(n.parse().expect("CARDS=saves|none|blocks"))),
+            }
         }
     }
-    let mut menu: Option<Menu> = None;
+    let mut bs = Bs2Main::new(&assets, Box::new(FakeDrive::new()), Box::new(cards));
+    if std::env::var("SKIP").is_ok() {
+        bs.skip_intro();
+    }
     // RES=WxH renders at another size, as the app does on a bigger screen.
     let (rw, rh) = std::env::var("RES")
         .ok()
@@ -165,57 +174,46 @@ fn main() {
     for f in 1..=last {
         let keys = script.get(&f).cloned().unwrap_or_default();
         let has = |k: &str| keys.iter().any(|x| x == k);
-        match &mut menu {
-            None => {
-                intro.update(bs2::Input { a: has("a"), egg: None });
-                if std::env::var("TRACE").is_ok() {
-                    let sc = &intro.scene;
-                    println!(
-                        "trace f{f} state={:?} spin={} speed={:.3} accel={:.3} wph={} wamp={} t={} mwob={} land={} drop={}",
-                        intro.state, sc.spin, sc.spin_speed, sc.spin_accel, sc.wobble_phase, sc.wobble_amp, sc.out_frame, intro.menu.wobble_frame, sc.land_impulse, sc.drop_impulse
-                    );
-                }
-                if intro.finished() {
-                    println!("frame {f}: menu starts");
-                    let mut cards = FakeCards::new();
-                    // CARDS=a,b sets each slot to `saves`, `none` or a blank card of N blocks.
-                    if let Ok(v) = std::env::var("CARDS") {
-                        for (i, c) in v.split(',').enumerate().take(2) {
-                            match c {
-                                "saves" => {}
-                                "none" => cards.set_blank(i, None),
-                                n => cards.set_blank(i, Some(n.parse().expect("CARDS=saves|none|blocks"))),
-                            }
-                        }
-                    }
-                    menu = Some(Menu::new(info(f), &ma, Box::new(FakeDrive::new()), Box::new(cards), intro.menu.clone()));
-                }
+        if let Some(m) = &mut bs.menu {
+            m.info.time = info(f).time;
+        }
+        let input = FrameInput {
+            intro: bs2::Input { a: has("a"), egg: None },
+            pad: Pad {
+                a: has("a"),
+                b: has("b"),
+                start: has("start"),
+                up: has("up"),
+                down: has("down"),
+                left: has("left"),
+                right: has("right"),
+                system: has("system"),
+                eject: has("eject"),
+                slot: [has("slot1"), has("slot2")],
+            },
+            reset: has("reset"),
+        };
+        let in_menu = bs.menu.is_some();
+        if let Some(act) = bs.update(&assets, &ma, &input, || info(f)) {
+            println!("frame {f}: action {act:?}");
+        }
+        if !in_menu {
+            if std::env::var("TRACE").is_ok() {
+                let (intro, sc) = (&bs.intro, &bs.intro.scene);
+                println!(
+                    "trace f{f} state={:?} spin={} speed={:.3} accel={:.3} wph={} wamp={} t={} mwob={} land={} drop={}",
+                    intro.state, sc.spin, sc.spin_speed, sc.spin_accel, sc.wobble_phase, sc.wobble_amp, sc.out_frame, intro.menu.wobble_frame, sc.land_impulse, sc.drop_impulse
+                );
             }
-            Some(m) => {
-                intro.update(bs2::Input::default());
-                m.info.time = info(f).time;
-                let pad = Pad {
-                    a: has("a"),
-                    b: has("b"),
-                    start: has("start"),
-                    up: has("up"),
-                    down: has("down"),
-                    left: has("left"),
-                    right: has("right"),
-                    system: has("system"),
-                    eject: has("eject"),
-                    slot: [has("slot1"), has("slot2")],
-                };
-                if let Some(act) = m.update(&ma, &intro.camera_view(), &pad) {
-                    println!("frame {f}: action {act:?}");
-                }
-                m.tick_guide();
-                m.update_fx(&ma, );
+            if bs.menu.is_some() {
+                println!("frame {f}: menu starts");
             }
+        } else if bs.menu.is_none() {
+            println!("frame {f}: reset, intro again");
         }
         if frames.contains(&f) {
             let t0 = std::time::Instant::now();
-            intro.render_with_menu(&mut target, &assets, &ma, menu.as_ref(), &|job| {
+            bs.render(&mut target, &assets, &ma, &|job| {
                 std::thread::scope(|sc| {
                     for _ in 1..threads {
                         sc.spawn(|| job.work());
@@ -230,7 +228,7 @@ fn main() {
                 .flat_map(|c| [c[0], c[1], c[2]].map(|x| (x.clamp(0.0, 1.0) * 255.0 + 0.5) as u8).into_iter().chain([255]))
                 .collect();
             png::write_rgba(&out.join(format!("f{f:04}.png")), target.w, target.h, &rgba).unwrap();
-            let st = menu.as_ref().map(|m| format!("{:?}", m.state)).unwrap_or_else(|| format!("intro {:?}", intro.state));
+            let st = bs.menu.as_ref().map(|m| format!("{:?}", m.state)).unwrap_or_else(|| format!("intro {:?}", bs.intro.state));
             println!("frame {f}: {st} ({ms:.1} ms)");
         }
     }
