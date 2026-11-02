@@ -25,6 +25,8 @@ pub enum Level {
     Main,
     /// Memory Card, Files, Drives; up goes back.
     Memory,
+    /// Game Play (the console's screen), Boot, Apps; down goes back.
+    Game,
     /// Console (the Options screen), Boot, Firmware, Controls.
     Settings,
 }
@@ -32,6 +34,9 @@ pub enum Level {
 /// A screen that only exists on a sub-cube.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Page {
+    /// Pick an OS to start now (BootNext).
+    BootNow,
+    Apps,
     Files,
     Drives,
     Boot,
@@ -54,6 +59,7 @@ fn labels(l: Level) -> [&'static str; 4] {
     match l {
         Level::Main => ["", "", "", ""],
         Level::Memory => ["Back", "Files", "Drives", "Memory Card"],
+        Level::Game => ["Game Play", "Boot", "Apps", "Back"],
         Level::Settings => ["Boot", "Console", "Firmware", "Controls"],
     }
 }
@@ -62,6 +68,10 @@ impl Level {
     /// A on a side (a `*Face` state).
     pub fn target(self, face: St) -> Option<Target> {
         Some(match (self, face) {
+            // Minimal mode: the console's screens, no sub-cubes.
+            (Level::Main, St::CardFace) if super::minimal() => Target::Screen(St::Card),
+            (Level::Main, St::OptionFace) if super::minimal() => Target::Screen(St::Option),
+            (Level::Main, St::GameFace) if !super::minimal() => Target::Cube(Level::Game),
             (Level::Main, St::CardFace) => Target::Cube(Level::Memory),
             (Level::Main, St::OptionFace) => Target::Cube(Level::Settings),
             (Level::Main, St::GameFace) => Target::Screen(St::Game),
@@ -70,6 +80,10 @@ impl Level {
             (Level::Memory, St::OptionFace) => Target::Page(Page::Files),
             (Level::Memory, St::ClockFace) => Target::Page(Page::Drives),
             (Level::Memory, St::GameFace) => Target::Cube(Level::Main),
+            (Level::Game, St::GameFace) => Target::Screen(St::Game),
+            (Level::Game, St::OptionFace) => Target::Page(Page::BootNow),
+            (Level::Game, St::ClockFace) => Target::Page(Page::Apps),
+            (Level::Game, St::CardFace) => Target::Cube(Level::Main),
             (Level::Settings, St::OptionFace) => Target::Screen(St::Option),
             (Level::Settings, St::GameFace) => Target::Page(Page::Boot),
             (Level::Settings, St::ClockFace) => Target::Page(Page::Firmware),
@@ -83,6 +97,7 @@ impl Level {
         match self {
             Level::Main => St::Top,
             Level::Memory => St::CardFace,
+            Level::Game => St::GameFace,
             Level::Settings => St::OptionFace,
         }
     }
@@ -92,6 +107,7 @@ impl Level {
         match self {
             Level::Main => true,
             Level::Memory => face == St::CardFace,
+            Level::Game => face == St::GameFace,
             Level::Settings => face == St::OptionFace,
         }
     }
@@ -115,6 +131,8 @@ impl Level {
 impl Page {
     pub fn title(self) -> &'static str {
         match self {
+            Page::BootNow => "Boot",
+            Page::Apps => "Apps",
             Page::Files => "Files",
             Page::Drives => "Drives",
             Page::Boot => "Boot",
@@ -126,6 +144,8 @@ impl Page {
     /// The side it sits on, where B returns to.
     pub fn face(self) -> St {
         match self {
+            Page::BootNow => St::OptionFace,
+            Page::Apps => St::ClockFace,
             Page::Files => St::OptionFace,
             Page::Drives => St::ClockFace,
             Page::Boot => St::GameFace,
@@ -156,9 +176,32 @@ impl Page {
                 v.push(s("A opens the system menu:"));
                 v.push(s(if fw_ui { "firmware setup, restart, power off." } else { "restart or power off." }));
                 v.push(s(""));
+                v.push(s("Minimal Mode is there too: the menu as"));
+                v.push(s("close to the console's as it gets."));
+                v.push(s(""));
                 v.push(s("F10 opens it from anywhere."));
                 v
             }
+            Page::BootNow => {
+                let mut v = Vec::new();
+                v.push(s("Start which system?"));
+                for (d, _) in entries.iter().take(BOOT_ROWS).map(|(n, d)| (d, n)) {
+                    v.push(d.clone());
+                }
+                if entries.is_empty() {
+                    v.push(s("No boot entries."));
+                }
+                v
+            }
+            Page::Apps => [
+                "Start .efi apps from your drives:",
+                "the UEFI Shell, memory testers,",
+                "firmware flashers.",
+                "",
+                "Coming soon.",
+            ]
+            .map(s)
+            .to_vec(),
             Page::Files => [
                 "Browse and convert memory card",
                 "files and card images on your drives.",
@@ -187,8 +230,25 @@ impl Page {
     }
 }
 
-/// Size of the side labels on a sub-cube's front face, in layout units.
-const LABEL_SIZE: f32 = 26.0;
+/// Boot entries the Boot page lists.
+pub const BOOT_ROWS: usize = 8;
+
+/// Layout units per texel of the front face's labels (the IPL draws its
+/// 200 x 32 word pictures there at 168 x 27).
+pub const FRONT_SCALE: f32 = 168.0 / 200.0;
+
+/// Every word [`word_label`] draws, lettered once at load.
+pub fn words() -> Vec<&'static str> {
+    let mut v: Vec<&'static str> = Vec::new();
+    let pages = [Page::BootNow, Page::Apps, Page::Files, Page::Drives, Page::Boot, Page::Firmware, Page::Controls];
+    let all = [Level::Memory, Level::Game, Level::Settings].into_iter().flat_map(labels);
+    for w in all.chain(pages.into_iter().map(Page::title)).chain(["Main Menu", super::MEMORY_LABEL]) {
+        if !w.is_empty() && !v.contains(&w) {
+            v.push(w);
+        }
+    }
+    v
+}
 
 /// A sub-cube's front face: one label along each side, reading like the
 /// main cube's (left side bottom to top, right side top to bottom). `mv`
@@ -199,23 +259,21 @@ pub fn draw_front<'a>(ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, l: Level, mv: &Mt
     }
     let a = alpha as f32 / 255.0;
     let c = with_a(WHITE, a * a);
-    let sh = with_a(SHADOW, a * a);
     let [up, left, right, down] = labels(l);
-    // (text, centre, rotation about the face normal)
+    // (text, centre, rotation about the face normal), where the main
+    // cube has its labels
     let at: [(&str, [f32; 2], i32); 4] = [
-        (up, [144.0, 49.0], 0),
+        (up, [144.0, 48.0], 0),
         (left, [48.0, 144.0], -0x4000),
-        (right, [240.0, 144.0], 0x4000),
+        (right, [239.0, 144.0], 0x4000),
         (down, [144.0, 239.0], 0),
     ];
     for (s, p, r) in at {
         if s.is_empty() {
             continue;
         }
-        let t = psmtx::concat(mv, &mtx::rot_trans(0, 0, r, [p[0], p[1], 0.0]));
-        ui.mv = t;
-        let s = cp1252(s);
-        bold_label(ui, ma, 0.0, 0.0, LABEL_SIZE, &s, c, sh);
+        ui.mv = psmtx::concat(mv, &mtx::rot_trans(0, 0, r, [p[0], p[1], 0.0]));
+        word_label(ui, ma, 0.0, 0.0, FRONT_SCALE, s, c);
     }
 }
 
@@ -228,9 +286,9 @@ pub fn draw_plain_face<'a>(ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, lang: usize,
         ui.frame(f, bank, with_a(WHITE, a));
     }
     let (white, shadow) = (with_a(WHITE, a), with_a(SHADOW, a));
-    let t = cp1252(title);
-    ui.label(&ma.font, 146.0, 42.0, 34.0, &t, shadow, 0);
-    ui.label(&ma.font, 144.0, 40.0, 34.0, &t, white, 0);
+    // where the Options face has its title picture
+    let (tx, ty) = g.pic(tag(b"titl")).next().map_or((144.0, 40.0), |p| (p.x, p.y));
+    word_label(ui, ma, tx, ty, 1.0, title, white);
     for (i, s) in lines.iter().enumerate() {
         let s = cp1252(s);
         let y = 130.0 + i as f32 * 32.0;
@@ -241,7 +299,8 @@ pub fn draw_plain_face<'a>(ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, lang: usize,
 
 /// A page on the 2D screen (584 x 448 units): the title and its lines,
 /// over the backdrop the caller drew.
-pub fn draw_page<'a>(ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, title: &str, lines: &[String], a: f32) {
+/// `sel` highlights that line (a list to pick from).
+pub fn draw_page<'a>(ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, title: &str, lines: &[String], sel: Option<usize>, a: f32) {
     let (white, shadow) = (with_a(WHITE, a), with_a(SHADOW, a));
     let t = cp1252(title);
     ui.label(&ma.font, 294.0, 62.0, 36.0, &t, shadow, 0);
@@ -250,25 +309,46 @@ pub fn draw_page<'a>(ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, title: &str, lines
         let s = cp1252(s);
         let y = 140.0 + i as f32 * 28.0;
         ui.label(&ma.font, 90.0, y + 2.0, 20.0, &s, shadow, 2);
-        ui.label(&ma.font, 88.0, y, 20.0, &s, white, 2);
+        let c = if sel == Some(i) { with_a([1.0, 0.93, 0.6, 1.0], a) } else { white };
+        ui.label(&ma.font, 88.0, y, 20.0, &s, c, 2);
+        if sel == Some(i) {
+            ui.label(&ma.font, 70.0, y, 20.0, b">", c, 2);
+        }
     }
 }
 
-/// A side label like the IPL's pre-drawn ones: centred on (x, y), heavier
-/// than the ROM font (drawn three times a little apart) over a soft
-/// shadow.
-pub fn bold_label<'a>(ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, x: f32, y: f32, size: f32, s: &[u8], c: Rgba, sh: Rgba) {
+/// A label in the IPL's lettering, centred on (x, y) at `scale` layout
+/// units per texel, like BS2's word pictures (white, no shadow). Words
+/// the label font could not set fall back to the ROM font, made heavier.
+pub fn word_label<'a>(ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, x: f32, y: f32, scale: f32, s: &str, c: Rgba) {
+    if let Some(t) = ma.label(s) {
+        let (w, h) = t.size();
+        let (w, h) = (w * scale, h * scale);
+        ui.rect(x - w / 2.0, y - h / 2.0, w, h, [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]], c, Some(t));
+        return;
+    }
+    let size = 31.0 * scale;
+    let s = cp1252(s);
     let top = y - size / 2.0;
-    ui.label(&ma.font, x + 2.0, top + 2.0, size, s, sh, 0);
+    ui.label(&ma.font, x + 2.0, top + 2.0, size, &s, with_a(SHADOW, c[3] * 0.5), 0);
     for dx in [-0.8, 0.8, 0.0] {
-        ui.label(&ma.font, x + dx, top, size, s, c, 0);
+        ui.label(&ma.font, x + dx, top, size, &s, c, 0);
     }
 }
 
 /// The icon cubes of the new sides: cube, side, tint (the icon colour of
 /// the main-cube side the cube grew out of) and picture.
 pub fn icons(d: &super::icons::IconData) -> Vec<(Level, St, super::icons::PixelIcon)> {
-    use super::icons::{PixelIcon, Side, TINT_CARD, TINT_OPTION};
+    use super::icons::{PixelIcon, Side, TINT_CARD, TINT_GAME, TINT_OPTION};
+    const APPS: &[&str] = &[
+        "###.###",
+        "###.###",
+        "###.###",
+        ".......",
+        "###.###",
+        "###.###",
+        "###.###",
+    ];
     const FILES: &[&str] = &[
         "#####...",
         "#...##..",
@@ -281,16 +361,24 @@ pub fn icons(d: &super::icons::IconData) -> Vec<(Level, St, super::icons::PixelI
         "#......#",
         "########",
     ];
+    // A 3.5" hard drive seen from the top: the case, the platter with its
+    // spindle, and the head arm swinging in from the bottom right.
     const DRIVES: &[&str] = &[
-        "#########",
-        "#.......#",
-        "#..###..#",
-        "#.#...#.#",
-        "#.#.#.#.#",
-        "#.#...#.#",
-        "#..###..#",
-        "#.....#.#",
-        "#########",
+        "############",
+        "#..........#",
+        "#...####...#",
+        "#..#....#..#",
+        "#.#......#.#",
+        "#.#..#...#.#",
+        "#.#...#..#.#",
+        "#.#....#.#.#",
+        "#..#....##.#",
+        "#...####.#.#",
+        "#.......##.#",
+        "#.......##.#",
+        "#..........#",
+        "#.##....##.#",
+        "############",
     ];
     const BOOT: &[&str] = &[
         "....#....",
@@ -325,6 +413,8 @@ pub fn icons(d: &super::icons::IconData) -> Vec<(Level, St, super::icons::PixelI
     alloc::vec![
         (Level::Memory, St::OptionFace, PixelIcon::new(d, Side::Left, TINT_CARD, FILES)),
         (Level::Memory, St::ClockFace, PixelIcon::new(d, Side::Right, TINT_CARD, DRIVES)),
+        (Level::Game, St::OptionFace, PixelIcon::new(d, Side::Left, TINT_GAME, BOOT)),
+        (Level::Game, St::ClockFace, PixelIcon::new(d, Side::Right, TINT_GAME, APPS)),
         (Level::Settings, St::GameFace, PixelIcon::new(d, Side::Up, TINT_OPTION, BOOT)),
         (Level::Settings, St::ClockFace, PixelIcon::new(d, Side::Right, TINT_OPTION, FIRMWARE)),
         (Level::Settings, St::CardFace, PixelIcon::new(d, Side::Down, TINT_OPTION, CONTROLS)),

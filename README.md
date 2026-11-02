@@ -40,12 +40,20 @@ The matching decompilation of the IPL's BS2 program lives in [decomp/](decomp/RE
   the firmware boot menu timeout (the `Timeout` variable). F10 opens the
   system dialog: Firmware Setup (reboots into your vendor's BIOS setup via
   `OsIndications`), Restart and Power Off.
-- **Sub-cubes.** Memory (down) and Options (left) open a second cube, turned
-  and entered the same way. Memory: Memory Card (down, the console's
+- **Sub-cubes.** Game Play (up), Memory (down) and Options (left) open a
+  second cube, turned and entered the same way. Game: Game Play (up, the
+  console's screen), Boot (left, start an OS now), Apps (right), down goes
+  back. Memory: Memory Card (down, the console's
   screen), Files (left), Drives (right), up goes back. Settings: Console
   (left, the Options screen), Boot (up), Firmware (right), Controls (down).
-  B on a sub-cube's front goes back. Files, Drives and Controls are
+  B on a sub-cube's front goes back. Their labels use the console's own
+  lettering, cut letter by letter from your dump's label pictures; the few
+  letters the IPL never drew come from M PLUS 1p (SIL Open Font License). Files, Drives and Controls are
   placeholders for now.
+- **Minimal mode.** For the menu exactly as on the console: no sub-cubes,
+  Memory Card and Options open their own screens again, and the cube keeps
+  the console's labels. Toggle it in the system menu (F10, or Settings cube
+  ▶ Firmware); it is saved in a UEFI variable (`GameCoobMinimal`).
 - **Your own memory cards.** Put card images (`.raw`, `.mcp` or `.gcp` from
   Dolphin, Nintendont, a MemCard PRO GC and the like, any size from 59 to
   2043 blocks) at `\EFI\GameCoob\cards\slot-a.raw` and `slot-b.raw` and the

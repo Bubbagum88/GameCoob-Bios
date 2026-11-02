@@ -128,6 +128,7 @@ fn perform(a: Action) -> Option<String> {
     match a {
         Action::Boot(n) => Some(firmware::boot_entry(n)),
         Action::SetTimeout(s) => firmware::save_timeout(s).err(),
+        Action::SetMinimal(on) => firmware::save_minimal(on).err(),
         Action::SetTime(t) => firmware::set_time(t).err(),
         Action::FirmwareSetup => Some(firmware::firmware_setup()),
         Action::Restart => firmware::restart(),
@@ -219,6 +220,7 @@ impl Cores {
 /// back the card images), R is the
 /// console's reset switch and F3 shows frame timings.
 pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &Assets, ma: &MenuAssets) -> ! {
+    crate::bs2::menu::set_minimal(crate::vars::minimal());
     let mut bs2 = Bs2Main::new(assets, Box::new(FakeDrive::new()), load_cards(), Box::new(UefiVolumes));
     let cores = Cores::open();
     // Rendered at the screen's resolution, adjusted to keep 60 fps.

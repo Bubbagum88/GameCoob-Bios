@@ -1,13 +1,15 @@
 //! The system dialog (GameCoob's own, opened with F10 from anywhere in the
 //! menu): Firmware Setup, Restart and Power Off, each confirmed with
-//! Yes / No. It is drawn with BS2's dialog layout (res 108, the one the
+//! Yes / No, and the Minimal Mode switch (no confirmation). It is drawn with BS2's dialog layout (res 108, the one the
 //! console uses for its language and "settings lost" prompts).
 
 use super::{Action, Fader, MenuAssets, Pad, WHITE, with_a};
 use super::super::ui::{cp1252, Ui};
 use crate::ipl::glh::tag;
 
-const ITEMS: [&str; 4] = ["Firmware Setup", "Restart", "Power Off", "Cancel"];
+const ITEMS: [&str; 5] = ["Firmware Setup", "Restart", "Power Off", "Minimal Mode", "Cancel"];
+/// The Minimal Mode row: A flips it at once.
+const ROW_MINIMAL: usize = 3;
 const QUESTIONS: [&str; 3] = [
     "Restart this PC into its\nfirmware setup screen?",
     "Restart this PC now?",
@@ -39,7 +41,8 @@ impl System {
         self.open || self.fader.alpha() > 0
     }
 
-    pub fn update(&mut self, p: &Pad) -> Option<Action> {
+    /// `minimal` is minimal mode's current state, for its row.
+    pub fn update(&mut self, p: &Pad, minimal: bool) -> Option<Action> {
         self.fader.step_if(self.open);
         if !self.open {
             return None;
@@ -77,6 +80,8 @@ impl System {
         }
         if p.b || (p.a && self.row == ITEMS.len() - 1) {
             self.open = false;
+        } else if p.a && self.row == ROW_MINIMAL {
+            return Some(Action::SetMinimal(!minimal));
         } else if p.a && (self.row != 0 || self.fw_ui) {
             self.confirm = Some(false);
         }
@@ -91,14 +96,18 @@ impl System {
         // Dim what is behind.
         ui.fill(-40.0, -40.0, 664.0, 528.0, [0.0, 0.0, 0.0, 0.55 * a]);
         let d = &ma.dialog;
-        let (q, items): (&str, [Option<&[u8]>; 4]) = match self.confirm {
+        let min_row = cp1252(&alloc::format!("{}: {}", ITEMS[ROW_MINIMAL], if super::minimal() { "On" } else { "Off" }));
+        let (q, items): (&str, [Option<&[u8]>; 5]) = match self.confirm {
             Some(_) => {
                 let s = &ma.dialog_str[lang];
                 let yes = s.get(1).map(|s| &s.text[..]).unwrap_or(b"Yes");
                 let no = s.get(2).map(|s| &s.text[..]).unwrap_or(b"No");
-                (QUESTIONS[self.row.min(2)], [Some(yes), Some(no), None, None])
+                (QUESTIONS[self.row.min(2)], [Some(yes), Some(no), None, None, None])
             }
-            None => ("What should this PC do?", [ITEMS[0], ITEMS[1], ITEMS[2], ITEMS[3]].map(|s| Some(s.as_bytes()))),
+            None => (
+                "What should this PC do?",
+                [ITEMS[0].as_bytes(), ITEMS[1].as_bytes(), ITEMS[2].as_bytes(), &min_row[..], ITEMS[4].as_bytes()].map(Some),
+            ),
         };
         // The dialog's big frame as the panel, the question on top.
         if let Some(f) = d.frame(tag(b"mes0")).next() {
@@ -112,11 +121,11 @@ impl System {
             None => self.row,
         };
         // The rows, the selected one boxed in the dialog's second frame.
-        let size = 22.0;
+        let size = 21.0;
         let n = items.iter().flatten().count();
         let wmax = items.iter().flatten().map(|t| ma.font.width(t, size, 0.0)).fold(0.0f32, f32::max);
-        let top = 196.0;
-        let pitch = 30.0;
+        let top = 186.0;
+        let pitch = 25.0;
         if let Some(f) = d.frame(tag(b"mes1")).next() {
             let w = wmax + 24.0;
             let y = top + sel.min(n.saturating_sub(1)) as f32 * pitch;

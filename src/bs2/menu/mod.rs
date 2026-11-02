@@ -30,9 +30,23 @@ mod calendar;
 mod options;
 pub mod icons;
 mod system;
+mod label_font;
 mod subcube;
 
 pub use subcube::Level;
+
+/// GameCoob's minimal mode: the menu as close to the console's as it gets
+/// (no sub-cubes, the console's own labels). Read by the spin-out's face
+/// before the menu exists, so it lives here rather than in [`Menu`].
+static MINIMAL: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+
+pub fn set_minimal(on: bool) {
+    MINIMAL.store(on, core::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn minimal() -> bool {
+    MINIMAL.load(core::sync::atomic::Ordering::Relaxed)
+}
 use subcube::{Page, Target};
 
 use super::backdrop;
@@ -115,6 +129,8 @@ pub struct MenuAssets {
     pub font: UiFont,
     pub fx: FxData,
     pub icons: icons::IconData,
+    /// GameCoob's side labels and face titles, by text.
+    pub labels: Vec<(&'static str, FastTex)>,
 }
 
 impl MenuAssets {
@@ -125,7 +141,15 @@ impl MenuAssets {
         let model = |id: u16| Some(render::Prepared::new(crate::ipl::j3d::Model::parse(&ipl.resource(id).ok()?).ok()?));
         let per_lang = |ids: &[u16; 6]| ids.iter().map(|&i| layout(i)).collect::<Option<Vec<_>>>();
         let per_lang_s = |ids: &[u16; 6]| ids.iter().map(|&i| strings(i)).collect::<Option<Vec<_>>>();
-        let bank = glh::texture_bank(&ipl.resource(res::TEX_BANK).ok()?).ok()?.iter().map(FastTex::new_ui).collect();
+        let bank_tex = glh::texture_bank(&ipl.resource(res::TEX_BANK).ok()?).ok()?;
+        let bank = bank_tex.iter().map(FastTex::new_ui).collect();
+        let (game_face, card_face) = (per_lang(&res::GAME_FACE)?, per_lang(&res::CARD_FACE)?);
+        let (clock_face, option_face) = (per_lang(&res::CLOCK_FACE)?, per_lang(&res::OPTION_FACE)?);
+        // GameCoob: the new sides' labels, lettered from the English face
+        // titles (language 0).
+        let title = |g: &Layout| g.pic(tag(b"titl")).next().and_then(|p| bank_tex.get(p.tex as usize));
+        let font = label_font::LabelFont::new([title(&option_face[0]), title(&clock_face[0]), title(&card_face[0]), title(&game_face[0])]);
+        let labels = subcube::words().into_iter().filter_map(|w| Some((w, font.render(w)?))).collect();
         let mut backdrop = bti::parse(&ipl.resource(res::BACKDROP).ok()?).ok()?;
         backdrop.wrap_s = crate::ipl::gx::REPEAT;
         backdrop.wrap_t = crate::ipl::gx::REPEAT;
@@ -134,10 +158,10 @@ impl MenuAssets {
         Some(MenuAssets {
             bank,
             front: per_lang(&res::FRONT)?,
-            game_face: per_lang(&res::GAME_FACE)?,
-            card_face: per_lang(&res::CARD_FACE)?,
-            clock_face: per_lang(&res::CLOCK_FACE)?,
-            option_face: per_lang(&res::OPTION_FACE)?,
+            game_face,
+            card_face,
+            clock_face,
+            option_face,
             guide: layout(res::GUIDE)?,
             guide_str: per_lang_s(&res::GUIDE_STR)?,
             clock_str: per_lang_s(&res::CLOCK_STR)?,
@@ -158,7 +182,13 @@ impl MenuAssets {
             font: UiFont::new(glh::Font::parse_rom(ipl.rom()).ok()?),
             fx: FxData::load(ipl)?,
             icons: icons::IconData::load(ipl)?,
+            labels,
         })
+    }
+
+    /// A GameCoob label set in the IPL's lettering (see [`label_font`]).
+    pub fn label(&self, s: &str) -> Option<&FastTex> {
+        self.labels.iter().find(|l| l.0 == s).map(|l| &l.1)
     }
 }
 
@@ -384,6 +414,8 @@ pub struct SysInfo {
 pub enum Action {
     Boot(u16),
     SetTimeout(u16),
+    /// Save minimal mode (on or off).
+    SetMinimal(bool),
     /// Set the firmware clock: year, month 1..12, day, hour, minute, second.
     SetTime([i32; 6]),
     FirmwareSetup,
@@ -533,7 +565,13 @@ impl Menu {
         use St::*;
         // GameCoob: on the Memory cube, up (the way back) and B on its
         // front leave for the main cube.
-        if self.level == Level::Memory && self.state == Top && self.w.at_front() && p.up {
+        // On the Game cube the way back is down.
+        let back = match self.level {
+            Level::Memory => p.up,
+            Level::Game => p.down,
+            _ => false,
+        };
+        if back && self.state == Top && self.w.at_front() {
             self.dive(Level::Main);
             return;
         }
@@ -603,6 +641,18 @@ impl Menu {
         }
     }
 
+    /// GameCoob: switch minimal mode. Turning it on from a sub-cube puts
+    /// the main cube back (behind the dialog), on the side it was entered
+    /// from.
+    fn set_minimal(&mut self, on: bool) {
+        set_minimal(on);
+        if on && self.level != Level::Main {
+            self.dive_to = Level::Main;
+            self.finish_dive();
+            self.w.zoom = 0;
+        }
+    }
+
     /// GameCoob: start zooming into the current face; at full zoom the
     /// cube becomes `to` ([`Menu::finish_dive`]).
     fn dive(&mut self, to: Level) {
@@ -619,6 +669,7 @@ impl Menu {
         let (rx, ry) = match face {
             St::CardFace => (-0x4000, 0),
             St::OptionFace => (0, 0x4000),
+            St::GameFace => (0x4000, 0),
             _ => (0, 0),
         };
         self.w.rot_x = rx;
@@ -796,6 +847,7 @@ impl Menu {
             // Card Files draws its own help line.
             St::Page if self.page == Page::Files => [o; 8],
             St::Page if self.page == Page::Firmware => [o, o, o, o, o, i, o, i],
+            St::Page if self.page == Page::BootNow => [o, o, o, i, o, i, o, i],
             St::Page => [o, o, o, o, o, i, o, o],
         };
         // Glyph groups: 0..2 inside submenus, 3 the stick on the front
@@ -809,6 +861,7 @@ impl Menu {
             St::Dive => [false; 6],
             St::Page if self.page == Page::Files => [false; 6],
             St::Page if self.page == Page::Firmware => [false, true, true, false, false, false],
+            St::Page if self.page == Page::BootNow => [true, true, true, false, false, false],
             St::Page => [false, true, false, false, false, false],
         };
         for (f, on) in self.guide_text.iter_mut().zip(text) {
@@ -892,7 +945,10 @@ impl Menu {
             self.sys.toggle();
         }
         let none = Pad::default();
-        let sys_action = if self.sys.visible() { self.sys.update(pad) } else { None };
+        let sys_action = if self.sys.visible() { self.sys.update(pad, minimal()) } else { None };
+        if let Some(Action::SetMinimal(on)) = sys_action {
+            self.set_minimal(on);
+        }
         let busy = self.sys.visible() || self.explorer.visible();
         let ep = if self.sys.visible() { &none } else { pad };
         self.explorer.update(ep, &mut *self.vols, &mut self.cards);
@@ -1035,6 +1091,22 @@ impl Menu {
             if p.a && self.page == Page::Firmware {
                 self.sys.toggle();
             }
+            if self.page == Page::BootNow {
+                // A list like Game Play's boot list: pick, A boots it
+                // once (BootNext).
+                let n = self.info.entries.len().min(subcube::BOOT_ROWS);
+                if p.up && self.boot_sel > 0 {
+                    self.boot_sel -= 1;
+                }
+                if p.down && self.boot_sel + 1 < n {
+                    self.boot_sel += 1;
+                }
+                if p.a {
+                    if let Some(&(num, _)) = self.info.entries.get(self.boot_sel) {
+                        return (St::Page, Some(Action::Boot(num)));
+                    }
+                }
+            }
             return (St::Page, None);
         }
         (self.state, None)
@@ -1176,11 +1248,10 @@ impl Menu {
             for f in g.frame(tag(b"fram")) {
                 ui.frame(f, bank, c);
             }
-            if self.level == Level::Main {
+            if self.level == Level::Main && !minimal() {
                 // GameCoob: the main cube's side is the Memory cube now.
                 if let Some(t) = g.pic(tag(b"titl")).next() {
-                    let s = cp1252(MEMORY_LABEL);
-                    subcube::bold_label(ui, ma, t.x, t.y, 30.0, &s, c, with_a(SHADOW, a * a * 0.5));
+                    subcube::word_label(ui, ma, t.x, t.y, t.w / 200.0, MEMORY_LABEL, c);
                 }
             } else {
                 pics(ui, g, b"titl", bank, c);
@@ -1394,7 +1465,8 @@ impl Menu {
             return;
         }
         let lines = self.page.lines(&self.info.entries, self.info.fw_ui);
-        subcube::draw_page(ui, ma, self.page.title(), &lines, t);
+        let sel = (self.page == Page::BootNow && !self.info.entries.is_empty()).then_some(self.boot_sel + 1);
+        subcube::draw_page(ui, ma, self.page.title(), &lines, sel, t);
         self.draw_message(ui, ma, t);
     }
 
@@ -1535,11 +1607,9 @@ fn draw_front<'a>(ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, lang: usize, view: &V
     let g = &ma.front[lang];
     for p in g.pics.iter() {
         // GameCoob: the Memory Card side leads to the Memory cube, so it
-        // is labelled "Memory" in the ROM font instead.
-        if p.tag == tag(b"titm") {
-            let s = cp1252(MEMORY_LABEL);
-            let size = p.h.min(p.w) + 1.0;
-            subcube::bold_label(ui, ma, p.x, p.y, size, &s, with_a(WHITE, a * a), with_a(SHADOW, a * a * 0.5));
+        // is labelled "Memory", cut from the "Memory Card" picture.
+        if p.tag == tag(b"titm") && !minimal() {
+            subcube::word_label(ui, ma, p.x, p.y, subcube::FRONT_SCALE, MEMORY_LABEL, with_a(WHITE, a * a));
             continue;
         }
         if let Some(t) = ma.bank.get(p.tex as usize) {
@@ -1549,7 +1619,7 @@ fn draw_front<'a>(ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, lang: usize, view: &V
 }
 
 /// The main cube's Memory Card side, now the way into the Memory cube.
-const MEMORY_LABEL: &str = "Memory";
+pub(crate) const MEMORY_LABEL: &str = "Memory";
 
 /// Backdrop_Draw, simplified: the 8x8 grid tile repeated over the screen,
 /// lit by a soft spot from the centre instead of the GX spot light.
