@@ -23,6 +23,9 @@ jobs:
       - name: Test the BS2 code on the host
         working-directory: tools/menu-render
         run: cargo test --target x86_64-unknown-linux-gnu
+      - name: Test the sound code on the host
+        working-directory: tools/audio-render
+        run: cargo test --target x86_64-unknown-linux-gnu
       - name: Lay out the boot partition
         run: |
           mkdir -p dist/EFI/BOOT dist/EFI/GameCoob

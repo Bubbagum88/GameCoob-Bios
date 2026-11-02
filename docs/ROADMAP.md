@@ -59,8 +59,9 @@ Language: Rust with the [`uefi`](https://crates.io/crates/uefi) crate, `no_std`.
       keyboard stays on alongside
 - [ ] Controls page: remap keys and pad buttons, saved in a UEFI variable
 - [ ] Mouse/pointer support through the Simple Pointer protocol
-- [ ] Intro audio through Intel HDA, following OpenCore's AudioDxe approach.
-      Ship only our own jingle; play the original only from the user's dump
+- [x] Intro audio through Intel HDA (own driver, `src/hda.rs`); the
+      original sounds play only from the user's dump, none are shipped
+- [ ] The IPL's sequence (`iplrom.com`) and every menu sound (docs/AUDIO.md)
 
 ## Phase 5: Real BIOS settings (HII)
 

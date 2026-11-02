@@ -477,6 +477,9 @@ pub struct Menu {
     /// and its fader.
     pub level: Level,
     dive_to: Level,
+    /// GameCoob: the turn (rot_x, rot_y) the cube leans into while it
+    /// dives, toward the side that was picked.
+    dive_tilt: (i16, i16),
     page: Page,
     /// The Files page has opened Card Files (closing it leaves the page).
     files_open: bool,
@@ -545,6 +548,7 @@ impl Menu {
             option_icon: icons::OptionIcon::new(&ma.icons),
             level: Level::Main,
             dive_to: Level::Main,
+            dive_tilt: (0, 0),
             page: Page::Files,
             files_open: false,
             page_fade: [Fader::default(), Fader::with_delay(8)],
@@ -576,6 +580,23 @@ impl Menu {
         if self.level != Level::Main && self.state == Top && self.w.at_front() && p.b {
             self.dive(Level::Main);
             return;
+        }
+        // GameCoob: on the main cube, a side that leads to a sub-cube is
+        // entered straight from the front, no face (and no A) in between.
+        if self.level == Level::Main && self.state == Top && self.w.at_front() {
+            let pick = [(p.up, GameFace), (p.down, CardFace), (p.left, OptionFace), (p.right, ClockFace)];
+            if let Some(&(_, face)) = pick.iter().find(|x| x.0) {
+                if let Some(Target::Cube(l)) = self.level.target(face) {
+                    self.dive_tilt = match face {
+                        GameFace => (DIVE_TILT, 0),
+                        CardFace => (-DIVE_TILT, 0),
+                        OptionFace => (0, DIVE_TILT),
+                        _ => (0, -DIVE_TILT),
+                    };
+                    self.dive(l);
+                    return;
+                }
+            }
         }
         let w = &self.w;
         if p.up {
@@ -640,8 +661,7 @@ impl Menu {
     }
 
     /// GameCoob: switch minimal mode. Turning it on from a sub-cube puts
-    /// the main cube back (behind the dialog), on the side it was entered
-    /// from.
+    /// the main cube back (behind the dialog), on its front.
     fn set_minimal(&mut self, on: bool) {
         set_minimal(on);
         if on && self.level != Level::Main {
@@ -655,25 +675,22 @@ impl Menu {
     /// cube becomes `to` ([`Menu::finish_dive`]).
     fn dive(&mut self, to: Level) {
         self.dive_to = to;
+        if to == Level::Main {
+            self.dive_tilt = (0, 0);
+        }
         self.next = St::Dive;
     }
 
     /// GameCoob: fully zoomed in: swap cubes and zoom back out, on the
-    /// new cube's front, or on the main cube's side we came from.
+    /// new cube's front (the main cube's too: its sub-cube sides have no
+    /// face of their own to land on).
     fn finish_dive(&mut self) {
-        let from = self.level;
         self.level = self.dive_to;
-        let face = if self.level == Level::Main { from.home_face() } else { St::Top };
-        let (rx, ry) = match face {
-            St::CardFace => (-0x4000, 0),
-            St::OptionFace => (0, 0x4000),
-            St::GameFace => (0x4000, 0),
-            _ => (0, 0),
-        };
-        self.w.rot_x = rx;
-        self.w.rot_y = ry;
-        self.state = face;
-        self.next = face;
+        self.dive_tilt = (0, 0);
+        self.w.rot_x = 0;
+        self.w.rot_y = 0;
+        self.state = St::Top;
+        self.next = St::Top;
     }
 
     /// Menu_CalcCubeMtx (0x81311D50): rotation, idle wobble, then the zoom
@@ -1004,6 +1021,10 @@ impl Menu {
             self.zoom_in();
             self.anim_cube();
             if self.state == St::Dive {
+                // lean toward the picked side as the cube zooms away
+                let k = self.w.zoom as f32 / 0x7FFF as f32;
+                self.w.rot_x = (self.dive_tilt.0 as f32 * k) as i16;
+                self.w.rot_y = (self.dive_tilt.1 as f32 * k) as i16;
                 if self.w.zoomed_in() {
                     self.finish_dive();
                 }
@@ -1615,6 +1636,9 @@ fn draw_front<'a>(ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, lang: usize, view: &V
         }
     }
 }
+
+/// How far the cube leans toward the side it dives into.
+const DIVE_TILT: i16 = 0x1800;
 
 /// The main cube's Memory Card side, now the way into the Memory cube.
 pub(crate) const MEMORY_LABEL: &str = "Memory";

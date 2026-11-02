@@ -1,0 +1,14 @@
+[package]
+name = "audio-render"
+version = "0.1.0"
+edition = "2024"
+description = "Host-side check of src/audio: finds the sound archive in an IPL dump and renders sounds to WAV"
+
+# Standalone: not part of the UEFI crate. Build with --target x86_64-unknown-linux-gnu.
+[workspace]
+
+[dependencies]
+libm = "0.2.16"
+
+[profile.release]
+opt-level = 3

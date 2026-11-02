@@ -7,6 +7,9 @@
 
 extern crate alloc;
 
+// The bank and sequence parts are used by the next step of the port.
+#[allow(dead_code)]
+mod audio;
 mod boot_intro;
 mod bs2;
 // Used by the memory card explorer and card backend (next steps).
@@ -17,6 +20,7 @@ mod firmware;
 mod fs;
 mod gamepad;
 mod gfx;
+mod hda;
 mod input;
 mod ipl;
 mod sdk;
@@ -36,7 +40,7 @@ fn main() -> Status {
     bs2::rnd::rand_init();
 
     // Checked before taking the screen, so the text console can still say why.
-    let Some((assets, menu_assets)) = boot_intro::load() else {
+    let Some((assets, menu_assets, sound)) = boot_intro::load() else {
         return no_dump();
     };
 
@@ -53,7 +57,7 @@ fn main() -> Status {
     let clock = clock::Clock::calibrate();
 
     let _ = system::with_stdin(|i| i.reset(false));
-    boot_intro::play(&mut gop, &mut canvas, &clock, &assets, &menu_assets)
+    boot_intro::play(&mut gop, &mut canvas, &clock, &assets, &menu_assets, sound)
 }
 
 /// Without a usable dump there is nothing to show: say where it goes, wait
