@@ -987,6 +987,8 @@ struct PixCube {
 /// three phases and the same feel as BS2's icons.
 pub struct PixelIcon {
     side: Side,
+    /// Cube scale: pictures over 9 cells are shrunk to fit like a 9-cell one.
+    scale: f32,
     tint: usize,
     cubes: Vec<PixCube>,
     inst: Vec<Instance>,
@@ -998,20 +1000,22 @@ impl PixelIcon {
     pub fn new(d: &IconData, side: Side, tint: usize, rows: &[&str]) -> PixelIcon {
         let h = rows.len() as f32;
         let w = rows.iter().map(|r| r.len()).max().unwrap_or(0) as f32;
+        let k = (9.0 / w.max(h)).min(1.0);
+        let pitch = PIX_PITCH * k;
         let mut cubes = Vec::new();
         for (r, row) in rows.iter().enumerate() {
             for (c, ch) in row.bytes().enumerate() {
                 if ch != b'#' {
                     continue;
                 }
-                let x = (c as f32 - (w - 1.0) / 2.0) * PIX_PITCH;
-                let y = ((h - 1.0) / 2.0 - r as f32) * PIX_PITCH;
-                let ring = ((x / PIX_PITCH).abs().max((y / PIX_PITCH).abs()) + 0.5) as i32;
+                let x = (c as f32 - (w - 1.0) / 2.0) * pitch;
+                let y = ((h - 1.0) / 2.0 - r as f32) * pitch;
+                let ring = ((x / pitch).abs().max((y / pitch).abs()) + 0.5) as i32;
                 cubes.push(PixCube { base: [x, y], ring, diag: (r + c) as i32, ..Default::default() });
             }
         }
         let inst = (0..cubes.len()).map(|_| d.instance()).collect();
-        PixelIcon { side, tint, cubes, inst, frame: 0, settled: false }
+        PixelIcon { side, scale: PIX_SCALE * k, tint, cubes, inst, frame: 0, settled: false }
     }
 
     pub fn update(&mut self, phase: Phase) {
@@ -1095,7 +1099,7 @@ impl PixelIcon {
         for (c, inst) in self.cubes.iter().zip(&mut self.inst) {
             let t = mtx::rot_trans(0, c.turn as i32, 0, [c.cur[0] * mirror, c.cur[1], c.z]);
             let m = psmtx::concat(&base, &t);
-            d.calc(inst, &m, PIX_SCALE, view);
+            d.calc(inst, &m, self.scale, view);
         }
     }
 
