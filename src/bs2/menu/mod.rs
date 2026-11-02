@@ -389,8 +389,6 @@ pub enum Action {
     FirmwareSetup,
     Restart,
     PowerOff,
-    /// Open the Card Files explorer (handled inside the menu).
-    CardFiles,
 }
 
 pub struct Menu {
@@ -445,6 +443,8 @@ pub struct Menu {
     pub level: Level,
     dive_to: Level,
     page: Page,
+    /// The Files page has opened Card Files (closing it leaves the page).
+    files_open: bool,
     page_fade: [Fader; 2],
 }
 
@@ -503,6 +503,7 @@ impl Menu {
             level: Level::Main,
             dive_to: Level::Main,
             page: Page::Files,
+            files_open: false,
             page_fade: [Fader::default(), Fader::with_delay(8)],
         };
         m.calc_cube_mtx();
@@ -765,6 +766,8 @@ impl Menu {
                 [o, o, o, i, None, Some(!browsing), Some(browsing), i]
             }
             St::Dive => [o; 8],
+            // Card Files draws its own help line.
+            St::Page if self.page == Page::Files => [o; 8],
             St::Page if self.page == Page::Firmware => [o, o, o, o, o, i, o, i],
             St::Page => [o, o, o, o, o, i, o, o],
         };
@@ -777,6 +780,7 @@ impl Menu {
             St::GameFace | St::CardFace | St::OptionFace | St::ClockFace => [false, false, false, false, true, true],
             St::Card | St::Option | St::Clock => [true, true, true, false, false, false],
             St::Dive => [false; 6],
+            St::Page if self.page == Page::Files => [false; 6],
             St::Page if self.page == Page::Firmware => [false, true, true, false, false, false],
             St::Page => [false, true, false, false, false, false],
         };
@@ -859,13 +863,6 @@ impl Menu {
         }
         let none = Pad::default();
         let sys_action = if self.sys.visible() { self.sys.update(pad) } else { None };
-        let sys_action = match sys_action {
-            Some(Action::CardFiles) => {
-                self.explorer.show(&mut *self.vols, &mut self.cards);
-                None
-            }
-            a => a,
-        };
         let busy = self.sys.visible() || self.explorer.visible();
         let ep = if self.sys.visible() { &none } else { pad };
         self.explorer.update(ep, &mut *self.vols, &mut self.cards);
@@ -985,6 +982,20 @@ impl Menu {
         }
         if self.state == St::Page {
             if !self.w.zoomed_in() {
+                return (St::Page, None);
+            }
+            // Files is the Card Files explorer: it opens once the cube
+            // has zoomed in, and closing it (B at its drive list) goes
+            // back to the side.
+            if self.page == Page::Files {
+                if !self.explorer.open {
+                    if self.files_open {
+                        self.files_open = false;
+                        return (self.page.face(), None);
+                    }
+                    self.explorer.show(&mut *self.vols, &mut self.cards);
+                    self.files_open = true;
+                }
                 return (St::Page, None);
             }
             if p.b {
@@ -1330,6 +1341,10 @@ impl Menu {
             return;
         }
         draw_backdrop(ui, ma, &self.w, b);
+        if self.page == Page::Files {
+            // Card Files draws itself over everything.
+            return;
+        }
         let lines = self.page.lines(&self.info.entries, self.info.fw_ui);
         subcube::draw_page(ui, ma, self.page.title(), &lines, t);
         self.draw_message(ui, ma, t);
