@@ -234,6 +234,11 @@ pub trait MemCards {
     fn take_changed(&mut self, _slot: usize) -> Option<(String, Vec<u8>)> {
         None
     }
+    /// The real-card backend, if this is it (the Card Files explorer loads
+    /// images through it).
+    fn images(&mut self) -> Option<&mut super::card_image::ImageCards> {
+        None
+    }
 }
 
 struct FakeCard {

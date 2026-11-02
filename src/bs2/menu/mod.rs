@@ -16,6 +16,8 @@
 
 pub mod backend;
 pub mod card_image;
+pub mod explorer;
+pub mod volumes;
 mod card;
 mod card_blocks;
 mod game;
@@ -374,6 +376,8 @@ pub enum Action {
     FirmwareSetup,
     Restart,
     PowerOff,
+    /// Open the Card Files explorer (handled inside the menu).
+    CardFiles,
 }
 
 pub struct Menu {
@@ -397,6 +401,11 @@ pub struct Menu {
     game: game::Game,
     card: card::Card,
     sys: system::System,
+    /// GameCoob's Card Files explorer and the drives it browses.
+    pub explorer: explorer::Explorer,
+    pub vols: Box<dyn volumes::Volumes>,
+    /// Card files backed up (as `.bak`) this boot before the first write.
+    backed_up: Vec<String>,
     slot_fill: [i32; 2],
     lang_guide: [Fader; LANGS],
     guide_alpha: i16,
@@ -429,7 +438,7 @@ impl Menu {
     /// The rest of Menu_Init (Menu_InitRes and the icons), on the
     /// `MenuWork` the scene made at boot and the spin-out has been
     /// wobbling since.
-    pub fn new(info: SysInfo, ma: &MenuAssets, drive: Box<dyn DiscDrive>, cards: Box<dyn MemCards>, w: Work) -> Menu {
+    pub fn new(info: SysInfo, ma: &MenuAssets, drive: Box<dyn DiscDrive>, cards: Box<dyn MemCards>, vols: Box<dyn volumes::Volumes>, w: Work) -> Menu {
         let card = card::Card::new(ma, &*cards);
         let timeout = info.timeout;
         let delay = w.sub_fade_delay;
@@ -449,6 +458,9 @@ impl Menu {
             game: game::Game::new(),
             card,
             sys: system::System::new(info.fw_ui),
+            explorer: explorer::Explorer::new(),
+            vols,
+            backed_up: Vec::new(),
             slot_fill: [0; 2],
             lang_guide: [Fader::default(); LANGS],
             guide_alpha: 0,
@@ -762,9 +774,20 @@ impl Menu {
         }
         let none = Pad::default();
         let sys_action = if self.sys.visible() { self.sys.update(pad) } else { None };
-        let p = if self.sys.visible() { &none } else { pad };
+        let sys_action = match sys_action {
+            Some(Action::CardFiles) => {
+                self.explorer.show(&mut *self.vols, &mut self.cards);
+                None
+            }
+            a => a,
+        };
+        let busy = self.sys.visible() || self.explorer.visible();
+        let ep = if self.sys.visible() { &none } else { pad };
+        self.explorer.update(ep, &mut *self.vols, &mut self.cards);
+        let p = if busy { &none } else { pad };
         self.drive.update();
         self.cards.update();
+        self.save_cards();
 
         // The SRAM-lost flag and the fatal disc error (SCENE_FATAL_ERROR,
         // sErrorMsg) don't happen with the dummy backends. disp->menuFlag
@@ -917,7 +940,33 @@ impl Menu {
         self.draw_submenus(&mut ui, ma);
         self.draw_guide(&mut ui, ma, 255);
         let pulse = (self.highlight - 50) as f32 / 70.0;
+        self.explorer.draw(&mut ui, ma, pulse);
         self.sys.draw(&mut ui, ma, self.lang, pulse);
+    }
+
+    /// Write changed card images back to their files; the first write of
+    /// a file this boot keeps the old one as `<name>.bak`.
+    fn save_cards(&mut self) {
+        for slot in 0..2 {
+            let Some((h, bytes)) = self.cards.take_changed(slot) else { continue };
+            let (id, path) = volumes::split_handle(&h);
+            if !self.backed_up.contains(&h) {
+                if let Ok(old) = self.vols.read(id, path) {
+                    if let Err(e) = self.vols.write(id, &alloc::format!("{path}.bak"), &old) {
+                        self.explorer_note(alloc::format!("Card not saved: no backup ({e})"));
+                        continue;
+                    }
+                }
+                self.backed_up.push(h.clone());
+            }
+            if let Err(e) = self.vols.write(id, path, &bytes) {
+                self.explorer_note(alloc::format!("Card not saved ({e})"));
+            }
+        }
+    }
+
+    fn explorer_note(&mut self, s: String) {
+        self.explorer.note(s);
     }
 
     fn face_mtx(&self, view: &View, rot: (i32, i32), t: [f32; 3]) -> Mtx {

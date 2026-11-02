@@ -14,6 +14,7 @@ mod bs2;
 mod card;
 mod clock;
 mod firmware;
+mod fs;
 mod gfx;
 mod input;
 mod ipl;

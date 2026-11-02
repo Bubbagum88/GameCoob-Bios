@@ -49,6 +49,13 @@ The matching decompilation of the IPL's BS2 program lives in [decomp/](decomp/RE
   images, both slots hold made-up test cards. `tools/card-tool` converts
   saves between `.gci`, `.gcs` and `.sav` and builds or unpacks card images
   on the PC.
+- **Card Files.** A file explorer for memory card files on every drive the
+  firmware can read (FAT partitions and USB sticks): put a card image in
+  slot A or B, make a new blank card of any size, unpack a card into a
+  Dolphin-style folder of `.gci` saves or pack such a folder into a card,
+  convert saves between `.gci`, `.gcs` and `.sav`, copy a save onto the
+  card in a slot, and export saves from it. For now it opens from the F10
+  dialog; it moves into the Memory menu when that lands.
 - **No dump, no show.** Without `ipl.bin`, GameCoob says where to put it and
   hands back to the firmware, which boots its next entry.
 
@@ -160,6 +167,7 @@ src/
   bs2/       the intro and cube menu rebuilt from BS2: cube and scene state machines,
              GX-style TEV renderer and banded rasterizer, J3D animations, menus
   ipl/       ipl.bin parsing: descrambling, resource archive, Yay0, J3D, textures
+  fs.rs      the firmware's file systems (SimpleFileSystem) for Card Files
   card/      memory card images (.raw/.mcp/.gcp, 59 to 2043 blocks) and saves
              (.gci, .gcs, .sav): read, write, convert, banners and icons
   gfx.rs     backbuffer: scales each frame to a 4:3 picture, one GOP blit
