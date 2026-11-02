@@ -30,6 +30,7 @@ mod calendar;
 mod options;
 pub mod icons;
 mod system;
+mod label_font;
 mod subcube;
 
 pub use subcube::Level;
@@ -128,6 +129,8 @@ pub struct MenuAssets {
     pub font: UiFont,
     pub fx: FxData,
     pub icons: icons::IconData,
+    /// GameCoob's side labels and face titles, by text.
+    pub labels: Vec<(&'static str, FastTex)>,
 }
 
 impl MenuAssets {
@@ -138,7 +141,15 @@ impl MenuAssets {
         let model = |id: u16| Some(render::Prepared::new(crate::ipl::j3d::Model::parse(&ipl.resource(id).ok()?).ok()?));
         let per_lang = |ids: &[u16; 6]| ids.iter().map(|&i| layout(i)).collect::<Option<Vec<_>>>();
         let per_lang_s = |ids: &[u16; 6]| ids.iter().map(|&i| strings(i)).collect::<Option<Vec<_>>>();
-        let bank = glh::texture_bank(&ipl.resource(res::TEX_BANK).ok()?).ok()?.iter().map(FastTex::new_ui).collect();
+        let bank_tex = glh::texture_bank(&ipl.resource(res::TEX_BANK).ok()?).ok()?;
+        let bank = bank_tex.iter().map(FastTex::new_ui).collect();
+        let (game_face, card_face) = (per_lang(&res::GAME_FACE)?, per_lang(&res::CARD_FACE)?);
+        let (clock_face, option_face) = (per_lang(&res::CLOCK_FACE)?, per_lang(&res::OPTION_FACE)?);
+        // GameCoob: the new sides' labels, lettered from the English face
+        // titles (language 0).
+        let title = |g: &Layout| g.pic(tag(b"titl")).next().and_then(|p| bank_tex.get(p.tex as usize));
+        let font = label_font::LabelFont::new([title(&option_face[0]), title(&clock_face[0]), title(&card_face[0]), title(&game_face[0])]);
+        let labels = subcube::words().into_iter().filter_map(|w| Some((w, font.render(w)?))).collect();
         let mut backdrop = bti::parse(&ipl.resource(res::BACKDROP).ok()?).ok()?;
         backdrop.wrap_s = crate::ipl::gx::REPEAT;
         backdrop.wrap_t = crate::ipl::gx::REPEAT;
@@ -147,10 +158,10 @@ impl MenuAssets {
         Some(MenuAssets {
             bank,
             front: per_lang(&res::FRONT)?,
-            game_face: per_lang(&res::GAME_FACE)?,
-            card_face: per_lang(&res::CARD_FACE)?,
-            clock_face: per_lang(&res::CLOCK_FACE)?,
-            option_face: per_lang(&res::OPTION_FACE)?,
+            game_face,
+            card_face,
+            clock_face,
+            option_face,
             guide: layout(res::GUIDE)?,
             guide_str: per_lang_s(&res::GUIDE_STR)?,
             clock_str: per_lang_s(&res::CLOCK_STR)?,
@@ -171,7 +182,13 @@ impl MenuAssets {
             font: UiFont::new(glh::Font::parse_rom(ipl.rom()).ok()?),
             fx: FxData::load(ipl)?,
             icons: icons::IconData::load(ipl)?,
+            labels,
         })
+    }
+
+    /// A GameCoob label set in the IPL's lettering (see [`label_font`]).
+    pub fn label(&self, s: &str) -> Option<&FastTex> {
+        self.labels.iter().find(|l| l.0 == s).map(|l| &l.1)
     }
 }
 
@@ -1210,8 +1227,7 @@ impl Menu {
             if self.level == Level::Main && !minimal() {
                 // GameCoob: the main cube's side is the Memory cube now.
                 if let Some(t) = g.pic(tag(b"titl")).next() {
-                    let s = cp1252(MEMORY_LABEL);
-                    subcube::bold_label(ui, ma, t.x, t.y, 30.0, &s, c, with_a(SHADOW, a * a * 0.5));
+                    subcube::word_label(ui, ma, t.x, t.y, t.w / 200.0, MEMORY_LABEL, c);
                 }
             } else {
                 pics(ui, g, b"titl", bank, c);
@@ -1567,11 +1583,9 @@ fn draw_front<'a>(ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, lang: usize, view: &V
     let g = &ma.front[lang];
     for p in g.pics.iter() {
         // GameCoob: the Memory Card side leads to the Memory cube, so it
-        // is labelled "Memory" in the ROM font instead.
+        // is labelled "Memory", cut from the "Memory Card" picture.
         if p.tag == tag(b"titm") && !minimal() {
-            let s = cp1252(MEMORY_LABEL);
-            let size = p.h.min(p.w) + 1.0;
-            subcube::bold_label(ui, ma, p.x, p.y, size, &s, with_a(WHITE, a * a), with_a(SHADOW, a * a * 0.5));
+            subcube::word_label(ui, ma, p.x, p.y, subcube::FRONT_SCALE, MEMORY_LABEL, with_a(WHITE, a * a));
             continue;
         }
         if let Some(t) = ma.bank.get(p.tex as usize) {
@@ -1581,7 +1595,7 @@ fn draw_front<'a>(ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, lang: usize, view: &V
 }
 
 /// The main cube's Memory Card side, now the way into the Memory cube.
-const MEMORY_LABEL: &str = "Memory";
+pub(crate) const MEMORY_LABEL: &str = "Memory";
 
 /// Backdrop_Draw, simplified: the 8x8 grid tile repeated over the screen,
 /// lit by a soft spot from the centre instead of the GX spot light.

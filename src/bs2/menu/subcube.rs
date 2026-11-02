@@ -233,8 +233,22 @@ impl Page {
 /// Boot entries the Boot page lists.
 pub const BOOT_ROWS: usize = 8;
 
-/// Size of the side labels on a sub-cube's front face, in layout units.
-const LABEL_SIZE: f32 = 26.0;
+/// Layout units per texel of the front face's labels (the IPL draws its
+/// 200 x 32 word pictures there at 168 x 27).
+pub const FRONT_SCALE: f32 = 168.0 / 200.0;
+
+/// Every word [`word_label`] draws, lettered once at load.
+pub fn words() -> Vec<&'static str> {
+    let mut v: Vec<&'static str> = Vec::new();
+    let pages = [Page::BootNow, Page::Apps, Page::Files, Page::Drives, Page::Boot, Page::Firmware, Page::Controls];
+    let all = [Level::Memory, Level::Game, Level::Settings].into_iter().flat_map(labels);
+    for w in all.chain(pages.into_iter().map(Page::title)).chain(["Main Menu", super::MEMORY_LABEL]) {
+        if !w.is_empty() && !v.contains(&w) {
+            v.push(w);
+        }
+    }
+    v
+}
 
 /// A sub-cube's front face: one label along each side, reading like the
 /// main cube's (left side bottom to top, right side top to bottom). `mv`
@@ -245,23 +259,21 @@ pub fn draw_front<'a>(ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, l: Level, mv: &Mt
     }
     let a = alpha as f32 / 255.0;
     let c = with_a(WHITE, a * a);
-    let sh = with_a(SHADOW, a * a);
     let [up, left, right, down] = labels(l);
-    // (text, centre, rotation about the face normal)
+    // (text, centre, rotation about the face normal), where the main
+    // cube has its labels
     let at: [(&str, [f32; 2], i32); 4] = [
-        (up, [144.0, 49.0], 0),
+        (up, [144.0, 48.0], 0),
         (left, [48.0, 144.0], -0x4000),
-        (right, [240.0, 144.0], 0x4000),
+        (right, [239.0, 144.0], 0x4000),
         (down, [144.0, 239.0], 0),
     ];
     for (s, p, r) in at {
         if s.is_empty() {
             continue;
         }
-        let t = psmtx::concat(mv, &mtx::rot_trans(0, 0, r, [p[0], p[1], 0.0]));
-        ui.mv = t;
-        let s = cp1252(s);
-        bold_label(ui, ma, 0.0, 0.0, LABEL_SIZE, &s, c, sh);
+        ui.mv = psmtx::concat(mv, &mtx::rot_trans(0, 0, r, [p[0], p[1], 0.0]));
+        word_label(ui, ma, 0.0, 0.0, FRONT_SCALE, s, c);
     }
 }
 
@@ -274,9 +286,9 @@ pub fn draw_plain_face<'a>(ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, lang: usize,
         ui.frame(f, bank, with_a(WHITE, a));
     }
     let (white, shadow) = (with_a(WHITE, a), with_a(SHADOW, a));
-    let t = cp1252(title);
-    ui.label(&ma.font, 146.0, 42.0, 34.0, &t, shadow, 0);
-    ui.label(&ma.font, 144.0, 40.0, 34.0, &t, white, 0);
+    // where the Options face has its title picture
+    let (tx, ty) = g.pic(tag(b"titl")).next().map_or((144.0, 40.0), |p| (p.x, p.y));
+    word_label(ui, ma, tx, ty, 1.0, title, white);
     for (i, s) in lines.iter().enumerate() {
         let s = cp1252(s);
         let y = 130.0 + i as f32 * 32.0;
@@ -305,14 +317,22 @@ pub fn draw_page<'a>(ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, title: &str, lines
     }
 }
 
-/// A side label like the IPL's pre-drawn ones: centred on (x, y), heavier
-/// than the ROM font (drawn three times a little apart) over a soft
-/// shadow.
-pub fn bold_label<'a>(ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, x: f32, y: f32, size: f32, s: &[u8], c: Rgba, sh: Rgba) {
+/// A label in the IPL's lettering, centred on (x, y) at `scale` layout
+/// units per texel, like BS2's word pictures (white, no shadow). Words
+/// the label font could not set fall back to the ROM font, made heavier.
+pub fn word_label<'a>(ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, x: f32, y: f32, scale: f32, s: &str, c: Rgba) {
+    if let Some(t) = ma.label(s) {
+        let (w, h) = t.size();
+        let (w, h) = (w * scale, h * scale);
+        ui.rect(x - w / 2.0, y - h / 2.0, w, h, [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]], c, Some(t));
+        return;
+    }
+    let size = 31.0 * scale;
+    let s = cp1252(s);
     let top = y - size / 2.0;
-    ui.label(&ma.font, x + 2.0, top + 2.0, size, s, sh, 0);
+    ui.label(&ma.font, x + 2.0, top + 2.0, size, &s, with_a(SHADOW, c[3] * 0.5), 0);
     for dx in [-0.8, 0.8, 0.0] {
-        ui.label(&ma.font, x + dx, top, size, s, c, 0);
+        ui.label(&ma.font, x + dx, top, size, &s, c, 0);
     }
 }
 

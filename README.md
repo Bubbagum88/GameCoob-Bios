@@ -46,7 +46,9 @@ The matching decompilation of the IPL's BS2 program lives in [decomp/](decomp/RE
   back. Memory: Memory Card (down, the console's
   screen), Files (left), Drives (right), up goes back. Settings: Console
   (left, the Options screen), Boot (up), Firmware (right), Controls (down).
-  B on a sub-cube's front goes back. Files, Drives and Controls are
+  B on a sub-cube's front goes back. Their labels use the console's own
+  lettering, cut letter by letter from your dump's label pictures; the few
+  letters the IPL never drew come from M PLUS 1p (SIL Open Font License). Files, Drives and Controls are
   placeholders for now.
 - **Minimal mode.** For the menu exactly as on the console: no sub-cubes,
   Memory Card and Options open their own screens again, and the cube keeps
