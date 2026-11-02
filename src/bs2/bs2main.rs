@@ -7,6 +7,7 @@
 //! the rasterizer cores and the present (DEMODoneRender's copy out).
 
 use super::menu::backend::{DiscDrive, MemCards};
+use super::menu::volumes::Volumes;
 use super::menu::{Action, Menu, MenuAssets, Pad, SysInfo};
 use super::cube::Jingle;
 use super::pad::{self, PadStatus, Pads};
@@ -122,21 +123,13 @@ pub struct Bs2Main {
     pub pads: Pads,
     /// The disc drive and memory cards while no menu holds them (the C's
     /// DVD and card threads outlive a reset).
-    backends: Option<(Box<dyn DiscDrive>, Box<dyn MemCards>)>,
+    backends: Option<(Box<dyn DiscDrive>, Box<dyn MemCards>, Box<dyn Volumes>)>,
 }
 
 impl Bs2Main {
     /// `BS2Main` up to the loop: the scene with `Scene_Init(TRUE)`.
-    pub fn new(a: &Assets, drive: Box<dyn DiscDrive>, cards: Box<dyn MemCards>) -> Bs2Main {
-        Bs2Main { intro: Intro::new(a), menu: None, pads: Pads::new(), backends: Some((drive, cards)) }
-    }
-
-    /// The memory cards, held by the menu or waiting for it.
-    pub fn cards_mut(&mut self) -> Option<&mut dyn MemCards> {
-        match &mut self.menu {
-            Some(m) => Some(&mut *m.cards),
-            None => self.backends.as_mut().map(|b| &mut *b.1 as &mut dyn MemCards),
-        }
+    pub fn new(a: &Assets, drive: Box<dyn DiscDrive>, cards: Box<dyn MemCards>, vols: Box<dyn Volumes>) -> Bs2Main {
+        Bs2Main { intro: Intro::new(a), menu: None, pads: Pads::new(), backends: Some((drive, cards, vols)) }
     }
 
     /// Run the intro to its end at once (a skip).
@@ -184,8 +177,8 @@ impl Bs2Main {
                 };
                 self.intro.update(Input { a: mp.pst.button & pad::PAD_BUTTON_A != 0, egg });
                 if self.intro.finished() {
-                    if let Some((drive, cards)) = self.backends.take() {
-                        self.menu = Some(Menu::new(info(), ma, drive, cards, self.intro.menu.clone()));
+                    if let Some((drive, cards, vols)) = self.backends.take() {
+                        self.menu = Some(Menu::new(info(), ma, drive, cards, vols, self.intro.menu.clone()));
                     }
                 }
             }
@@ -193,7 +186,7 @@ impl Bs2Main {
         let fatal = self.intro.scene.fatal;
         if self.intro.disc.reset_switch(input.reset, fatal) {
             if let Some(m) = self.menu.take() {
-                self.backends = Some((m.drive, m.cards));
+                self.backends = Some((m.drive, m.cards, m.vols));
             }
             self.intro.restart(a);
         }

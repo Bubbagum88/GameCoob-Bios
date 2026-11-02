@@ -14,6 +14,7 @@
 //! Env: THREADS=n rasterizes on n threads; SKIP=1 skips the intro;
 //! PADTRACE=1 prints the pad code's new presses;
 //! RES=WxH renders at that size instead of 640x448;
+//! VOLS=dir,dir lists folders as drives for the Card Files explorer (F10);
 //! CARDS=a,b sets each slot to saves, none or a blank card of N blocks, or
 //! to a card image file (.raw/.mcp/.gcp) loaded as a real card (both slots then);
 //! DUMP=layout:N, strings:N, model:N or raw:N prints that resource and exits
@@ -167,7 +168,7 @@ fn main() {
         let mut cards = bs2::menu::card_image::ImageCards::new();
         for (i, c) in spec.iter().enumerate().take(2) {
             if c != "none" {
-                cards.insert(i, c.clone(), std::fs::read(c).expect("read card image"));
+                cards.insert(i, bs2::menu::volumes::handle("", c), std::fs::read(c).expect("read card image"));
             }
         }
         Box::new(cards)
@@ -182,7 +183,9 @@ fn main() {
         }
         Box::new(cards)
     };
-    let mut bs = Bs2Main::new(&assets, Box::new(FakeDrive::new()), cards);
+    // VOLS=dir,dir... are the drives the Card Files explorer browses.
+    let roots: Vec<PathBuf> = std::env::var("VOLS").map(|v| v.split(',').map(PathBuf::from).collect()).unwrap_or_default();
+    let mut bs = Bs2Main::new(&assets, Box::new(FakeDrive::new()), cards, Box::new(HostVolumes { roots }));
     if std::env::var("SKIP").is_ok() {
         bs.skip_intro();
     }
@@ -257,5 +260,60 @@ fn main() {
             let st = bs.menu.as_ref().map(|m| format!("{:?}", m.state)).unwrap_or_else(|| format!("intro {:?}", bs.intro.state));
             println!("frame {f}: {st} ({ms:.1} ms)");
         }
+    }
+}
+
+/// Folders standing in for the PC's drives (the first is the boot drive);
+/// a volume's id is its folder.
+struct HostVolumes {
+    roots: Vec<PathBuf>,
+}
+
+impl HostVolumes {
+    fn path(&self, id: &str, p: &str) -> PathBuf {
+        let mut out = if id.is_empty() { PathBuf::new() } else { PathBuf::from(id) };
+        for part in p.split('\\').filter(|s| !s.is_empty()) {
+            out.push(part);
+        }
+        if id.is_empty() { PathBuf::from(p) } else { out }
+    }
+}
+
+impl bs2::menu::volumes::Volumes for HostVolumes {
+    fn volumes(&mut self) -> Vec<bs2::menu::volumes::Volume> {
+        self.roots
+            .iter()
+            .enumerate()
+            .map(|(i, r)| bs2::menu::volumes::Volume {
+                id: r.to_string_lossy().into(),
+                label: r.file_name().map(|n| n.to_string_lossy().to_uppercase()).unwrap_or_default(),
+                size: 8 << 30,
+                free: 5 << 30,
+                boot: i == 0,
+            })
+            .collect()
+    }
+    fn list(&mut self, id: &str, p: &str) -> Result<Vec<bs2::menu::volumes::Entry>, String> {
+        let rd = std::fs::read_dir(self.path(id, p)).map_err(|e| e.to_string())?;
+        Ok(rd
+            .flatten()
+            .map(|e| {
+                let m = e.metadata().ok();
+                bs2::menu::volumes::Entry {
+                    name: e.file_name().to_string_lossy().into(),
+                    dir: m.as_ref().is_some_and(|m| m.is_dir()),
+                    size: m.map_or(0, |m| m.len()),
+                }
+            })
+            .collect())
+    }
+    fn read(&mut self, id: &str, p: &str) -> Result<Vec<u8>, String> {
+        std::fs::read(self.path(id, p)).map_err(|e| e.to_string())
+    }
+    fn write(&mut self, id: &str, p: &str, b: &[u8]) -> Result<(), String> {
+        std::fs::write(self.path(id, p), b).map_err(|e| e.to_string())
+    }
+    fn mkdir(&mut self, id: &str, p: &str) -> Result<(), String> {
+        std::fs::create_dir_all(self.path(id, p)).map_err(|e| e.to_string())
     }
 }

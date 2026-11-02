@@ -8,9 +8,6 @@
 //! with [`ImageCards::insert`] and, after an operation changed a card,
 //! takes the new bytes from [`ImageCards::take_changed`] to write back.
 
-// eject, name, error, card and edit are for the Card Files explorer (next).
-#![allow(dead_code)]
-
 use super::backend::{CardError, CardOp, FastTexRc, MemCards, Save, SlotState, DIR_ENTRIES};
 use super::super::shader::FastTex;
 use crate::card::icon::{BANNER_H, BANNER_W, ICON_H, ICON_W};
@@ -31,9 +28,9 @@ enum Media {
     Empty,
     /// A card image that opened.
     Card(Card),
-    /// A file that isn't a usable card: the reason, and its size in
-    /// megabits when it has a card's size (formatting can then fix it).
-    Bad(card::Error, Option<u16>),
+    /// A file that isn't a usable card: its size in megabits when it has
+    /// a card's size (formatting can then fix it).
+    Bad(Option<u16>),
 }
 
 struct Slot {
@@ -143,7 +140,7 @@ impl ImageCards {
         let len = bytes.len();
         s.media = match Card::open(bytes) {
             Ok(c) => Media::Card(c),
-            Err(e) => Media::Bad(e, card::SIZES_MBIT.iter().copied().find(|&m| card::image_len(m) == len)),
+            Err(_) => Media::Bad(card::SIZES_MBIT.iter().copied().find(|&m| card::image_len(m) == len)),
         };
         s.name = name;
         s.mounting = MOUNT_FRAMES;
@@ -170,14 +167,6 @@ impl ImageCards {
     pub fn name(&self, slot: usize) -> Option<&str> {
         let s = &self.slots[slot & 1];
         (!matches!(s.media, Media::Empty)).then_some(s.name.as_str())
-    }
-
-    /// Why the image in `slot` didn't open, if it didn't.
-    pub fn error(&self, slot: usize) -> Option<card::Error> {
-        match self.slots[slot & 1].media {
-            Media::Bad(e, _) => Some(e),
-            _ => None,
-        }
     }
 
     /// The image in `slot` as it now is, for the explorer's export.
@@ -221,7 +210,7 @@ impl ImageCards {
             let s = &mut self.slots[slot];
             let (mbit, enc, ticks) = match &s.media {
                 Media::Card(c) => (c.size_mbit(), c.encoding(), c.serial().1),
-                Media::Bad(_, Some(m)) => (*m, Encoding::Ansi, 0),
+                Media::Bad(Some(m)) => (*m, Encoding::Ansi, 0),
                 _ => return Err(CardError::Failed),
             };
             // Keep the format time so the serial stays the card's own.
@@ -298,8 +287,8 @@ impl MemCards for ImageCards {
             Media::Card(_) => SlotState::Ready,
             // A file of a card's size that doesn't read as a card: the
             // console's "damaged, format?" case. Anything else isn't a card.
-            Media::Bad(_, Some(_)) => SlotState::Broken,
-            Media::Bad(_, None) => SlotState::WrongDevice,
+            Media::Bad(Some(_)) => SlotState::Broken,
+            Media::Bad(None) => SlotState::WrongDevice,
         }
     }
 
@@ -364,6 +353,10 @@ impl MemCards for ImageCards {
                 }
             }
         }
+    }
+
+    fn images(&mut self) -> Option<&mut ImageCards> {
+        Some(self)
     }
 
     fn take_changed(&mut self, slot: usize) -> Option<(String, Vec<u8>)> {
