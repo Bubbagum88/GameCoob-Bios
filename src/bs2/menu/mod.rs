@@ -539,7 +539,13 @@ impl Menu {
         use St::*;
         // GameCoob: on the Memory cube, up (the way back) and B on its
         // front leave for the main cube.
-        if self.level == Level::Memory && self.state == Top && self.w.at_front() && p.up {
+        // On the Game cube the way back is down.
+        let back = match self.level {
+            Level::Memory => p.up,
+            Level::Game => p.down,
+            _ => false,
+        };
+        if back && self.state == Top && self.w.at_front() {
             self.dive(Level::Main);
             return;
         }
@@ -637,6 +643,7 @@ impl Menu {
         let (rx, ry) = match face {
             St::CardFace => (-0x4000, 0),
             St::OptionFace => (0, 0x4000),
+            St::GameFace => (0x4000, 0),
             _ => (0, 0),
         };
         self.w.rot_x = rx;
@@ -814,6 +821,7 @@ impl Menu {
             // Card Files draws its own help line.
             St::Page if self.page == Page::Files => [o; 8],
             St::Page if self.page == Page::Firmware => [o, o, o, o, o, i, o, i],
+            St::Page if self.page == Page::BootNow => [o, o, o, i, o, i, o, i],
             St::Page => [o, o, o, o, o, i, o, o],
         };
         // Glyph groups: 0..2 inside submenus, 3 the stick on the front
@@ -827,6 +835,7 @@ impl Menu {
             St::Dive => [false; 6],
             St::Page if self.page == Page::Files => [false; 6],
             St::Page if self.page == Page::Firmware => [false, true, true, false, false, false],
+            St::Page if self.page == Page::BootNow => [true, true, true, false, false, false],
             St::Page => [false, true, false, false, false, false],
         };
         for (f, on) in self.guide_text.iter_mut().zip(text) {
@@ -1054,6 +1063,22 @@ impl Menu {
             }
             if p.a && self.page == Page::Firmware {
                 self.sys.toggle();
+            }
+            if self.page == Page::BootNow {
+                // A list like Game Play's boot list: pick, A boots it
+                // once (BootNext).
+                let n = self.info.entries.len().min(subcube::BOOT_ROWS);
+                if p.up && self.boot_sel > 0 {
+                    self.boot_sel -= 1;
+                }
+                if p.down && self.boot_sel + 1 < n {
+                    self.boot_sel += 1;
+                }
+                if p.a {
+                    if let Some(&(num, _)) = self.info.entries.get(self.boot_sel) {
+                        return (St::Page, Some(Action::Boot(num)));
+                    }
+                }
             }
             return (St::Page, None);
         }
@@ -1400,7 +1425,8 @@ impl Menu {
             return;
         }
         let lines = self.page.lines(&self.info.entries, self.info.fw_ui);
-        subcube::draw_page(ui, ma, self.page.title(), &lines, t);
+        let sel = (self.page == Page::BootNow && !self.info.entries.is_empty()).then_some(self.boot_sel + 1);
+        subcube::draw_page(ui, ma, self.page.title(), &lines, sel, t);
         self.draw_message(ui, ma, t);
     }
 
