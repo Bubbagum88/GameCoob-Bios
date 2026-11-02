@@ -42,9 +42,9 @@ The matching decompilation of the IPL's BS2 program lives in [decomp/](decomp/RE
   `OsIndications`), Restart and Power Off.
 - **Sub-cubes.** Game Play (up), Memory (down) and Options (left) open a
   second cube, turned and entered the same way. Game: Game Play (up, the
-  console's screen), Boot (left, start an OS now), Apps (right), down goes
-  back. Memory: Memory Card (down, the console's
-  screen), Files (left), Drives (right), up goes back. Settings: Console
+  console's screen), Boot (left, start an OS now), Apps (right).
+  Memory: Memory Card (down, the console's screen), Files (left), Drives
+  (right). Settings: Console
   (left, the Options screen), Boot (up), Firmware (right), Controls (down).
   B on a sub-cube's front goes back. Their labels use the console's own
   lettering, cut letter by letter from your dump's label pictures; the few

@@ -563,16 +563,14 @@ impl Menu {
     /// submenus. Sound_Play calls are left out (no audio yet).
     fn handle_input(&mut self, p: &Pad) {
         use St::*;
-        // GameCoob: on the Memory cube, up (the way back) and B on its
-        // front leave for the main cube.
-        // On the Game cube the way back is down.
-        let back = match self.level {
+        // GameCoob: the Memory cube has no up side and the Game cube no
+        // down side; B on a sub-cube's front goes back to the main cube.
+        let empty = match self.level {
             Level::Memory => p.up,
             Level::Game => p.down,
             _ => false,
         };
-        if back && self.state == Top && self.w.at_front() {
-            self.dive(Level::Main);
+        if empty && self.state == Top {
             return;
         }
         if self.level != Level::Main && self.state == Top && self.w.at_front() && p.b {
