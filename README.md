@@ -61,7 +61,9 @@ The matching decompilation of the IPL's BS2 program lives in [decomp/](decomp/RE
   Dolphin-style folder of `.gci` saves or pack such a folder into a card,
   convert saves between `.gci`, `.gcs` and `.sav`, copy a save onto the
   card in a slot, and export saves from it. It is the Files side of the
-  Memory cube.
+  Memory cube. The card put in each slot (or a slot left empty) is
+  remembered in a UEFI variable and comes back on the next boot; if that
+  drive is gone, the slot falls back to `slot-a.raw`/`slot-b.raw`.
 - **No dump, no show.** Without `ipl.bin`, GameCoob says where to put it and
   hands back to the firmware, which boots its next entry.
 
