@@ -93,6 +93,21 @@ impl IconData {
     }
 }
 
+/// Smoothstep on 0..1.
+fn smooth(s: f32) -> f32 {
+    let s = s.clamp(0.0, 1.0);
+    s * s * (3.0 - 2.0 * s)
+}
+
+/// 0 -> 1 -> 0 over s in 0..1, 0 outside.
+fn bump(s: f32) -> f32 {
+    if (0.0..1.0).contains(&s) {
+        smooth(1.0 - (2.0 * s - 1.0).abs())
+    } else {
+        0.0
+    }
+}
+
 fn toward_zero(v: f32, step: f32) -> f32 {
     if v > 0.0 {
         (v - step).max(0.0)
@@ -960,10 +975,6 @@ const PIX_SCALE: f32 = 0.67;
 /// distance from the centre.
 const PIX_FLY: i32 = 18;
 const PIX_STAGGER: i32 = 3;
-/// The idle wave: period, frames for one cube's turn, delay per diagonal.
-const PIX_WAVE_PERIOD: i32 = 300;
-const PIX_WAVE_TURN: i32 = 24;
-const PIX_WAVE_STAGGER: i32 = 3;
 const PIX_SHRINK: f32 = 5.0;
 const PIX_FADE: i16 = 12;
 const PIX_HIDE_FADE: i16 = 10;
@@ -973,20 +984,56 @@ struct PixCube {
     base: [f32; 2],
     /// Distance from the centre in cells, for the build order.
     ring: i32,
-    /// Diagonal index for the wave.
-    diag: i32,
+    /// Row in the picture, from the top.
+    row: i32,
+    /// The bitmap character it was drawn with: its motion group.
+    group: u8,
+    /// Size against the icon's cube size.
+    size: f32,
     cur: [f32; 2],
     z: f32,
     turn: i16,
     alpha: i16,
 }
 
-/// A picture of small cubes (a bitmap, `#` set) that builds out from the
-/// centre while its side shows, ripples a turn along its diagonals now
-/// and then, and collapses into the centre when its page opens: the same
-/// three phases and the same feel as BS2's icons.
+/// What a built icon does while its side shows. Groups are the bitmap
+/// characters of the cubes that move (`#` is a still cube).
+#[derive(Clone, Copy)]
+pub enum Motion {
+    /// The group turns about its own centre, `speed` angle units a frame
+    /// (negative is clockwise), easing in.
+    Orbit { group: u8, speed: i32 },
+    /// The groups are pushed in one after another, `period` frames each.
+    Press { groups: &'static [u8], period: i32 },
+    /// The groups flip over about their own vertical axis one after
+    /// another, then rest as long as the flips took.
+    Flip { groups: &'static [u8], period: i32 },
+    /// A bump runs round the group, once per `period` frames: clockwise,
+    /// or anticlockwise for a negative period.
+    Chase { group: u8, period: i32 },
+    /// The group's rows rise half a cell and settle, one after another,
+    /// every `period` frames.
+    Lift { group: u8, period: i32 },
+    /// A bump climbs the group from its bottom row to its top, once per
+    /// `period` frames.
+    Climb { group: u8, period: i32 },
+    /// A bump runs outward from the centre through the group, `delay`
+    /// frames into every `period`.
+    Ripple { group: u8, period: i32, delay: i32 },
+}
+
+/// A picture of small cubes (a bitmap) that builds out from the centre
+/// while its side shows, then plays its own [`Motion`]s (a spinning
+/// platter, a d-pad being pressed), and collapses into the centre when
+/// its page opens: the same three phases and the same feel as BS2's
+/// icons.
 pub struct PixelIcon {
     side: Side,
+    motions: &'static [Motion],
+    /// Cell pitch, in icon units.
+    pitch: f32,
+    /// Centre of each group, by character.
+    centres: Vec<(u8, [f32; 2])>,
     /// Cube scale: pictures over 9 cells are shrunk to fit like a 9-cell one.
     scale: f32,
     tint: usize,
@@ -997,7 +1044,7 @@ pub struct PixelIcon {
 }
 
 impl PixelIcon {
-    pub fn new(d: &IconData, side: Side, tint: usize, rows: &[&str]) -> PixelIcon {
+    pub fn new(d: &IconData, side: Side, tint: usize, rows: &[&str], motions: &'static [Motion]) -> PixelIcon {
         let h = rows.len() as f32;
         let w = rows.iter().map(|r| r.len()).max().unwrap_or(0) as f32;
         let k = (9.0 / w.max(h)).min(1.0);
@@ -1005,17 +1052,30 @@ impl PixelIcon {
         let mut cubes = Vec::new();
         for (r, row) in rows.iter().enumerate() {
             for (c, ch) in row.bytes().enumerate() {
-                if ch != b'#' {
+                if ch == b'.' || ch == b' ' {
                     continue;
                 }
                 let x = (c as f32 - (w - 1.0) / 2.0) * pitch;
                 let y = ((h - 1.0) / 2.0 - r as f32) * pitch;
                 let ring = ((x / pitch).abs().max((y / pitch).abs()) + 0.5) as i32;
-                cubes.push(PixCube { base: [x, y], ring, diag: (r + c) as i32, ..Default::default() });
+                cubes.push(PixCube { base: [x, y], ring, row: r as i32, group: ch, size: 1.0, ..Default::default() });
             }
         }
+        let mut centres: Vec<(u8, [f32; 2])> = Vec::new();
+        for g in cubes.iter().map(|c| c.group) {
+            if centres.iter().any(|c| c.0 == g) {
+                continue;
+            }
+            let (mut sx, mut sy, mut n) = (0.0, 0.0, 0.0);
+            for c in cubes.iter().filter(|c| c.group == g) {
+                sx += c.base[0];
+                sy += c.base[1];
+                n += 1.0;
+            }
+            centres.push((g, [sx / n, sy / n]));
+        }
         let inst = (0..cubes.len()).map(|_| d.instance()).collect();
-        PixelIcon { side, scale: PIX_SCALE * k, tint, cubes, inst, frame: 0, settled: false }
+        PixelIcon { side, motions, pitch, centres, scale: PIX_SCALE * k, tint, cubes, inst, frame: 0, settled: false }
     }
 
     pub fn update(&mut self, phase: Phase) {
@@ -1030,7 +1090,7 @@ impl PixelIcon {
         self.settled = false;
         self.frame += 1;
         let f = self.frame;
-        let built = f > PIX_FLY + PIX_STAGGER * 6;
+        let built = PIX_FLY + PIX_STAGGER * 6;
         for c in &mut self.cubes {
             let t = ((f - c.ring * PIX_STAGGER) as f32 / PIX_FLY as f32).clamp(0.0, 1.0);
             let e = 1.0 - (1.0 - t) * (1.0 - t);
@@ -1038,14 +1098,93 @@ impl PixelIcon {
             c.z = 40.0 * (1.0 - e);
             c.alpha = (255.0 * t) as i16;
             c.turn = 0;
-            if built {
-                // One full turn about the vertical axis, running along the
-                // diagonals, once per period.
-                let k = (f - PIX_FLY) % PIX_WAVE_PERIOD - c.diag * PIX_WAVE_STAGGER;
-                if (0..PIX_WAVE_TURN).contains(&k) {
-                    let s = k as f32 / PIX_WAVE_TURN as f32;
-                    let s = s * s * (3.0 - 2.0 * s);
-                    c.turn = (s * 65536.0) as i32 as i16;
+            c.size = 1.0;
+        }
+        if f > built {
+            for m in self.motions {
+                self.apply(*m, f - built);
+            }
+        }
+    }
+
+    fn centre(&self, g: u8) -> [f32; 2] {
+        self.centres.iter().find(|c| c.0 == g).map_or([0.0; 2], |c| c.1)
+    }
+
+    /// One motion, `t` frames after the icon was built.
+    fn apply(&mut self, m: Motion, t: i32) {
+        let p = self.pitch;
+        match m {
+            Motion::Orbit { group, speed } => {
+                // eased in over the first EASE frames
+                const EASE: i32 = 40;
+                let a = if t < EASE { speed * t * t / (2 * EASE) } else { speed * (t - EASE / 2) };
+                let o = self.centre(group);
+                let (sn, cs) = (sin_s(a), cos_s(a));
+                for c in self.cubes.iter_mut().filter(|c| c.group == group) {
+                    let (x, y) = (c.cur[0] - o[0], c.cur[1] - o[1]);
+                    c.cur = [o[0] + x * cs - y * sn, o[1] + x * sn + y * cs];
+                }
+            }
+            Motion::Press { groups, period } => {
+                let k = groups[(t / period) as usize % groups.len()];
+                let b = bump((t % period) as f32 / period as f32 / 0.6);
+                for c in self.cubes.iter_mut().filter(|c| c.group == k) {
+                    c.z -= 0.6 * p * b;
+                    c.size *= 1.0 - 0.35 * b;
+                }
+            }
+            Motion::Flip { groups, period } => {
+                let n = groups.len() as i32;
+                let k = t % (2 * n * period);
+                if k < n * period {
+                    let g = groups[(k / period) as usize];
+                    let a = (smooth((k % period) as f32 / period as f32) * 32768.0) as i32;
+                    let o = self.centre(g);
+                    let (sn, cs) = (sin_s(a), cos_s(a));
+                    for c in self.cubes.iter_mut().filter(|c| c.group == g) {
+                        let x = c.cur[0] - o[0];
+                        c.cur[0] = o[0] + x * cs;
+                        c.z -= x * sn;
+                        c.turn = a as i16;
+                    }
+                }
+            }
+            Motion::Chase { group, period } => {
+                let w = (t % period.abs()) as f32 / period.abs() as f32;
+                let w = if period < 0 { 1.0 - w } else { w };
+                let o = self.centre(group);
+                for c in self.cubes.iter_mut().filter(|c| c.group == group) {
+                    // clockwise from the top, 0..1
+                    let ph = libm::atan2f(-(c.base[0] - o[0]), c.base[1] - o[1]) / core::f32::consts::TAU + 0.5;
+                    let d = (ph - w).abs();
+                    let b = bump(0.5 + d.min(1.0 - d) * 6.0);
+                    c.z += 0.6 * p * b;
+                    c.size *= 1.0 + 0.4 * b;
+                }
+            }
+            Motion::Lift { group, period } => {
+                let k = t % period;
+                for c in self.cubes.iter_mut().filter(|c| c.group == group) {
+                    c.cur[1] += 0.6 * p * bump((k - c.row * 6) as f32 / 30.0);
+                }
+            }
+            Motion::Climb { group, period } => {
+                let k = t % period;
+                let low = self.cubes.iter().filter(|c| c.group == group).map(|c| c.base[1]).fold(f32::MAX, f32::min);
+                for c in self.cubes.iter_mut().filter(|c| c.group == group) {
+                    let b = bump((k as f32 - (c.base[1] - low) / p * 5.0) / 18.0);
+                    c.z += 0.6 * p * b;
+                    c.size *= 1.0 + 0.4 * b;
+                }
+            }
+            Motion::Ripple { group, period, delay } => {
+                let k = t % period - delay;
+                for c in self.cubes.iter_mut().filter(|c| c.group == group) {
+                    let r = libm::sqrtf(c.base[0] * c.base[0] + c.base[1] * c.base[1]) / p;
+                    let b = bump((k as f32 - r * 3.0) / 16.0);
+                    c.z += 0.5 * p * b;
+                    c.size *= 1.0 + 0.35 * b;
                 }
             }
         }
@@ -1061,6 +1200,7 @@ impl PixelIcon {
             }
             c.z = toward_zero(c.z, PIX_SHRINK);
             c.turn = 0;
+            c.size = 1.0;
         }
         self.settled = done;
         if done {
@@ -1099,7 +1239,7 @@ impl PixelIcon {
         for (c, inst) in self.cubes.iter().zip(&mut self.inst) {
             let t = mtx::rot_trans(0, c.turn as i32, 0, [c.cur[0] * mirror, c.cur[1], c.z]);
             let m = psmtx::concat(&base, &t);
-            d.calc(inst, &m, self.scale, view);
+            d.calc(inst, &m, self.scale * c.size, view);
         }
     }
 
