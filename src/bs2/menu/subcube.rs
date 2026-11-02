@@ -336,84 +336,101 @@ pub fn word_label<'a>(ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, x: f32, y: f32, s
 /// The icon cubes of the new sides: cube, side, tint (the icon colour of
 /// the main-cube side the cube grew out of) and picture.
 pub fn icons(d: &super::icons::IconData) -> Vec<(Level, St, super::icons::PixelIcon)> {
-    use super::icons::{PixelIcon, Side, TINT_CARD, TINT_GAME, TINT_OPTION};
+    use super::icons::{Motion, PixelIcon, Side, TINT_CARD, TINT_GAME, TINT_OPTION};
+    // Bitmaps: `.` is empty, `#` a still cube, any other character a cube
+    // of that motion group.
+    // Four tiles that flip over in turn, clockwise.
     const APPS: &[&str] = &[
-        "###.###",
-        "###.###",
-        "###.###",
+        "111.222",
+        "111.222",
+        "111.222",
         ".......",
-        "###.###",
-        "###.###",
-        "###.###",
+        "333.444",
+        "333.444",
+        "333.444",
     ];
+    const APPS_MOTION: &[Motion] = &[Motion::Flip { groups: b"1243", period: 24 }];
+    // A folder; its two sheets lift a little now and then.
     const FILES: &[&str] = &[
         "#####...",
         "#...##..",
         "#...#.#.",
         "#...####",
         "#......#",
-        "#.####.#",
+        "#.pppp.#",
         "#......#",
-        "#.####.#",
+        "#.pppp.#",
         "#......#",
         "########",
     ];
-    // A 3.5" hard drive seen from the top: the case, the platter with its
-    // spindle, and the head arm swinging in from the bottom right.
+    const FILES_MOTION: &[Motion] = &[Motion::Lift { group: b'p', period: 150 }];
+    // A 3.5" hard drive seen from the top: the case, the platter (which
+    // spins) and the head arm swinging in from the bottom right to the
+    // spindle.
     const DRIVES: &[&str] = &[
         "############",
         "#..........#",
-        "#...####...#",
-        "#..#....#..#",
-        "#.#......#.#",
-        "#.#..#...#.#",
-        "#.#...#..#.#",
-        "#.#....#.#.#",
-        "#..#....##.#",
-        "#...####.#.#",
+        "#...oooo...#",
+        "#..o....o..#",
+        "#.o......o.#",
+        "#.o..#...o.#",
+        "#.o...#..o.#",
+        "#.o....#.o.#",
+        "#..o....o#.#",
+        "#...oooo.#.#",
         "#.......##.#",
         "#.......##.#",
         "#..........#",
         "#.##....##.#",
         "############",
     ];
+    const DRIVES_MOTION: &[Motion] = &[Motion::Orbit { group: b'o', speed: -400 }];
+    // The power symbol: the bar is pressed in and the ring ripples.
     const BOOT: &[&str] = &[
-        "....#....",
-        ".#..#..#.",
-        "#...#...#",
-        "#...#...#",
-        "#.......#",
-        "#.......#",
-        ".#.....#.",
-        "..#####..",
+        "....b....",
+        ".o..b..o.",
+        "o...b...o",
+        "o...b...o",
+        "o.......o",
+        "o.......o",
+        ".o.....o.",
+        "..ooooo..",
     ];
+    const BOOT_MOTION: &[Motion] = &[
+        Motion::Press { groups: b"b", period: 100 },
+        Motion::Ripple { group: b'o', period: 100, delay: 22 },
+    ];
+    // A chip: a light runs round its pins.
     const FIRMWARE: &[&str] = &[
-        "..#.#.#..",
+        "..p.p.p..",
         ".#######.",
-        "##.....##",
+        "p#.....#p",
         ".#.###.#.",
-        "##.###.##",
+        "p#.###.#p",
         ".#.###.#.",
-        "##.....##",
+        "p#.....#p",
         ".#######.",
-        "..#.#.#..",
+        "..p.p.p..",
     ];
+    const FIRMWARE_MOTION: &[Motion] = &[Motion::Chase { group: b'p', period: 90 }];
+    // A d-pad pressed up, right, down, left.
     const CONTROLS: &[&str] = &[
-        "...###...",
-        "...#.#...",
-        "####.####",
-        "#.......#",
-        "####.####",
-        "...#.#...",
-        "...###...",
+        "...uuu...",
+        "...u.u...",
+        "llll.rrrr",
+        "l.......r",
+        "llll.rrrr",
+        "...d.d...",
+        "...ddd...",
     ];
+    const CONTROLS_MOTION: &[Motion] = &[Motion::Press { groups: b"urdl", period: 30 }];
     alloc::vec![
-        (Level::Memory, St::OptionFace, PixelIcon::new(d, Side::Left, TINT_CARD, FILES)),
-        (Level::Memory, St::ClockFace, PixelIcon::new(d, Side::Right, TINT_CARD, DRIVES)),
-        (Level::Game, St::OptionFace, PixelIcon::new(d, Side::Left, TINT_GAME, BOOT)),
-        (Level::Game, St::ClockFace, PixelIcon::new(d, Side::Right, TINT_GAME, APPS)),
-        (Level::Settings, St::GameFace, PixelIcon::new(d, Side::Up, TINT_OPTION, BOOT)),
-        (Level::Settings, St::ClockFace, PixelIcon::new(d, Side::Right, TINT_OPTION, FIRMWARE)),
-        (Level::Settings, St::CardFace, PixelIcon::new(d, Side::Down, TINT_OPTION, CONTROLS)),
+        (Level::Memory, St::OptionFace, PixelIcon::new(d, Side::Left, TINT_CARD, FILES, FILES_MOTION)),
+        (Level::Memory, St::ClockFace, PixelIcon::new(d, Side::Right, TINT_CARD, DRIVES, DRIVES_MOTION)),
+        (Level::Game, St::OptionFace, PixelIcon::new(d, Side::Left, TINT_GAME, BOOT, BOOT_MOTION)),
+        (Level::Game, St::ClockFace, PixelIcon::new(d, Side::Right, TINT_GAME, APPS, APPS_MOTION)),
+        (Level::Settings, St::GameFace, PixelIcon::new(d, Side::Up, TINT_OPTION, BOOT, BOOT_MOTION)),
+        (Level::Settings, St::ClockFace, PixelIcon::new(d, Side::Right, TINT_OPTION, FIRMWARE, FIRMWARE_MOTION)),
+        (Level::Settings, St::CardFace, PixelIcon::new(d, Side::Down, TINT_OPTION, CONTROLS, CONTROLS_MOTION)),
     ]
 }
