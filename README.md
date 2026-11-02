@@ -40,6 +40,12 @@ The matching decompilation of the IPL's BS2 program lives in [decomp/](decomp/RE
   the firmware boot menu timeout (the `Timeout` variable). F10 opens the
   system dialog: Firmware Setup (reboots into your vendor's BIOS setup via
   `OsIndications`), Restart and Power Off.
+- **Sub-cubes.** Memory (down) and Options (left) open a second cube, turned
+  and entered the same way. Memory: Memory Card (down, the console's
+  screen), Files (left), Drives (right), up goes back. Settings: Console
+  (left, the Options screen), Boot (up), Firmware (right), Controls (down).
+  B on a sub-cube's front goes back. Files, Drives and Controls are
+  placeholders for now.
 - **Your own memory cards.** Put card images (`.raw`, `.mcp` or `.gcp` from
   Dolphin, Nintendont, a MemCard PRO GC and the like, any size from 59 to
   2043 blocks) at `\EFI\GameCoob\cards\slot-a.raw` and `slot-b.raw` and the

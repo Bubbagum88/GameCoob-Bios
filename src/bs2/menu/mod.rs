@@ -13,6 +13,11 @@
 //! | Calendar    | set the clock           | set the firmware clock (SetTime)       |
 //!
 //! Firmware Setup, Restart and Power Off are in a system dialog (F10).
+//!
+//! GameCoob: Memory Card and Options don't open their screens straight
+//! away; they dive into a second cube ([`subcube`]) whose sides hold
+//! those screens and new ones (Files, Drives, Boot, Firmware, Controls).
+//! The main cube's Memory Card side is labelled "Memory".
 
 pub mod backend;
 pub mod card_image;
@@ -23,6 +28,10 @@ mod calendar;
 mod options;
 pub mod icons;
 mod system;
+mod subcube;
+
+pub use subcube::Level;
+use subcube::{Page, Target};
 
 use super::backdrop;
 use super::fx::{self, Fx, FxData};
@@ -327,6 +336,10 @@ pub enum St {
     Option,
     ClockFace,
     Clock,
+    /// GameCoob: zooming into a face to swap to another cube.
+    Dive,
+    /// GameCoob: a sub-cube page ([`Menu::page`]).
+    Page,
 }
 
 impl St {
@@ -418,6 +431,12 @@ pub struct Menu {
     card_icon: icons::CardIcon,
     clock_icon: icons::ClockIcon,
     option_icon: icons::OptionIcon,
+    /// GameCoob: which cube is up, the one a dive leads to, the open page
+    /// and its fader.
+    pub level: Level,
+    dive_to: Level,
+    page: Page,
+    page_fade: [Fader; 2],
 }
 
 const SUB_OPTION: usize = 0;
@@ -469,6 +488,10 @@ impl Menu {
             card_icon: icons::CardIcon::new(&ma.icons),
             clock_icon: icons::ClockIcon::new(&ma.icons),
             option_icon: icons::OptionIcon::new(&ma.icons),
+            level: Level::Main,
+            dive_to: Level::Main,
+            page: Page::Files,
+            page_fade: [Fader::default(), Fader::with_delay(8)],
         };
         m.calc_cube_mtx();
         m
@@ -483,6 +506,16 @@ impl Menu {
     /// submenus. Sound_Play calls are left out (no audio yet).
     fn handle_input(&mut self, p: &Pad) {
         use St::*;
+        // GameCoob: on the Memory cube, up (the way back) and B on its
+        // front leave for the main cube.
+        if self.level == Level::Memory && self.state == Top && self.w.at_front() && p.up {
+            self.dive(Level::Main);
+            return;
+        }
+        if self.level != Level::Main && self.state == Top && self.w.at_front() && p.b {
+            self.dive(Level::Main);
+            return;
+        }
         let w = &self.w;
         if p.up {
             match self.state {
@@ -513,12 +546,25 @@ impl Menu {
             }
         }
         if p.a {
-            match self.state {
-                CardFace if w.at_face_x(-0x4000) => self.next = Card,
-                GameFace if w.at_face_x(0x4000) => self.next = Game,
-                ClockFace if w.at_face_y(-0x4000) => self.next = Clock,
-                OptionFace if w.at_face_y(0x4000) => self.next = Option,
-                _ => {}
+            let at = match self.state {
+                CardFace => w.at_face_x(-0x4000),
+                GameFace => w.at_face_x(0x4000),
+                ClockFace => w.at_face_y(-0x4000),
+                OptionFace => w.at_face_y(0x4000),
+                _ => false,
+            };
+            // GameCoob: what a side opens depends on the cube.
+            match self.level.target(self.state).filter(|_| at) {
+                Some(Target::Screen(st)) => self.next = st,
+                Some(Target::Cube(l)) => {
+                    self.dive(l);
+                    return;
+                }
+                Some(Target::Page(pg)) => {
+                    self.page = pg;
+                    self.next = St::Page;
+                }
+                None => {}
             }
         }
         if p.b {
@@ -530,6 +576,30 @@ impl Menu {
                 _ => {}
             }
         }
+    }
+
+    /// GameCoob: start zooming into the current face; at full zoom the
+    /// cube becomes `to` ([`Menu::finish_dive`]).
+    fn dive(&mut self, to: Level) {
+        self.dive_to = to;
+        self.next = St::Dive;
+    }
+
+    /// GameCoob: fully zoomed in: swap cubes and zoom back out, on the
+    /// new cube's front, or on the main cube's side we came from.
+    fn finish_dive(&mut self) {
+        let from = self.level;
+        self.level = self.dive_to;
+        let face = if self.level == Level::Main { from.home_face() } else { St::Top };
+        let (rx, ry) = match face {
+            St::CardFace => (-0x4000, 0),
+            St::OptionFace => (0, 0x4000),
+            _ => (0, 0),
+        };
+        self.w.rot_x = rx;
+        self.w.rot_y = ry;
+        self.state = face;
+        self.next = face;
     }
 
     /// Menu_CalcCubeMtx (0x81311D50): rotation, idle wobble, then the zoom
@@ -607,6 +677,8 @@ impl Menu {
                 toward_zero(&mut w.rot_x, step);
                 toward_zero(&mut w.rot_y, step);
             }
+            // GameCoob: a dive or a page holds the face it left from.
+            St::Dive | St::Page => {}
         }
     }
 
@@ -614,7 +686,11 @@ impl Menu {
     /// submenu's icon cube, then their matrices. It runs before
     /// Menu_AnimCube, so the icons sit in last frame's cube matrix.
     fn update_icons(&mut self, d: &icons::IconData, view: &Mtx) {
+        let level = self.level;
         let phase = |face: St, sub: St| match self.state {
+            // GameCoob: a sub-cube shows only the icon of the screen it
+            // kept from the main cube.
+            _ if !level.shows_icon(face) => icons::Phase::Hide,
             st if st == face => icons::Phase::Face,
             st if st == sub => icons::Phase::Enter,
             _ => icons::Phase::Hide,
@@ -676,6 +752,9 @@ impl Menu {
                 let browsing = self.card.browsing();
                 [o, o, o, i, None, Some(!browsing), Some(browsing), i]
             }
+            St::Dive => [o; 8],
+            St::Page if self.page == Page::Firmware => [o, o, o, o, o, i, o, i],
+            St::Page => [o, o, o, o, o, i, o, o],
         };
         // Glyph groups: 0..2 inside submenus, 3 the stick on the front
         // face, 4..5 B and A on a selected face.
@@ -685,6 +764,9 @@ impl Menu {
             St::Game => [false, !self.game.fatal(), false, false, false, false],
             St::GameFace | St::CardFace | St::OptionFace | St::ClockFace => [false, false, false, false, true, true],
             St::Card | St::Option | St::Clock => [true, true, true, false, false, false],
+            St::Dive => [false; 6],
+            St::Page if self.page == Page::Firmware => [false, true, true, false, false, false],
+            St::Page => [false, true, false, false, false, false],
         };
         for (f, on) in self.guide_text.iter_mut().zip(text) {
             if let Some(on) = on {
@@ -706,6 +788,9 @@ impl Menu {
             self.sub[SUB_GAME][i].step_if(self.state == St::Game);
             self.sub[SUB_OPTION][i].step_if(self.state == St::Option);
             self.sub[SUB_CLOCK][i].step_if(self.state == St::Clock);
+        }
+        for f in self.page_fade.iter_mut() {
+            f.step_if(self.state == St::Page);
         }
     }
 
@@ -813,9 +898,15 @@ impl Menu {
             // the next state.
             self.zoom_in();
             self.anim_cube();
-            let (next, act) = self.update_sub(p);
-            self.next = next;
-            action = act;
+            if self.state == St::Dive {
+                if self.w.zoomed_in() {
+                    self.finish_dive();
+                }
+            } else {
+                let (next, act) = self.update_sub(p);
+                self.next = next;
+                action = act;
+            }
         }
 
         // GameCoob: the highlight pulse 50..120 at 2 per frame.
@@ -869,6 +960,18 @@ impl Menu {
             }
             return r;
         }
+        if self.state == St::Page {
+            if !self.w.zoomed_in() {
+                return (St::Page, None);
+            }
+            if p.b {
+                return (self.page.face(), None);
+            }
+            if p.a && self.page == Page::Firmware {
+                self.sys.toggle();
+            }
+            return (St::Page, None);
+        }
         (self.state, None)
     }
 
@@ -915,6 +1018,7 @@ impl Menu {
         v2.vp = view.vp;
         let mut ui = Ui { gx: ui.gx, view: &v2, mv: screen_2d() };
         self.draw_submenus(&mut ui, ma);
+        self.draw_page(&mut ui, ma);
         self.draw_guide(&mut ui, ma, 255);
         let pulse = (self.highlight - 50) as f32 / 70.0;
         self.sys.draw(&mut ui, ma, self.lang, pulse);
@@ -932,21 +1036,47 @@ impl Menu {
         if let Some(m) = front {
             // Menu_DrawTopFace ignores the menu alpha.
             let fa = (255 - m * 255 / FACE_FADE) as u8;
-            draw_front(ui, ma, self.lang, view, &self.cube, fa);
+            if self.level == Level::Main {
+                draw_front(ui, ma, self.lang, view, &self.cube, fa);
+            } else {
+                let mv = self.face_mtx(view, (0, 0), [-FACE_HALF, FACE_HALF, FACE_HALF]);
+                subcube::draw_front(ui, ma, self.level, &mv, fa);
+            }
         }
         let face_a = |r: i16| ((alpha as i32) * (255 - (0x4000 - (r as i32).abs()) * 255 / FACE_FADE) / 255).clamp(0, 255) as f32 / 255.0;
         let l = self.lang;
         let bank = &ma.bank[..];
+        // GameCoob: a sub-cube's new sides.
+        let plain = |ui: &mut Ui<'a, '_>, face: St, a: f32| -> bool {
+            match self.level.plain_face(face) {
+                Some((t, lines)) => {
+                    subcube::draw_plain_face(ui, ma, l, t, lines, a);
+                    true
+                }
+                None => false,
+            }
+        };
         // Bottom: Memory Card.
         if self.w.rot_x <= -FACE_SHOW {
             let a = face_a(self.w.rot_x);
             ui.mv = self.face_mtx(view, (0x4000, 0), [-FACE_HALF, -FACE_HALF, FACE_HALF]);
+            if plain(ui, St::CardFace, a) {
+                return;
+            }
             let g = &ma.card_face[l];
             let c = with_a(WHITE, a * a);
             for f in g.frame(tag(b"fram")) {
                 ui.frame(f, bank, c);
             }
-            pics(ui, g, b"titl", bank, c);
+            if self.level == Level::Main {
+                // GameCoob: the main cube's side is the Memory cube now.
+                if let Some(t) = g.pic(tag(b"titl")).next() {
+                    let s = cp1252(MEMORY_LABEL);
+                    subcube::bold_label(ui, ma, t.x, t.y, 30.0, &s, c, with_a(SHADOW, a * a * 0.5));
+                }
+            } else {
+                pics(ui, g, b"titl", bank, c);
+            }
             for slot in 0..2u8 {
                 self.draw_slot(ui, g, bank, slot, a);
             }
@@ -955,19 +1085,25 @@ impl Menu {
         if self.w.rot_x >= FACE_SHOW {
             let a = face_a(self.w.rot_x);
             ui.mv = self.face_mtx(view, (-0x4000, 0), [-FACE_HALF, FACE_HALF, -FACE_HALF]);
-            self.draw_game_face(ui, ma, a);
+            if !plain(ui, St::GameFace, a) {
+                self.draw_game_face(ui, ma, a);
+            }
         }
         // Right: Calendar.
         if self.w.rot_y <= -FACE_SHOW {
             let a = face_a(self.w.rot_y);
             ui.mv = self.face_mtx(view, (0, 0x4000), [FACE_HALF, FACE_HALF, FACE_HALF]);
-            self.draw_clock_face(ui, ma, a);
+            if !plain(ui, St::ClockFace, a) {
+                self.draw_clock_face(ui, ma, a);
+            }
         }
         // Left: Options.
         if self.w.rot_y >= FACE_SHOW {
             let a = face_a(self.w.rot_y);
             ui.mv = self.face_mtx(view, (0, -0x4000), [-FACE_HALF, FACE_HALF, -FACE_HALF]);
-            self.draw_option_face(ui, ma, a);
+            if !plain(ui, St::OptionFace, a) {
+                self.draw_option_face(ui, ma, a);
+            }
         }
     }
 
@@ -1138,6 +1274,18 @@ impl Menu {
         }
     }
 
+    /// GameCoob: a sub-cube page over the backdrop.
+    fn draw_page<'a>(&'a self, ui: &mut Ui<'a, '_>, ma: &'a MenuAssets) {
+        let [b, t] = self.page_fade.map(|f| f.alpha() as f32 / 255.0);
+        if b <= 0.0 {
+            return;
+        }
+        draw_backdrop(ui, ma, &self.w, b);
+        let lines = self.page.lines(&self.info.entries, self.info.fw_ui);
+        subcube::draw_page(ui, ma, self.page.title(), &lines, t);
+        self.draw_message(ui, ma, t);
+    }
+
     fn draw_message<'a>(&'a self, ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, a: f32) {
         if let Some((msg, at)) = &self.message {
             let age = self.frame.saturating_sub(*at) as f32;
@@ -1274,11 +1422,22 @@ fn draw_front<'a>(ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, lang: usize, view: &V
     ui.mv = face_mtx(view, cube, (0, 0), [-FACE_HALF, FACE_HALF, FACE_HALF]);
     let g = &ma.front[lang];
     for p in g.pics.iter() {
+        // GameCoob: the Memory Card side leads to the Memory cube, so it
+        // is labelled "Memory" in the ROM font instead.
+        if p.tag == tag(b"titm") {
+            let s = cp1252(MEMORY_LABEL);
+            let size = p.h.min(p.w) + 1.0;
+            subcube::bold_label(ui, ma, p.x, p.y, size, &s, with_a(WHITE, a * a), with_a(SHADOW, a * a * 0.5));
+            continue;
+        }
         if let Some(t) = ma.bank.get(p.tex as usize) {
             ui.pic(p, t, with_a(WHITE, a * a), 0.0, 0.0);
         }
     }
 }
+
+/// The main cube's Memory Card side, now the way into the Memory cube.
+const MEMORY_LABEL: &str = "Memory";
 
 /// Backdrop_Draw, simplified: the 8x8 grid tile repeated over the screen,
 /// lit by a soft spot from the centre instead of the GX spot light.
