@@ -2,7 +2,9 @@
 # Build the app and boot it in QEMU with OVMF firmware.
 # Usage: [IPL=path/to/ipl.bin] scripts/run-qemu.sh [extra qemu args...]
 # Your own dump (IPL, or local/ipl.bin by default) is copied to the virtual ESP
-# so the real intro plays.
+# so the real intro plays. Sound goes through an emulated Intel HD Audio card
+# to PulseAudio (AUDIO=<backend> picks another); AUDIO=none mutes it, AUDIO=wav,path=out.wav
+# records it.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -28,4 +30,5 @@ exec qemu-system-x86_64 \
   -drive if=pflash,format=raw,file=target/qemu/OVMF_VARS.fd \
   -drive format=raw,file=fat:rw:target/esp \
   -net none \
+  -audiodev "${AUDIO:-pa},id=snd0" -device intel-hda -device hda-output,audiodev=snd0 \
   "$@"

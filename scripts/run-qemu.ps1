@@ -1,5 +1,5 @@
 # Boot GameCoob in QEMU on Windows, straight from a downloaded build.
-# Usage: scripts\run-qemu.ps1 [-Boot <folder with EFI\BOOT\BOOTX64.EFI>] [-Fast] [-Slow]
+# Usage: scripts\run-qemu.ps1 [-Boot <folder with EFI\BOOT\BOOTX64.EFI>] [-Fast] [-Slow] [-NoSound]
 #   Without -Boot it uses the newest boot files under local\ (an unzipped
 #   GameCoob-boot-files download, or the .zip itself) or target\esp.
 #   By default it uses Windows Hypervisor Platform when it is turned on
@@ -8,10 +8,11 @@
 #   with floating-point math, which emulation does in software.
 #   -Fast insists on Windows Hypervisor Platform; -Slow skips it.
 #   -Cpus N gives the VM N processors (default: one per physical core, up to 8).
+#   Sound plays through an emulated Intel HD Audio card; -NoSound leaves it out.
 # Your dump at local\ipl.bin is added so the real intro plays. Frame timings
 # (fps, render/scale/present ms) are written to local\qemu\serial.log,
 # which starts over on each restart.
-param([string]$Boot, [switch]$Fast, [switch]$Slow, [int]$Cpus = 0)
+param([string]$Boot, [switch]$Fast, [switch]$Slow, [int]$Cpus = 0, [switch]$NoSound)
 $ErrorActionPreference = "Stop"
 $root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 Set-Location $root
@@ -83,6 +84,9 @@ Write-Host "CPUs: $cpus; accelerator: $(($accel | Where-Object { $_ -ne '-accel'
 # GameCoob logged that it asked for the restart (Restart, booting an entry,
 # firmware setup). BootNext and other variables carry over in vars.fd.
 $log = "local\qemu\serial.log"
+# Sound: an emulated Intel HD Audio card on Windows' DirectSound output.
+$audio = @("-audiodev", "dsound,id=snd0", "-device", "intel-hda", "-device", "hda-output,audiodev=snd0")
+if ($NoSound) { $audio = @() }
 do {
     if (Test-Path $log) { Remove-Item -Force $log }
     # qemu64 asks for AMD-V (svm), which Intel hosts lack under WHPX; it is unused.
@@ -90,7 +94,7 @@ do {
         -drive "if=pflash,format=raw,readonly=on,file=$code" `
         -drive "if=pflash,format=raw,file=$vars" `
         -drive "format=raw,file=fat:rw:$esp" `
-        -net none `
+        -net none @audio `
         -serial "file:$log"
     $again = (Test-Path $log) -and (Select-String -Quiet -SimpleMatch "GameCoob: reset" -Path $log)
     if ($again) { Write-Host "Restarting" }

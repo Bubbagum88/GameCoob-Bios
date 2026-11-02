@@ -6,6 +6,27 @@ byte-exact. The other 9 differ only in register choice and instruction order,
 not in logic (`fdiff -r` shows no logic change). 8 of those 9 are NEOS code,
 which the IPL never runs (see below).
 
+## In the app (status)
+
+- Done: `src/audio/data.rs` finds the archive in the user's dump (`IBNK`,
+  then `WSYS`, then the waves, each 32-byte aligned) and decodes all 12 waves
+  to PCM at load. `src/audio/mixer.rs` resamples each voice once, straight to
+  48 kHz (Catmull-Rom), mixes in f32 and soft-limits. `src/hda.rs` drives an
+  Intel HD Audio controller (QEMU `intel-hda`, most PCs): codec walk, every
+  analog output pin routed to a DAC, one cyclic 48 kHz stereo stream fed from
+  the main loop. The boot jingles play from `Cube_UpdateJingle`.
+- Stand-in until the sequence is ported: `Sound_Play(0..2)` starts the
+  jingle wave pairs directly (0/1, 2/3, 9/10, hard left/right). Which egg
+  gets which pair is a guess. All other ids are silent.
+- Next: the Jam interpreter (`jammain_2.c`) over `iplrom.com`, voices from
+  the bank, then every `Sound_*` call from the menus.
+- Check on the host: `tools/audio-render <ipl.bin> <out-dir> [id...]` writes
+  48 kHz WAVs of `Sound_Play` ids. In QEMU, add
+  `-audiodev wav,id=snd0,path=out.wav -device intel-hda -device hda-output,audiodev=snd0`.
+
+PAL 1.0 waves: 10 at 32000 Hz and 2 at 44100 Hz, AFC 4-bit. The jingles are
+prerecorded stereo (two waves, one per side) of 5.2 to 5.9 s.
+
 ## Short version
 
 - BS2 calls only a small glue API: `Sound_Play`, `Sound_UpdateSpin`,
@@ -31,7 +52,7 @@ which the IPL never runs (see below).
 | --- | --- | --- | --- |
 | `ipl.bnk` | 0x0 | 0x8E0 | instrument bank: instruments, percussion, key/velocity regions, envelopes (`bankread.c`, `bankdrv.c`) |
 | `ipl.ws` | 0x8E0 | 0x680 | wave system table: per-wave format, loop, rate, offset in the .aw (`waveread.c`) |
-| `ipl_0.aw` | 0xF60 | 0xB2100 | the wave data itself (GC DSP 4-bit ADPCM), copied to ARAM at boot |
+| `ipl_0.aw` | 0xF60 | 0xB2100 | the wave data itself (AFC 4-bit ADPCM: 9-byte frames of 16 samples, one fixed 16-entry coefficient table), copied to ARAM at boot |
 | `iplrom.com` | 0xB3060 | 0xC40 | the sequence (JAudio "Jam" bytecode) |
 
 The archive starts at 0x813F7620 in bs2.dol. The decomp build pulls these bytes
@@ -93,9 +114,9 @@ Callers: `cube.c` (jingles), `scene_intro.c` and `scene_spinout.c` (spin),
 4. **DSP channel setup.** `dspdriver.c` (64 `dspch_`) and `dspinterface.c`
    (`DSPchannel_`): resampling ratio (pitch), 6 mixer volumes with
    target/current ramps, bus links, wave info, filters, start/stop.
-5. **Mixer (HLE, new code).** For each active channel: decode 4-bit DSP ADPCM
-   from ARAM (8-byte frames; per-wave coefficient table and loop/history in
-   the wave info), resample by `resamplingRatio`, ramp volumes, sum into the
+5. **Mixer (HLE, new code).** For each active channel: decode AFC ADPCM
+   from ARAM (9-byte frames, fixed coefficient table; loop history in the
+   wave info), resample by `resamplingRatio`, ramp volumes, sum into the
    buses, then run the FX lines (`fxinterface.c`: delay/echo per `sFxConfig`)
    and the final L/R mix (`aictrl.c` `MixDsp`, `Jac_imixcopy`). Write this
    fresh from the C structs. Dolphin's Zelda HLE is GPL: facts only, no code.
