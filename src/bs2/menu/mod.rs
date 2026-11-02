@@ -33,6 +33,19 @@ mod system;
 mod subcube;
 
 pub use subcube::Level;
+
+/// GameCoob's minimal mode: the menu as close to the console's as it gets
+/// (no sub-cubes, the console's own labels). Read by the spin-out's face
+/// before the menu exists, so it lives here rather than in [`Menu`].
+static MINIMAL: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+
+pub fn set_minimal(on: bool) {
+    MINIMAL.store(on, core::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn minimal() -> bool {
+    MINIMAL.load(core::sync::atomic::Ordering::Relaxed)
+}
 use subcube::{Page, Target};
 
 use super::backdrop;
@@ -384,6 +397,8 @@ pub struct SysInfo {
 pub enum Action {
     Boot(u16),
     SetTimeout(u16),
+    /// Save minimal mode (on or off).
+    SetMinimal(bool),
     /// Set the firmware clock: year, month 1..12, day, hour, minute, second.
     SetTime([i32; 6]),
     FirmwareSetup,
@@ -591,6 +606,18 @@ impl Menu {
                 OptionFace if w.at_face_y(0x4000) => self.next = Top,
                 _ => {}
             }
+        }
+    }
+
+    /// GameCoob: switch minimal mode. Turning it on from a sub-cube puts
+    /// the main cube back (behind the dialog), on the side it was entered
+    /// from.
+    fn set_minimal(&mut self, on: bool) {
+        set_minimal(on);
+        if on && self.level != Level::Main {
+            self.dive_to = Level::Main;
+            self.finish_dive();
+            self.w.zoom = 0;
         }
     }
 
@@ -883,7 +910,10 @@ impl Menu {
             self.sys.toggle();
         }
         let none = Pad::default();
-        let sys_action = if self.sys.visible() { self.sys.update(pad) } else { None };
+        let sys_action = if self.sys.visible() { self.sys.update(pad, minimal()) } else { None };
+        if let Some(Action::SetMinimal(on)) = sys_action {
+            self.set_minimal(on);
+        }
         let busy = self.sys.visible() || self.explorer.visible();
         let ep = if self.sys.visible() { &none } else { pad };
         self.explorer.update(ep, &mut *self.vols, &mut self.cards);
@@ -1152,7 +1182,7 @@ impl Menu {
             for f in g.frame(tag(b"fram")) {
                 ui.frame(f, bank, c);
             }
-            if self.level == Level::Main {
+            if self.level == Level::Main && !minimal() {
                 // GameCoob: the main cube's side is the Memory cube now.
                 if let Some(t) = g.pic(tag(b"titl")).next() {
                     let s = cp1252(MEMORY_LABEL);
@@ -1512,7 +1542,7 @@ fn draw_front<'a>(ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, lang: usize, view: &V
     for p in g.pics.iter() {
         // GameCoob: the Memory Card side leads to the Memory cube, so it
         // is labelled "Memory" in the ROM font instead.
-        if p.tag == tag(b"titm") {
+        if p.tag == tag(b"titm") && !minimal() {
             let s = cp1252(MEMORY_LABEL);
             let size = p.h.min(p.w) + 1.0;
             subcube::bold_label(ui, ma, p.x, p.y, size, &s, with_a(WHITE, a * a), with_a(SHADOW, a * a * 0.5));

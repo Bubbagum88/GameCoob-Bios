@@ -66,6 +66,21 @@ pub fn set_boot_next(num: u16) -> uefi::Result {
     runtime::set_variable(cstr16!("BootNext"), GLOBAL, attrs(), &num.to_le_bytes())
 }
 
+/// GameCoob's own variables.
+const GAMECOOB: &VariableVendor = &VariableVendor(uefi::guid!("87765b71-c5f6-4fb3-bec0-a85ab35948df"));
+
+/// Minimal mode (the menu as close to the console's as it gets), saved as
+/// `GameCoobMinimal` (one byte, 1 = on). Off when unset.
+pub fn minimal() -> bool {
+    runtime::get_variable_boxed(cstr16!("GameCoobMinimal"), GAMECOOB)
+        .ok()
+        .is_some_and(|(b, _)| b.first() == Some(&1))
+}
+
+pub fn set_minimal(on: bool) -> uefi::Result {
+    runtime::set_variable(cstr16!("GameCoobMinimal"), GAMECOOB, attrs(), &[on as u8])
+}
+
 pub fn firmware_ui_supported() -> bool {
     read(cstr16!("OsIndicationsSupported"))
         .filter(|b| b.len() >= 8)

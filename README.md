@@ -46,6 +46,10 @@ The matching decompilation of the IPL's BS2 program lives in [decomp/](decomp/RE
   (left, the Options screen), Boot (up), Firmware (right), Controls (down).
   B on a sub-cube's front goes back. Files, Drives and Controls are
   placeholders for now.
+- **Minimal mode.** For the menu exactly as on the console: no sub-cubes,
+  Memory Card and Options open their own screens again, and the cube keeps
+  the console's labels. Toggle it in the system menu (F10, or Settings cube
+  ▶ Firmware); it is saved in a UEFI variable (`GameCoobMinimal`).
 - **Your own memory cards.** Put card images (`.raw`, `.mcp` or `.gcp` from
   Dolphin, Nintendont, a MemCard PRO GC and the like, any size from 59 to
   2043 blocks) at `\EFI\GameCoob\cards\slot-a.raw` and `slot-b.raw` and the

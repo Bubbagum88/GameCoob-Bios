@@ -62,6 +62,9 @@ impl Level {
     /// A on a side (a `*Face` state).
     pub fn target(self, face: St) -> Option<Target> {
         Some(match (self, face) {
+            // Minimal mode: the console's screens, no sub-cubes.
+            (Level::Main, St::CardFace) if super::minimal() => Target::Screen(St::Card),
+            (Level::Main, St::OptionFace) if super::minimal() => Target::Screen(St::Option),
             (Level::Main, St::CardFace) => Target::Cube(Level::Memory),
             (Level::Main, St::OptionFace) => Target::Cube(Level::Settings),
             (Level::Main, St::GameFace) => Target::Screen(St::Game),
@@ -155,6 +158,9 @@ impl Page {
                 let mut v = Vec::new();
                 v.push(s("A opens the system menu:"));
                 v.push(s(if fw_ui { "firmware setup, restart, power off." } else { "restart or power off." }));
+                v.push(s(""));
+                v.push(s("Minimal Mode is there too: the menu as"));
+                v.push(s("close to the console's as it gets."));
                 v.push(s(""));
                 v.push(s("F10 opens it from anywhere."));
                 v

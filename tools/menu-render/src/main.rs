@@ -186,6 +186,8 @@ fn main() {
     // VOLS=dir,dir... are the drives the Card Files explorer browses.
     let roots: Vec<PathBuf> = std::env::var("VOLS").map(|v| v.split(',').map(PathBuf::from).collect()).unwrap_or_default();
     let mut bs = Bs2Main::new(&assets, Box::new(FakeDrive::new()), cards, Box::new(HostVolumes { roots }));
+    // MINIMAL=1: minimal mode (no sub-cubes, the console's labels).
+    bs2::menu::set_minimal(std::env::var("MINIMAL").is_ok());
     if std::env::var("SKIP").is_ok() {
         bs.skip_intro();
     }
