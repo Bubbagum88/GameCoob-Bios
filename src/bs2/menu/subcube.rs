@@ -339,17 +339,19 @@ pub fn icons(d: &super::icons::IconData) -> Vec<(Level, St, super::icons::PixelI
     use super::icons::{Motion, PixelIcon, Side, TINT_CARD, TINT_GAME, TINT_OPTION};
     // Bitmaps: `.` is empty, `#` a still cube, any other character a cube
     // of that motion group.
-    // Four tiles that flip over in turn, clockwise.
+    // Nine app tiles that flip over in turn, clockwise round the edge,
+    // then the middle.
     const APPS: &[&str] = &[
-        "111.222",
-        "111.222",
-        "111.222",
-        ".......",
-        "333.444",
-        "333.444",
-        "333.444",
+        "11.22.33",
+        "11.22.33",
+        "........",
+        "44.55.66",
+        "44.55.66",
+        "........",
+        "77.88.99",
+        "77.88.99",
     ];
-    const APPS_MOTION: &[Motion] = &[Motion::Flip { groups: b"1243", period: 24 }];
+    const APPS_MOTION: &[Motion] = &[Motion::Flip { groups: b"123698745", period: 16 }];
     // A folder; its two sheets lift a little now and then.
     const FILES: &[&str] = &[
         "#####...",
@@ -385,7 +387,7 @@ pub fn icons(d: &super::icons::IconData) -> Vec<(Level, St, super::icons::PixelI
         "############",
     ];
     const DRIVES_MOTION: &[Motion] = &[Motion::Orbit { group: b'o', speed: -400 }];
-    // The power symbol: the bar is pressed in and the ring ripples.
+    // The power symbol: a pulse climbs the bar, then the ring ripples.
     const BOOT: &[&str] = &[
         "....b....",
         ".o..b..o.",
@@ -397,29 +399,32 @@ pub fn icons(d: &super::icons::IconData) -> Vec<(Level, St, super::icons::PixelI
         "..ooooo..",
     ];
     const BOOT_MOTION: &[Motion] = &[
-        Motion::Press { groups: b"b", period: 100 },
-        Motion::Ripple { group: b'o', period: 100, delay: 22 },
+        Motion::Climb { group: b'b', period: 100 },
+        Motion::Ripple { group: b'o', period: 100, delay: 30 },
     ];
-    // A chip: a light runs round its pins.
+    // A chip: a light runs round its pins, and the other way round its
+    // core.
     const FIRMWARE: &[&str] = &[
         "..p.p.p..",
         ".#######.",
         "p#.....#p",
-        ".#.###.#.",
-        "p#.###.#p",
-        ".#.###.#.",
+        ".#.ccc.#.",
+        "p#.c#c.#p",
+        ".#.ccc.#.",
         "p#.....#p",
         ".#######.",
         "..p.p.p..",
     ];
-    const FIRMWARE_MOTION: &[Motion] = &[Motion::Chase { group: b'p', period: 90 }];
+    const FIRMWARE_MOTION: &[Motion] = &[Motion::Chase { group: b'p', period: 90 }, Motion::Chase { group: b'c', period: -90 }];
     // A d-pad pressed up, right, down, left.
     const CONTROLS: &[&str] = &[
         "...uuu...",
         "...u.u...",
-        "llll.rrrr",
+        "...u.u...",
+        "lll#.#rrr",
         "l.......r",
-        "llll.rrrr",
+        "lll#.#rrr",
+        "...d.d...",
         "...d.d...",
         "...ddd...",
     ];

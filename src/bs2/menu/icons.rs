@@ -1008,11 +1008,15 @@ pub enum Motion {
     /// The groups flip over about their own vertical axis one after
     /// another, then rest as long as the flips took.
     Flip { groups: &'static [u8], period: i32 },
-    /// A bump runs round the group, once per `period` frames.
+    /// A bump runs round the group, once per `period` frames: clockwise,
+    /// or anticlockwise for a negative period.
     Chase { group: u8, period: i32 },
     /// The group's rows rise half a cell and settle, one after another,
     /// every `period` frames.
     Lift { group: u8, period: i32 },
+    /// A bump climbs the group from its bottom row to its top, once per
+    /// `period` frames.
+    Climb { group: u8, period: i32 },
     /// A bump runs outward from the centre through the group, `delay`
     /// frames into every `period`.
     Ripple { group: u8, period: i32, delay: i32 },
@@ -1147,7 +1151,8 @@ impl PixelIcon {
                 }
             }
             Motion::Chase { group, period } => {
-                let w = (t % period) as f32 / period as f32;
+                let w = (t % period.abs()) as f32 / period.abs() as f32;
+                let w = if period < 0 { 1.0 - w } else { w };
                 let o = self.centre(group);
                 for c in self.cubes.iter_mut().filter(|c| c.group == group) {
                     // clockwise from the top, 0..1
@@ -1162,6 +1167,15 @@ impl PixelIcon {
                 let k = t % period;
                 for c in self.cubes.iter_mut().filter(|c| c.group == group) {
                     c.cur[1] += 0.6 * p * bump((k - c.row * 6) as f32 / 30.0);
+                }
+            }
+            Motion::Climb { group, period } => {
+                let k = t % period;
+                let low = self.cubes.iter().filter(|c| c.group == group).map(|c| c.base[1]).fold(f32::MAX, f32::min);
+                for c in self.cubes.iter_mut().filter(|c| c.group == group) {
+                    let b = bump((k as f32 - (c.base[1] - low) / p * 5.0) / 18.0);
+                    c.z += 0.6 * p * b;
+                    c.size *= 1.0 + 0.4 * b;
                 }
             }
             Motion::Ripple { group, period, delay } => {
