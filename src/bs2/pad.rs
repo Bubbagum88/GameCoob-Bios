@@ -38,7 +38,7 @@ pub const DIR_LEFT: u16 = 0x4000;
 pub const DIR_RIGHT: u16 = 0x8000;
 
 /// One controller (`PADStatus`).
-#[derive(Clone, Copy, Default, Debug)]
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
 pub struct PadStatus {
     pub button: u16,
     pub stick_x: i8,

@@ -18,6 +18,7 @@ mod card;
 mod clock;
 mod firmware;
 mod fs;
+mod gamepad;
 mod gfx;
 mod hda;
 mod input;

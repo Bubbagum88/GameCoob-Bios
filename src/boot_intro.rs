@@ -10,6 +10,8 @@ use crate::fs::UefiVolumes;
 use crate::bs2::menu::{Action, MenuAssets, SysInfo};
 use alloc::boxed::Box;
 use crate::bs2::{Assets, raster::{Job, Target, Work}, render};
+use crate::bs2::pad::{PAD_ERR_NONE, PadStatus};
+use crate::gamepad::Gamepads;
 use crate::input::{self, AppAction, KeyCode, Keyboard};
 use crate::clock::Clock;
 use crate::gfx::{Canvas, ResScale};
@@ -265,6 +267,10 @@ impl Cores {
 /// format-break and re-insert the stand-in memory cards (or pull and put
 /// back the card images), R is the
 /// console's reset switch and F3 shows frame timings.
+///
+/// USB gamepads ([`crate::gamepad`]) play alongside: GameCube controllers
+/// on an adapter as themselves, other pads through
+/// [`input::DEFAULT_PAD`].
 pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &Assets, ma: &MenuAssets, snd: Option<SoundArchive>) -> ! {
     let mut audio = Audio::open(snd);
     crate::bs2::menu::set_minimal(crate::vars::minimal());
@@ -281,6 +287,7 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
     let t0 = clock.now();
     let mut done_frames = 0u32;
     let mut keys = Keyboard::new(input::DEFAULT_KEYS);
+    let mut gamepads = Gamepads::new();
     let mut clock_at = 0.0;
 
     loop {
@@ -296,12 +303,29 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
         }
         // Catch logic up to real time, drawing only the latest frame.
         let due = (now * 60.0) as u32;
+        // The gamepads, read when logic frames are due: their buttons hold
+        // for each of those frames, their actions fire once.
+        let mut gp = [PadStatus::NONE; 4];
+        let mut gp_actions = Vec::new();
+        if done_frames < due {
+            for (port, pad, prev) in gamepads.poll(now) {
+                input::add_pad(&mut gp, &mut gp_actions, input::DEFAULT_PAD, port, &pad, prev);
+            }
+        }
         let mut stepped = false;
         while done_frames < due {
             done_frames += 1;
             stepped = true;
-            let mut input = FrameInput { pads: keys.pads(now), ..FrameInput::default() };
-            for a in keys.take_actions() {
+            let mut pads = keys.pads(now);
+            for (p, g) in pads.iter_mut().zip(&gp) {
+                if g.err == PAD_ERR_NONE {
+                    input::merge(p, g);
+                }
+            }
+            let mut input = FrameInput { pads, ..FrameInput::default() };
+            let mut actions = keys.take_actions();
+            actions.append(&mut gp_actions);
+            for a in actions {
                 match a {
                     AppAction::System => input.system = true,
                     AppAction::Eject => input.eject = true,

@@ -54,8 +54,10 @@ Language: Rust with the [`uefi`](https://crates.io/crates/uefi) crate, `no_std`.
 
 ## Phase 4: Input and sound
 
-- [ ] USB game controller input: UEFI exposes HID devices on some firmware;
-      fall back to keyboard everywhere else
+- [x] USB game controller input over the firmware's USB I/O protocol:
+      GameCube adapters (Wii U mode), Xbox 360 / One, generic HID gamepads;
+      keyboard stays on alongside
+- [ ] Controls page: remap keys and pad buttons, saved in a UEFI variable
 - [ ] Mouse/pointer support through the Simple Pointer protocol
 - [x] Intro audio through Intel HDA (own driver, `src/hda.rs`); the
       original sounds play only from the user's dump, none are shipped
