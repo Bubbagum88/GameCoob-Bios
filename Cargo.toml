@@ -7,6 +7,7 @@ edition = "2024"
 libm = "0.2.16"
 wide = { version = "0.7", default-features = false }
 log = "0.4.34"
+uefi-raw = "0.17"
 uefi = { version = "0.41", features = ["global_allocator", "panic_handler", "logger", "alloc"] }
 
 [profile.dev]

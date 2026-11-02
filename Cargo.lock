@@ -33,6 +33,7 @@ dependencies = [
  "libm",
  "log",
  "uefi",
+ "uefi-raw",
  "wide",
 ]
 

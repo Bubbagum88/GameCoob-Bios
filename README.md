@@ -167,6 +167,27 @@ are X, Y, L and R, and z held at boot (shift-Z for all four controllers) picks a
 easter-egg jingle. Esc skips the intro, F10 opens the system dialog, R is the
 reset switch and F3 shows frame timings. Held arrows repeat at the IPL's own rate.
 
+USB controllers work alongside the keyboard (`src/gamepad/`), plugged in before
+or while GameCoob runs:
+
+- **GameCube controllers on an adapter**: the Wii U GameCube adapter (057e:0337),
+  and third-party adapters (Mayflash and others) switched to their "Wii U" mode.
+  Each port is that controller, so all four ports work for the Z easter egg.
+- **Xbox 360 and Xbox One wired controllers**, and pads that use their protocols.
+- **Any other USB HID gamepad or joystick** (PlayStation pads, generic pads,
+  adapters in "PC" mode with one joystick per port).
+
+On non-GameCube pads the bottom face button is A, the right one B, the left one
+X, the top one Y; the triggers are L and R, either shoulder is Z, and the Xbox / PS
+/ Home button opens the system dialog. Generic pads are read by button number in
+the usual DirectInput order (PlayStation layout); one that differs gets remapped
+once the Controls page lands. The firmware's own USB stack does the transport, so
+the firmware must have USB enabled (if a USB keyboard works in its setup screen,
+pads work too).
+
+`scripts/fake-gamepad.py` serves a made-up adapter, Xbox 360 pad or HID pad to
+QEMU over usbredir, with scripted button presses, for testing without hardware.
+
 ### On real hardware
 
 1. Copy `gamecoob.efi` to a FAT32 USB stick as `EFI/BOOT/BOOTX64.EFI`.
@@ -180,6 +201,9 @@ reset switch and F3 shows frame timings. Held arrows repeat at the IPL's own rat
 src/
   main.rs    entry point: load the dump, graphics setup, hand over to the intro
   boot_intro.rs  loads ipl.bin from the ESP and runs the intro and menu on all CPU cores
+  input.rs   key and gamepad bindings to the emulated GameCube controllers and app actions
+  gamepad/   USB controllers over the firmware's USB I/O protocol: GameCube adapters,
+             Xbox pads, HID gamepads (report.rs decodes the reports; host-tested)
   bs2/       the intro and cube menu rebuilt from BS2: cube and scene state machines,
              GX-style TEV renderer and banded rasterizer, J3D animations, menus
   ipl/       ipl.bin parsing: descrambling, resource archive, Yay0, J3D, textures

@@ -38,6 +38,18 @@ mod card;
 #[allow(dead_code)]
 mod bs2;
 
+// The gamepad reports and the input bindings, for their tests.
+#[path = "../../../src/gamepad/report.rs"]
+#[allow(dead_code)]
+mod gamepad_report;
+mod gamepad {
+    pub(crate) use super::gamepad_report as report;
+}
+
+#[path = "../../../src/input.rs"]
+#[allow(dead_code)]
+mod input;
+
 mod png;
 
 use bs2::menu::backend::{FakeCards, FakeDrive};
