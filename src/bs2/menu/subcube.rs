@@ -23,9 +23,9 @@ use alloc::vec::Vec;
 pub enum Level {
     /// BS2's cube: Game Play, Memory Card, Options, Calendar.
     Main,
-    /// Memory Card, Files, Drives; up goes back.
+    /// Memory Card, Files, Drives; no up side (B goes back).
     Memory,
-    /// Game Play (the console's screen), Boot, Apps; down goes back.
+    /// Game Play (the console's screen), Boot, Apps; no down side (B goes back).
     Game,
     /// Console (the Options screen), Boot, Firmware, Controls.
     Settings,
@@ -58,8 +58,8 @@ pub enum Target {
 fn labels(l: Level) -> [&'static str; 4] {
     match l {
         Level::Main => ["", "", "", ""],
-        Level::Memory => ["Back", "Files", "Drives", "Memory Card"],
-        Level::Game => ["Game Play", "Boot", "Apps", "Back"],
+        Level::Memory => ["", "Files", "Drives", "Memory Card"],
+        Level::Game => ["Game Play", "Boot", "Apps", ""],
         Level::Settings => ["Boot", "Console", "Firmware", "Controls"],
     }
 }
@@ -79,11 +79,9 @@ impl Level {
             (Level::Memory, St::CardFace) => Target::Screen(St::Card),
             (Level::Memory, St::OptionFace) => Target::Page(Page::Files),
             (Level::Memory, St::ClockFace) => Target::Page(Page::Drives),
-            (Level::Memory, St::GameFace) => Target::Cube(Level::Main),
             (Level::Game, St::GameFace) => Target::Screen(St::Game),
             (Level::Game, St::OptionFace) => Target::Page(Page::BootNow),
             (Level::Game, St::ClockFace) => Target::Page(Page::Apps),
-            (Level::Game, St::CardFace) => Target::Cube(Level::Main),
             (Level::Settings, St::OptionFace) => Target::Screen(St::Option),
             (Level::Settings, St::GameFace) => Target::Page(Page::Boot),
             (Level::Settings, St::ClockFace) => Target::Page(Page::Firmware),
@@ -121,9 +119,8 @@ impl Level {
         }
         // Title only: the side's icon cubes show through the middle.
         Some(match self.target(face)? {
-            Target::Cube(_) => ("Main Menu", &[]),
             Target::Page(p) => (p.title(), &[]),
-            Target::Screen(_) => return None,
+            Target::Cube(_) | Target::Screen(_) => return None,
         })
     }
 }
@@ -242,7 +239,7 @@ pub fn words() -> Vec<&'static str> {
     let mut v: Vec<&'static str> = Vec::new();
     let pages = [Page::BootNow, Page::Apps, Page::Files, Page::Drives, Page::Boot, Page::Firmware, Page::Controls];
     let all = [Level::Memory, Level::Game, Level::Settings].into_iter().flat_map(labels);
-    for w in all.chain(pages.into_iter().map(Page::title)).chain(["Main Menu", super::MEMORY_LABEL]) {
+    for w in all.chain(pages.into_iter().map(Page::title)).chain([super::MEMORY_LABEL]) {
         if !w.is_empty() && !v.contains(&w) {
             v.push(w);
         }
