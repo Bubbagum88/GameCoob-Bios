@@ -1,2 +1,10 @@
 [build]
 target = "x86_64-unknown-uefi"
+
+# The UEFI target is soft-float: without this every f32 add and multiply is a
+# library call, which made rendering ~20x slower. UEFI runs x64 code with SSE
+# enabled, so turn it on. rustc warns that soft-float "cannot be disabled";
+# it is, for our code: float values only cross into the soft-float parts of
+# core by reference (float formatting), never by value.
+[target.x86_64-unknown-uefi]
+rustflags = ["-C", "target-feature=+sse,+sse2,-soft-float"]
