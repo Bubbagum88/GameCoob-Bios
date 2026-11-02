@@ -43,6 +43,15 @@ pub trait Volumes {
     fn write(&mut self, id: &str, path: &str, bytes: &[u8]) -> Result<(), String>;
     /// Create a folder (its parent must exist); fine if it exists.
     fn mkdir(&mut self, id: &str, path: &str) -> Result<(), String>;
+    /// The card image last left in `slot` (a [`handle`]): `None` if never
+    /// set, `Some("")` if the slot was left empty. Kept across boots.
+    fn slot_memory(&mut self, _slot: usize) -> Option<String> {
+        None
+    }
+    /// Remember `handle` (or `""`, empty) for `slot`.
+    fn set_slot_memory(&mut self, _slot: usize, _handle: &str) -> Result<(), String> {
+        Ok(())
+    }
 }
 
 /// A file's handle for the card backend: volume id and path in one string.

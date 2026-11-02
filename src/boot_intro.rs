@@ -35,32 +35,52 @@ fn read_dump() -> Option<Vec<u8>> {
     PATHS.iter().find_map(|p| fs.read(*p).ok())
 }
 
-/// Card images loaded into slots A and B at boot, on the partition
-/// GameCoob booted from. The first name found per slot is used.
+/// Default card images for slots A and B, on the partition GameCoob booted
+/// from. The first name found per slot is used.
 const CARD_PATHS: [[&uefi::CStr16; 3]; 2] = [
     [cstr16!("\\EFI\\GameCoob\\cards\\slot-a.raw"), cstr16!("\\EFI\\GameCoob\\cards\\slot-a.mcp"), cstr16!("\\EFI\\GameCoob\\cards\\slot-a.gcp")],
     [cstr16!("\\EFI\\GameCoob\\cards\\slot-b.raw"), cstr16!("\\EFI\\GameCoob\\cards\\slot-b.mcp"), cstr16!("\\EFI\\GameCoob\\cards\\slot-b.gcp")],
 ];
 
-/// Real cards when the boot partition holds card images, else the
-/// made-up stand-ins. Changed cards are written back by the menu.
+/// Each slot gets the image it held at the end of the last boot (Card
+/// Files remembers it), else the default image on the boot partition.
+/// A slot left empty stays empty. Real cards if any slot was set this way,
+/// else the made-up stand-ins. Changed cards are written back by the menu.
 fn load_cards() -> Box<dyn MemCards> {
-    let mut found = false;
+    let mut real = false;
     let mut cards = ImageCards::new();
     let id = UefiVolumes::boot_id().unwrap_or_default();
     let mut vols = UefiVolumes;
     for (slot, paths) in CARD_PATHS.iter().enumerate() {
+        let name = ["A", "B"][slot];
+        match vols.slot_memory(slot) {
+            Some(h) if h.is_empty() => {
+                real = true;
+                continue;
+            }
+            Some(h) => {
+                let (vid, path) = volumes::split_handle(&h);
+                if let Ok(b) = vols.read(vid, path) {
+                    log::info!("memory card in slot {name}: {path} (remembered)");
+                    cards.insert(slot, h.clone(), b);
+                    real = true;
+                    continue;
+                }
+                log::warn!("slot {name}: remembered card {path} not found, using the default");
+            }
+            None => {}
+        }
         for p in paths {
             let p = p.to_string();
             if let Ok(b) = vols.read(&id, &p) {
-                log::info!("memory card in slot {}: {p}", ["A", "B"][slot]);
+                log::info!("memory card in slot {name}: {p}");
                 cards.insert(slot, volumes::handle(&id, &p), b);
-                found = true;
+                real = true;
                 break;
             }
         }
     }
-    if found { Box::new(cards) } else { Box::new(FakeCards::new()) }
+    if real { Box::new(cards) } else { Box::new(FakeCards::new()) }
 }
 
 /// Load the dump and its intro and menu assets, if present and valid.

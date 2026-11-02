@@ -417,6 +417,9 @@ pub struct Menu {
     pub vols: Box<dyn volumes::Volumes>,
     /// Card files backed up (as `.bak`) this boot before the first write.
     backed_up: Vec<String>,
+    /// The image handle in each slot as last remembered (see
+    /// [`volumes::Volumes::set_slot_memory`]).
+    slot_seen: [Option<String>; 2],
     slot_fill: [i32; 2],
     lang_guide: [Fader; LANGS],
     guide_alpha: i16,
@@ -458,6 +461,11 @@ impl Menu {
     /// `MenuWork` the scene made at boot and the spin-out has been
     /// wobbling since.
     pub fn new(info: SysInfo, ma: &MenuAssets, drive: Box<dyn DiscDrive>, cards: Box<dyn MemCards>, vols: Box<dyn volumes::Volumes>, w: Work) -> Menu {
+        let mut cards = cards;
+        let slot_seen = match cards.images() {
+            Some(ic) => [0, 1].map(|s| ic.name(s).map(String::from)),
+            None => [None, None],
+        };
         let card = card::Card::new(ma, &*cards);
         let timeout = info.timeout;
         let delay = w.sub_fade_delay;
@@ -480,6 +488,7 @@ impl Menu {
             explorer: explorer::Explorer::new(),
             vols,
             backed_up: Vec::new(),
+            slot_seen,
             slot_fill: [0; 2],
             lang_guide: [Fader::default(); LANGS],
             guide_alpha: 0,
@@ -870,6 +879,7 @@ impl Menu {
         self.drive.update();
         self.cards.update();
         self.save_cards();
+        self.remember_slots();
 
         // The SRAM-lost flag and the fatal disc error (SCENE_FATAL_ERROR,
         // sErrorMsg) don't happen with the dummy backends. disp->menuFlag
@@ -1076,6 +1086,20 @@ impl Menu {
             }
             if let Err(e) = self.vols.write(id, path, &bytes) {
                 self.explorer_note(alloc::format!("Card not saved ({e})"));
+            }
+        }
+    }
+
+    /// Keep which image sits in each slot, so the next boot puts it back.
+    fn remember_slots(&mut self) {
+        let Some(ic) = self.cards.images() else { return };
+        let now = [0, 1].map(|s| ic.name(s).map(String::from));
+        for (s, now) in now.into_iter().enumerate() {
+            if now != self.slot_seen[s] {
+                if let Err(e) = self.vols.set_slot_memory(s, now.as_deref().unwrap_or("")) {
+                    self.explorer_note(alloc::format!("Slot {} not remembered ({e})", ["A", "B"][s]));
+                }
+                self.slot_seen[s] = now;
             }
         }
     }

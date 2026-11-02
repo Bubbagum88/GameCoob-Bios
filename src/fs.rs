@@ -13,7 +13,14 @@ use uefi::proto::device_path::DevicePath;
 use uefi::proto::loaded_image::LoadedImage;
 use uefi::proto::media::file::{File, FileSystemInfo};
 use uefi::proto::media::fs::SimpleFileSystem;
-use uefi::{CString16, Handle};
+use uefi::runtime::{self, VariableAttributes, VariableVendor};
+use uefi::{cstr16, guid, CStr16, CString16, Handle};
+
+/// GameCoob's own UEFI variables.
+const VENDOR: VariableVendor = VariableVendor(guid!("edc5e45c-31db-47a4-8969-2fe623cc0605"));
+/// The card image left in each slot, as a UTF-8 volume handle (one 0
+/// byte: left empty).
+const SLOT_VARS: [&CStr16; 2] = [cstr16!("CardSlotA"), cstr16!("CardSlotB")];
 
 pub struct UefiVolumes;
 
@@ -112,5 +119,21 @@ impl Volumes for UefiVolumes {
             return Ok(());
         }
         fs.create_dir(p.as_ref()).map_err(err)
+    }
+
+    fn slot_memory(&mut self, slot: usize) -> Option<String> {
+        let (b, _) = runtime::get_variable_boxed(SLOT_VARS[slot & 1], &VENDOR).ok()?;
+        let b = b.into_vec();
+        if b == [0] {
+            return Some(String::new());
+        }
+        String::from_utf8(b).ok()
+    }
+
+    fn set_slot_memory(&mut self, slot: usize, handle: &str) -> Result<(), String> {
+        let attrs = VariableAttributes::NON_VOLATILE | VariableAttributes::BOOTSERVICE_ACCESS;
+        // A zero-size write would delete the variable, so empty is one 0.
+        let data = if handle.is_empty() { &[0u8][..] } else { handle.as_bytes() };
+        runtime::set_variable(SLOT_VARS[slot & 1], &VENDOR, attrs, data).map_err(|e| format!("{:?}", e.status()))
     }
 }
