@@ -14,6 +14,9 @@ use crate::input::{self, AppAction, KeyCode, Keyboard};
 use crate::clock::Clock;
 use crate::gfx::{Canvas, ResScale};
 use crate::ipl::Ipl;
+use crate::audio::{Engine, data::SoundArchive};
+use crate::bs2::bs2main::SoundCmd;
+use crate::hda::Hda;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::ffi::c_void;
@@ -83,8 +86,9 @@ fn load_cards() -> Box<dyn MemCards> {
     if real { Box::new(cards) } else { Box::new(FakeCards::new()) }
 }
 
-/// Load the dump and its intro and menu assets, if present and valid.
-pub fn load() -> Option<(Assets, MenuAssets)> {
+/// Load the dump and its intro and menu assets, if present and valid, and
+/// its sound archive if found.
+pub fn load() -> Option<(Assets, MenuAssets, Option<SoundArchive>)> {
     let rom = read_dump()?;
     let ipl = match Ipl::parse(&rom) {
         Ok(i) => i,
@@ -101,7 +105,49 @@ pub fn load() -> Option<(Assets, MenuAssets)> {
         log::warn!("ipl.bin parsed but the menu assets are missing");
         return None;
     };
-    Some((a, m))
+    let snd = SoundArchive::find(ipl.bs2());
+    if snd.is_none() {
+        log::warn!("ipl.bin parsed but no sound archive was found: no sound");
+    }
+    Some((a, m, snd))
+}
+
+/// The sound engine and the sound card it plays on, when both exist.
+struct Audio {
+    engine: Engine,
+    out: Option<Hda>,
+}
+
+impl Audio {
+    fn open(arc: Option<SoundArchive>) -> Option<Audio> {
+        let engine = Engine::new(arc?, crate::hda::RATE);
+        let out = Hda::open();
+        if out.is_none() {
+            log::warn!("no usable HD Audio controller: no sound");
+        }
+        Some(Audio { engine, out })
+    }
+
+    /// Hand BS2's sound calls to the engine and keep the card fed.
+    fn update(&mut self, cmds: &mut Vec<SoundCmd>) {
+        for c in cmds.drain(..) {
+            match c {
+                SoundCmd::Play(id) => self.engine.sound_play(id),
+                SoundCmd::Reset => self.engine.reset(),
+            }
+        }
+        if let Some(o) = &mut self.out {
+            let e = &mut self.engine;
+            o.pump(&mut |buf| e.render(buf));
+        }
+    }
+
+    /// Stop the card before control leaves GameCoob (booting an entry).
+    fn close(&mut self) {
+        if let Some(mut o) = self.out.take() {
+            o.close();
+        }
+    }
 }
 
 /// What the menu shows about this PC.
@@ -219,7 +265,8 @@ impl Cores {
 /// format-break and re-insert the stand-in memory cards (or pull and put
 /// back the card images), R is the
 /// console's reset switch and F3 shows frame timings.
-pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &Assets, ma: &MenuAssets) -> ! {
+pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &Assets, ma: &MenuAssets, snd: Option<SoundArchive>) -> ! {
+    let mut audio = Audio::open(snd);
     crate::bs2::menu::set_minimal(crate::vars::minimal());
     let mut bs2 = Bs2Main::new(assets, Box::new(FakeDrive::new()), load_cards(), Box::new(UefiVolumes));
     let cores = Cores::open();
@@ -266,7 +313,15 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
                 }
             }
             if let Some(act) = bs2.update(assets, ma, &input, sys_info) {
-                if let Some(msg) = perform(act) {
+                let leaves = matches!(act, Action::Boot(_));
+                if let (true, Some(a)) = (leaves, &mut audio) {
+                    a.close();
+                }
+                let failed = perform(act);
+                if let (true, Some(a)) = (leaves, &mut audio) {
+                    a.out = Hda::open();
+                }
+                if let Some(msg) = failed {
                     if let Some(m) = &mut bs2.menu {
                         m.notify(msg);
                     }
@@ -275,6 +330,11 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
             if bs2.menu.is_some() {
                 keys.unlatch();
             }
+        }
+        if let Some(a) = &mut audio {
+            a.update(&mut bs2.sounds);
+        } else {
+            bs2.sounds.clear();
         }
         if let Some(m) = &mut bs2.menu {
             if now - clock_at > 0.25 {
