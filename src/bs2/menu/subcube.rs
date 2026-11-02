@@ -103,9 +103,10 @@ impl Level {
         if self == Level::Main || self.shows_icon(face) {
             return None;
         }
+        // Title only: the side's icon cubes show through the middle.
         Some(match self.target(face)? {
-            Target::Cube(_) => ("Main Menu", &["Back to the", "main cube"]),
-            Target::Page(p) => (p.title(), p.blurb()),
+            Target::Cube(_) => ("Main Menu", &[]),
+            Target::Page(p) => (p.title(), &[]),
             Target::Screen(_) => return None,
         })
     }
@@ -119,16 +120,6 @@ impl Page {
             Page::Boot => "Boot",
             Page::Firmware => "Firmware",
             Page::Controls => "Controls",
-        }
-    }
-
-    fn blurb(self) -> &'static [&'static str] {
-        match self {
-            Page::Files => &["Memory card files", "and card images"],
-            Page::Drives => &["Hard drives", "and SSDs"],
-            Page::Boot => &["Boot order", "and next boot"],
-            Page::Firmware => &["Firmware setup,", "restart, power off"],
-            Page::Controls => &["Keys and", "controllers"],
         }
     }
 
@@ -272,4 +263,70 @@ pub fn bold_label<'a>(ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, x: f32, y: f32, s
     for dx in [-0.8, 0.8, 0.0] {
         ui.label(&ma.font, x + dx, top, size, s, c, 0);
     }
+}
+
+/// The icon cubes of the new sides: cube, side, tint (the icon colour of
+/// the main-cube side the cube grew out of) and picture.
+pub fn icons(d: &super::icons::IconData) -> Vec<(Level, St, super::icons::PixelIcon)> {
+    use super::icons::{PixelIcon, Side, TINT_CARD, TINT_OPTION};
+    const FILES: &[&str] = &[
+        "#####...",
+        "#...##..",
+        "#...#.#.",
+        "#...####",
+        "#......#",
+        "#.####.#",
+        "#......#",
+        "#.####.#",
+        "#......#",
+        "########",
+    ];
+    const DRIVES: &[&str] = &[
+        "#########",
+        "#.......#",
+        "#..###..#",
+        "#.#...#.#",
+        "#.#.#.#.#",
+        "#.#...#.#",
+        "#..###..#",
+        "#.....#.#",
+        "#########",
+    ];
+    const BOOT: &[&str] = &[
+        "....#....",
+        ".#..#..#.",
+        "#...#...#",
+        "#...#...#",
+        "#.......#",
+        "#.......#",
+        ".#.....#.",
+        "..#####..",
+    ];
+    const FIRMWARE: &[&str] = &[
+        "..#.#.#..",
+        ".#######.",
+        "##.....##",
+        ".#.###.#.",
+        "##.###.##",
+        ".#.###.#.",
+        "##.....##",
+        ".#######.",
+        "..#.#.#..",
+    ];
+    const CONTROLS: &[&str] = &[
+        "...###...",
+        "...#.#...",
+        "####.####",
+        "#.......#",
+        "####.####",
+        "...#.#...",
+        "...###...",
+    ];
+    alloc::vec![
+        (Level::Memory, St::OptionFace, PixelIcon::new(d, Side::Left, TINT_CARD, FILES)),
+        (Level::Memory, St::ClockFace, PixelIcon::new(d, Side::Right, TINT_CARD, DRIVES)),
+        (Level::Settings, St::GameFace, PixelIcon::new(d, Side::Up, TINT_OPTION, BOOT)),
+        (Level::Settings, St::ClockFace, PixelIcon::new(d, Side::Right, TINT_OPTION, FIRMWARE)),
+        (Level::Settings, St::CardFace, PixelIcon::new(d, Side::Down, TINT_OPTION, CONTROLS)),
+    ]
 }
