@@ -10,6 +10,10 @@ extern crate alloc;
 #[allow(dead_code)]
 mod ipl;
 
+#[path = "../../../src/sdk/mod.rs"]
+#[allow(dead_code)]
+mod sdk;
+
 #[path = "../../../src/bs2/mod.rs"]
 #[allow(dead_code)]
 mod bs2;

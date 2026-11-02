@@ -15,16 +15,24 @@
 //! Firmware Setup, Restart and Power Off are in a system dialog (F10).
 
 pub mod backend;
+pub mod card_image;
 mod card;
+mod card_blocks;
 mod game;
+mod calendar;
+mod options;
 pub mod icons;
 mod system;
 
-use super::fx::{self, screen, Mosaic, MosaicData};
-use super::mtx::{self, Mtx, SinTable};
-use super::raster::Prim;
-use super::render::{self, DrawOpts, View};
+use super::backdrop;
+use super::fx::{self, Fx, FxData};
+use crate::bs2::{bs2main, camera};
+use crate::bs2::mtx::{self, cos_s, sin_s, to_s16};
+use crate::sdk::mtx::{self as psmtx, Mtx};
+use super::render::{self, View};
 use super::shader::FastTex;
+use crate::sdk::gx::{Gx, GX_COLOR0A0, GX_PNMTX0};
+use super::gmr::{self, Instance};
 use super::ui::{self, cp1252, Rgba, Ui, UiFont, SHADOW, WHITE};
 use super::Assets;
 use alloc::boxed::Box;
@@ -85,7 +93,7 @@ pub struct MenuAssets {
     pub dialog_str: Vec<Strings>,
     pub card: Layout,
     pub card_bar: FastTex,
-    pub card_models: card::Models,
+    pub card_models: card_blocks::Models,
     pub digits: Vec<FastTex>,
     pub weekday: Vec<Vec<FastTex>>,
     pub clock: Layout,
@@ -94,7 +102,7 @@ pub struct MenuAssets {
     pub dialog: Layout,
     pub backdrop: FastTex,
     pub font: UiFont,
-    pub fx: MosaicData,
+    pub fx: FxData,
     pub icons: icons::IconData,
 }
 
@@ -128,7 +136,7 @@ impl MenuAssets {
             dialog_str: per_lang_s(&res::DIALOG_STR)?,
             card: layout(res::CARD)?,
             card_bar: tex(res::CARD_BAR)?,
-            card_models: card::Models::new(model(res::CARD_FILE)?, model(res::CARD_EMPTY)?),
+            card_models: card_blocks::Models::new(model(res::CARD_FILE)?, model(res::CARD_EMPTY)?),
             digits: (0..10).map(|i| tex(res::DIGITS + i)).collect::<Option<Vec<_>>>()?,
             weekday: res::WEEKDAY.iter().map(|&b| (0..7).map(|i| tex(b + i)).collect::<Option<Vec<_>>>()).collect::<Option<Vec<_>>>()?,
             clock: layout(res::CLOCK)?,
@@ -137,7 +145,7 @@ impl MenuAssets {
             dialog: layout(res::DIALOG)?,
             backdrop,
             font: UiFont::new(glh::Font::parse_rom(ipl.rom()).ok()?),
-            fx: MosaicData::load(ipl)?,
+            fx: FxData::load(ipl)?,
             icons: icons::IconData::load(ipl)?,
         })
     }
@@ -147,119 +155,160 @@ impl MenuAssets {
 // Faders
 // ---------------------------------------------------------------------
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum Fade {
-    In,
-    Out,
-    Half,
-}
-
-/// `Fader`: an alpha ramp of `length` frames after `delay` frames.
-#[derive(Clone, Copy, Debug)]
-pub struct Fader {
-    pub frame: i16,
-    pub length: i16,
-    pub delay: i16,
-    pub max: u8,
-}
-
-impl Default for Fader {
-    fn default() -> Self {
-        Fader { frame: 0, length: 20, delay: 0, max: 255 }
-    }
-}
-
-impl Fader {
-    pub fn with_delay(delay: i16) -> Fader {
-        Fader { delay, ..Default::default() }
-    }
-
-    pub fn step(&mut self, mode: Fade) {
-        let end = self.delay + self.length;
-        match mode {
-            Fade::In => self.frame = (self.frame + 1).min(end),
-            Fade::Out => {
-                if self.frame > 0 {
-                    self.frame -= 1;
-                }
-                if self.frame < self.delay {
-                    self.frame = 0;
-                }
-            }
-            Fade::Half => {
-                let mid = self.delay + self.length / 2;
-                if self.frame < mid {
-                    self.frame = if self.frame < self.delay { self.delay } else { self.frame + 1 };
-                } else if self.frame > mid {
-                    self.frame -= 1;
-                }
-            }
-        }
-    }
-
-    pub fn alpha(&self) -> i32 {
-        if self.frame <= self.delay {
-            return 0;
-        }
-        self.max as i32 * (self.frame - self.delay) as i32 / self.length as i32
-    }
-
-    pub fn reset(&mut self) {
-        self.frame = 0;
-    }
-
-    pub fn step_if(&mut self, on: bool) {
-        self.step(if on { Fade::In } else { Fade::Out });
-    }
-}
+pub use super::fader::{Fade, Fader};
 
 // ---------------------------------------------------------------------
 // Cube motion
 // ---------------------------------------------------------------------
 
-pub const ROT_STEP: i16 = 750;
-pub const ZOOM_IN: i16 = 0x730;
-pub const ZOOM_OUT: i16 = 0x578;
-pub const ZOOM_DEPTH: f32 = -70.0;
 const FACE_HALF: f32 = 144.0;
 const FACE_SHOW: i16 = 0x2E3A;
 const FACE_FADE: i32 = 5000;
-const SUB_DELAY: [i16; 3] = [0, 20, 70];
-const MAX_TIMEOUT: u16 = 30;
 
-/// The idle wobble (Menu_CalcCubeMtx) at wobble frame `t`.
-pub struct Wobble {
-    pub rx: f32,
-    pub ry: f32,
-    pub rz: f32,
-    pub tx: f32,
-    pub ty: f32,
+/// `MenuWork` (0x1B8 bytes, `gMenuWork`): the cube's motion and the
+/// menu's tunables. The mosaic's text layout and colours (`fx*`,
+/// `gameColor`, ...) live with the mosaic in `fx.rs`.
+#[derive(Clone)]
+pub struct Work {
+    pub zoom_depth: f32,
+    pub wobble_frame: i16,
+    pub rot_x: i16,
+    pub rot_y: i16,
+    pub rot_step: i16,
+    pub zoom: i16,
+    pub wobble_speed: [i16; 3],
+    pub wobble_amp: [i16; 3],
+    pub wobble_speed_tx: i16,
+    pub wobble_speed_ty: i16,
+    pub wobble_amp_tx: i16,
+    pub wobble_amp_ty: i16,
+    pub wobble_phase_ry: i16,
+    pub wobble_phase_tx: i16,
+    /// Debug: accept input while the cube moves.
+    pub input_always: bool,
+    pub zoom_in_step: i16,
+    pub zoom_out_step: i16,
+    pub bg_min_alpha: i16,
+    pub zoom_spin: f32,
+    pub light_attn: f32,
+    pub light_attn_k: f32,
+    pub light_pos: [f32; 3],
+    pub light_cutoff: f32,
+    pub guide_color_a: [i16; 3],
+    pub guide_color_b: [i16; 3],
+    pub sub_fade_delay: [i16; 3],
 }
 
-impl Wobble {
-    pub fn at(s: &SinTable, t: i16) -> Wobble {
+impl Work {
+    /// `Menu_Init(TRUE)`: Menu_SetDefaults, then Menu_ResetCube.
+    pub fn new() -> Work {
+        let mut w = Work {
+            zoom_depth: 0.0,
+            wobble_frame: 0,
+            rot_x: 0,
+            rot_y: 0,
+            rot_step: 0,
+            zoom: 0,
+            wobble_speed: [0; 3],
+            wobble_amp: [0; 3],
+            wobble_speed_tx: 0,
+            wobble_speed_ty: 0,
+            wobble_amp_tx: 0,
+            wobble_amp_ty: 0,
+            wobble_phase_ry: 0,
+            wobble_phase_tx: 0,
+            input_always: false,
+            zoom_in_step: 0,
+            zoom_out_step: 0,
+            bg_min_alpha: 0,
+            zoom_spin: 0.0,
+            light_attn: 0.0,
+            light_attn_k: 0.0,
+            light_pos: [0.0; 3],
+            light_cutoff: 0.0,
+            guide_color_a: [0; 3],
+            guide_color_b: [0; 3],
+            sub_fade_delay: [0; 3],
+        };
+        w.set_defaults();
+        w.reset_cube();
+        w
+    }
+
+    /// Menu_SetDefaults (0x813113EC's caller), less the mosaic's fields.
+    fn set_defaults(&mut self) {
+        self.rot_step = 750;
+        self.zoom_depth = -70.0;
+        self.zoom_in_step = 0x730;
+        self.zoom_out_step = 0x578;
+        self.bg_min_alpha = 0;
+        self.zoom_spin = 0.0;
+        self.wobble_speed = [50, 25, 25];
+        self.wobble_amp = [350, 1000, 1000];
+        self.wobble_speed_tx = 25;
+        self.wobble_speed_ty = 50;
+        self.wobble_amp_tx = 15;
+        self.wobble_amp_ty = 6;
+        self.wobble_phase_ry = -15000;
+        self.wobble_phase_tx = -0x4000;
+        self.input_always = false;
+        self.light_attn = 500.0;
+        self.light_attn_k = 0.375;
+        self.light_pos = [296.0, 224.0, 474.0];
+        self.light_cutoff = 36.0;
+        self.guide_color_a = [0, 200, 140];
+        self.guide_color_b = [210, 0, 70];
+        self.sub_fade_delay = [0, 20, 70];
+    }
+
+    /// Menu_ResetCube (0x81311850).
+    fn reset_cube(&mut self) {
+        self.wobble_frame = 0;
+        self.rot_x = 0;
+        self.rot_y = 0;
+        self.zoom = 0;
+    }
+
+    /// The idle wobble of Menu_CalcCubeMtx at wobble frame `t`.
+    pub fn wobble_mtx(&self, t: i16) -> Mtx {
         let t = t as i32;
-        Wobble {
-            tx: 15.0 * s.sin(-0x4000 + 25 * t),
-            ty: 6.0 * s.sin(50 * t),
-            rx: 350.0 * s.cos(50 * t),
-            ry: 1000.0 * s.cos(-15000 + 25 * t),
-            rz: 1000.0 * s.cos(25 * t),
-        }
+        let ty = self.wobble_amp_ty as f32 * sin_s(self.wobble_speed_ty as i32 * t);
+        let tx = self.wobble_amp_tx as f32 * sin_s(self.wobble_phase_tx as i32 + self.wobble_speed_tx as i32 * t);
+        let rz = to_s16(self.wobble_amp[2] as f32 * cos_s(self.wobble_speed[2] as i32 * t));
+        let ry = to_s16(self.wobble_amp[1] as f32 * cos_s(self.wobble_phase_ry as i32 + self.wobble_speed[1] as i32 * t));
+        let rx = to_s16(self.wobble_amp[0] as f32 * cos_s(self.wobble_speed[0] as i32 * t));
+        mtx::rot_trans(rx as i32, ry as i32, rz as i32, [tx, ty, 0.0])
     }
 
-    pub fn mtx(&self, s: &SinTable) -> Mtx {
-        mtx::rot_trans(s, self.rx as i32, self.ry as i16 as i32, self.rz as i32, [self.tx, self.ty, 0.0])
+    /// `AT_FRONT()`: the cube sits exactly on the front face.
+    fn at_front(&self) -> bool {
+        (self.rot_x == 0 && self.rot_y == 0) || self.input_always
+    }
+
+    /// `AT_FACE_X(a)`.
+    fn at_face_x(&self, a: i16) -> bool {
+        (self.rot_x == a && self.zoom == 0) || self.input_always
+    }
+
+    /// `AT_FACE_Y(a)`.
+    fn at_face_y(&self, a: i16) -> bool {
+        (self.rot_y == a && self.zoom == 0) || self.input_always
+    }
+
+    /// Inside a submenu: zoomed all the way in (or input forced).
+    fn zoomed_in(&self) -> bool {
+        self.zoom == 0x7FFF || self.input_always
     }
 }
 
-/// Move an angle one step towards 0, snapping it onto the step grid first.
+/// `ROT_TOWARD_ZERO`: move an angle one step towards 0, snapping it onto
+/// the step grid first.
 fn toward_zero(a: &mut i16, step: i16) {
     if *a > 0 {
-        *a = step * (*a / step) - step;
+        *a = step.wrapping_mul(*a / step).wrapping_sub(step);
     }
     if *a < 0 {
-        *a = step + step * (*a / step);
+        *a = step.wrapping_add(step.wrapping_mul(*a / step));
     }
 }
 
@@ -328,12 +377,13 @@ pub enum Action {
 }
 
 pub struct Menu {
+    /// `gMenu`.
+    pub w: Work,
+    /// `gMenuState`.
     pub state: St,
+    /// `gMenuNextState`.
     next: St,
-    pub wobble_frame: i16,
-    pub rot_x: i16,
-    pub rot_y: i16,
-    pub zoom: i16,
+    /// `sCubeMtx`.
     cube: Mtx,
     guide_icon: [Fader; 6],
     guide_text: [Fader; 8],
@@ -356,105 +406,18 @@ pub struct Menu {
     slot_glow: [i16; 2],
     // Submenus.
     boot_sel: usize,
-    opt_row: usize,
-    opt_edit: bool,
-    opt_timeout: u16,
-    opt_lang: usize,
-    clock: ClockEdit,
+    options: options::Options,
+    calendar: calendar::Calendar,
     highlight: i16,
     highlight_up: bool,
     message: Option<(String, u32)>,
     frame: u32,
     pub info: SysInfo,
-    fx: Mosaic,
+    fx: Fx,
     game_icon: icons::GameIcon,
     card_icon: icons::CardIcon,
     clock_icon: icons::ClockIcon,
     option_icon: icons::OptionIcon,
-}
-
-/// Calendar state (`sClockSub`, `sClockRow`, `sDateField`, `sTimeField`,
-/// `gClockEdit`).
-#[derive(Clone, Copy, Default)]
-struct ClockEdit {
-    /// 0 menu, 1 editing the date, 2 editing the time.
-    sub: u8,
-    /// The sub-state the mosaic showed last frame (it flashes on a change).
-    shown_sub: u8,
-    /// 0 date, 1 time.
-    row: u8,
-    /// 0 year, 1 month, 2 day.
-    date_field: u8,
-    /// 0 hour, 1 minute, 2 second.
-    time_field: u8,
-    /// Year, month 1..12, day; or hour, minute, second.
-    value: [i32; 3],
-}
-
-impl ClockEdit {
-    /// Clock_FixDate: the year wraps in 2000..2099 and the month in 1..12;
-    /// the day wraps only while it is the field being edited, else it is
-    /// clamped to the month.
-    fn fix_date(&mut self) {
-        let v = &mut self.value;
-        if v[0] < 2000 {
-            v[0] = 2099;
-        }
-        if v[0] > 2099 {
-            v[0] = 2000;
-        }
-        if v[1] < 1 {
-            v[1] = 12;
-        }
-        if v[1] > 12 {
-            v[1] = 1;
-        }
-        let days = days_in_month(v[0], v[1]);
-        if v[2] > days {
-            v[2] = if self.date_field == 2 { 1 } else { days };
-        }
-        if v[2] < 1 {
-            v[2] = days;
-        }
-    }
-
-    /// Clock_FixTime: hours wrap 0..23, minutes and seconds 0..59.
-    fn fix_time(&mut self) {
-        let f = self.time_field as usize;
-        let max = if f == 0 { 23 } else { 59 };
-        if self.value[f] < 0 {
-            self.value[f] = max;
-        }
-        if self.value[f] > max {
-            self.value[f] = 0;
-        }
-    }
-
-    /// The time the mosaic shows: `now`, with the field group being edited
-    /// taken from the edit buffer.
-    fn shown(&self, now: [i32; 6]) -> [i32; 6] {
-        self.shown_with(self.sub, now)
-    }
-
-    fn shown_with(&self, sub: u8, now: [i32; 6]) -> [i32; 6] {
-        let mut t = now;
-        match sub {
-            1 => t[..3].copy_from_slice(&self.value),
-            2 => t[3..].copy_from_slice(&self.value),
-            _ => {}
-        }
-        t
-    }
-}
-
-fn days_in_month(y: i32, m: i32) -> i32 {
-    let leap = (y % 4 == 0 && y % 100 != 0) || y % 400 == 0;
-    match m {
-        2 if leap => 29,
-        2 => 28,
-        4 | 6 | 9 | 11 => 30,
-        _ => 31,
-    }
 }
 
 const SUB_OPTION: usize = 0;
@@ -463,20 +426,21 @@ const SUB_CLOCK: usize = 2;
 const SUB_GAME: usize = 3;
 
 impl Menu {
-    /// Menu_Init, continuing the wobble clock of the spin-out.
-    pub fn new(info: SysInfo, ma: &MenuAssets, drive: Box<dyn DiscDrive>, cards: Box<dyn MemCards>, wobble_frame: i16, s: &SinTable) -> Menu {
+    /// The rest of Menu_Init (Menu_InitRes and the icons), on the
+    /// `MenuWork` the scene made at boot and the spin-out has been
+    /// wobbling since.
+    pub fn new(info: SysInfo, ma: &MenuAssets, drive: Box<dyn DiscDrive>, cards: Box<dyn MemCards>, w: Work) -> Menu {
         let card = card::Card::new(ma, &*cards);
+        let timeout = info.timeout;
+        let delay = w.sub_fade_delay;
         let mut m = Menu {
+            w,
             state: St::Top,
             next: St::Top,
-            wobble_frame,
-            rot_x: 0,
-            rot_y: 0,
-            zoom: 0,
-            cube: mtx::IDENTITY,
+            cube: psmtx::IDENTITY,
             guide_icon: [Fader::default(); 6],
             guide_text: [Fader::default(); 8],
-            sub: [[0, 1, 2].map(|i| Fader::with_delay(SUB_DELAY[i])); 4],
+            sub: [[0, 1, 2].map(|i| Fader::with_delay(delay[i])); 4],
             disc_banner: Fader::default(),
             disc_none: Fader::default(),
             disc_unknown: Fader::default(),
@@ -493,23 +457,20 @@ impl Menu {
             lang: 0,
             slot_glow: [0; 2],
             boot_sel: 0,
-            opt_row: 0,
-            opt_edit: false,
-            opt_timeout: 0,
-            opt_lang: 0,
-            clock: ClockEdit::default(),
+            options: options::Options::new(&ma.option, 0, timeout),
+            calendar: calendar::Calendar::new(),
             highlight: 50,
             highlight_up: true,
             message: None,
             frame: 0,
             info,
-            fx: Mosaic::new(),
-            game_icon: icons::GameIcon::new(),
-            card_icon: icons::CardIcon::new(),
-            clock_icon: icons::ClockIcon::new(),
-            option_icon: icons::OptionIcon::new(),
+            fx: Fx::new(),
+            game_icon: icons::GameIcon::new(&ma.icons),
+            card_icon: icons::CardIcon::new(&ma.icons),
+            clock_icon: icons::ClockIcon::new(&ma.icons),
+            option_icon: icons::OptionIcon::new(&ma.icons),
         };
-        m.calc_cube(s);
+        m.calc_cube_mtx();
         m
     }
 
@@ -518,110 +479,183 @@ impl Menu {
         self.message = Some((msg, self.frame));
     }
 
-    fn settled_front(&self) -> bool {
-        self.rot_x == 0 && self.rot_y == 0
-    }
-
-    fn settled_x(&self, a: i16) -> bool {
-        self.rot_x == a && self.zoom == 0
-    }
-
-    fn settled_y(&self, a: i16) -> bool {
-        self.rot_y == a && self.zoom == 0
-    }
-
-    /// Menu_HandleInput: turning between faces and entering submenus.
+    /// Menu_HandleInput (0x81311868): turning between faces and entering
+    /// submenus. Sound_Play calls are left out (no audio yet).
     fn handle_input(&mut self, p: &Pad) {
         use St::*;
+        let w = &self.w;
         if p.up {
             match self.state {
-                Top if self.settled_front() => self.next = GameFace,
-                CardFace if self.settled_x(-0x4000) => self.next = Top,
+                Top if w.at_front() => self.next = GameFace,
+                CardFace if w.at_face_x(-0x4000) => self.next = Top,
                 _ => {}
             }
         }
         if p.down {
             match self.state {
-                Top if self.settled_front() => self.next = CardFace,
-                GameFace if self.settled_x(0x4000) => self.next = Top,
+                Top if w.at_front() => self.next = CardFace,
+                GameFace if w.at_face_x(0x4000) => self.next = Top,
                 _ => {}
             }
         }
         if p.left {
             match self.state {
-                Top if self.settled_front() => self.next = OptionFace,
-                ClockFace if self.settled_y(-0x4000) => self.next = Top,
+                Top if w.at_front() => self.next = OptionFace,
+                ClockFace if w.at_face_y(-0x4000) => self.next = Top,
                 _ => {}
             }
         }
         if p.right {
             match self.state {
-                Top if self.settled_front() => self.next = ClockFace,
-                OptionFace if self.settled_y(0x4000) => self.next = Top,
+                Top if w.at_front() => self.next = ClockFace,
+                OptionFace if w.at_face_y(0x4000) => self.next = Top,
                 _ => {}
             }
         }
-        let on_face = match self.state {
-            CardFace => self.settled_x(-0x4000),
-            GameFace => self.settled_x(0x4000),
-            ClockFace => self.settled_y(-0x4000),
-            OptionFace => self.settled_y(0x4000),
-            _ => false,
-        };
-        if on_face && p.a {
-            self.next = match self.state {
-                CardFace => Card,
-                GameFace => Game,
-                ClockFace => Clock,
-                _ => Option,
-            };
+        if p.a {
+            match self.state {
+                CardFace if w.at_face_x(-0x4000) => self.next = Card,
+                GameFace if w.at_face_x(0x4000) => self.next = Game,
+                ClockFace if w.at_face_y(-0x4000) => self.next = Clock,
+                OptionFace if w.at_face_y(0x4000) => self.next = Option,
+                _ => {}
+            }
         }
-        if on_face && p.b {
-            self.next = Top;
+        if p.b {
+            match self.state {
+                CardFace if w.at_face_x(-0x4000) => self.next = Top,
+                GameFace if w.at_face_x(0x4000) => self.next = Top,
+                ClockFace if w.at_face_y(-0x4000) => self.next = Top,
+                OptionFace if w.at_face_y(0x4000) => self.next = Top,
+                _ => {}
+            }
         }
     }
 
-    /// Menu_UpdateRotation.
+    /// Menu_CalcCubeMtx (0x81311D50): rotation, idle wobble, then the zoom
+    /// push. The big cube's model matrix (scale 1.1) is set where it is
+    /// drawn.
+    fn calc_cube_mtx(&mut self) {
+        let w = &self.w;
+        let rot = mtx::rot_trans(w.rot_x as i32, w.rot_y as i32, 0, [0.0; 3]);
+        let mut m = psmtx::concat(&rot, &psmtx::IDENTITY);
+        m = psmtx::concat(&w.wobble_mtx(w.wobble_frame), &m);
+        self.cube = m;
+        // Zooming into a submenu pushes the cube back by
+        // zoomDepth * (1 - cos(zoom)).
+        if w.zoom != 0 {
+            let z = w.zoom_depth * (1.0 - cos_s(w.zoom as i32));
+            let m = mtx::rot_trans(0, 0, to_s16(w.zoom as f32 * w.zoom_spin) as i32, [0.0, 0.0, z]);
+            self.cube = psmtx::concat(&m, &self.cube);
+        }
+    }
+
+    /// Menu_UpdateDiscFaders (0x81312044): banner, "no disc" or "unknown
+    /// disc" on the Game Play face.
+    fn update_disc_faders(&mut self) {
+        if self.drive.banner().is_some() {
+            self.disc_banner.step_if(true);
+            self.disc_none.step_if(false);
+            self.disc_unknown.step_if(false);
+            return;
+        }
+        self.disc_banner.step_if(false);
+        if self.drive.state() == DiscState::NoDisc {
+            self.disc_none.step_if(true);
+            self.disc_unknown.step_if(false);
+            return;
+        }
+        self.disc_none.step_if(false);
+        self.disc_unknown.step_if(true);
+    }
+
+    /// Menu_UpdateRotation (0x813120F0): turn the cube towards the face of
+    /// `gMenuNextState`.
     fn update_rotation(&mut self) {
-        let step = ROT_STEP;
+        let w = &mut self.w;
+        let step = w.rot_step;
         match self.next {
-            St::Top => {
-                toward_zero(&mut self.rot_x, step);
-                toward_zero(&mut self.rot_y, step);
+            St::CardFace | St::Card => {
+                w.rot_x = w.rot_x.wrapping_sub(step);
+                toward_zero(&mut w.rot_y, step);
+                if w.rot_x < -0x4000 {
+                    w.rot_x = -0x4000;
+                }
             }
             St::GameFace | St::Game => {
-                self.rot_x = self.rot_x.saturating_add(step).min(0x4000);
-                toward_zero(&mut self.rot_y, step);
-            }
-            St::CardFace | St::Card => {
-                self.rot_x = self.rot_x.saturating_sub(step).max(-0x4000);
-                toward_zero(&mut self.rot_y, step);
-            }
-            St::OptionFace | St::Option => {
-                toward_zero(&mut self.rot_x, step);
-                self.rot_y = self.rot_y.saturating_add(step).min(0x4000);
+                w.rot_x = w.rot_x.wrapping_add(step);
+                toward_zero(&mut w.rot_y, step);
+                if w.rot_x > 0x4000 {
+                    w.rot_x = 0x4000;
+                }
             }
             St::ClockFace | St::Clock => {
-                toward_zero(&mut self.rot_x, step);
-                self.rot_y = self.rot_y.saturating_sub(step).max(-0x4000);
+                toward_zero(&mut w.rot_x, step);
+                w.rot_y = w.rot_y.wrapping_sub(step);
+                if w.rot_y < -0x4000 {
+                    w.rot_y = -0x4000;
+                }
+            }
+            St::OptionFace | St::Option => {
+                toward_zero(&mut w.rot_x, step);
+                w.rot_y = w.rot_y.wrapping_add(step);
+                if w.rot_y > 0x4000 {
+                    w.rot_y = 0x4000;
+                }
+            }
+            St::Top => {
+                toward_zero(&mut w.rot_x, step);
+                toward_zero(&mut w.rot_y, step);
             }
         }
     }
 
-    /// Menu_CalcCubeMtx: rotation, idle wobble, then the zoom push.
-    fn calc_cube(&mut self, s: &SinTable) {
-        let rot = mtx::rot_trans(s, self.rot_x as i32, self.rot_y as i32, 0, [0.0; 3]);
-        let m = mtx::concat(&Wobble::at(s, self.wobble_frame).mtx(s), &rot);
-        self.cube = if self.zoom != 0 {
-            let z = ZOOM_DEPTH * (1.0 - s.cos(self.zoom as i32));
-            mtx::concat(&mtx::trans(0.0, 0.0, z), &m)
-        } else {
-            m
+    /// Menu_UpdateIcons (0x813123B0): face, enter or hide for each
+    /// submenu's icon cube, then their matrices. It runs before
+    /// Menu_AnimCube, so the icons sit in last frame's cube matrix.
+    fn update_icons(&mut self, d: &icons::IconData, view: &Mtx) {
+        let phase = |face: St, sub: St| match self.state {
+            st if st == face => icons::Phase::Face,
+            st if st == sub => icons::Phase::Enter,
+            _ => icons::Phase::Hide,
         };
+        let p = phase(St::CardFace, St::Card);
+        self.card_icon.update(p);
+        let p = phase(St::GameFace, St::Game);
+        self.game_icon.update(p);
+        let p = phase(St::OptionFace, St::Option);
+        self.option_icon.update(p, d);
+        let p = phase(St::ClockFace, St::Clock);
+        self.clock_icon.update(p, &self.info.time);
+        self.card_icon.calc_mtx(d, &self.cube, view);
+        self.game_icon.calc_mtx(d, &self.cube, view);
+        self.option_icon.calc_mtx(d, &self.cube, view);
+        self.clock_icon.calc_mtx(d, &self.cube, view);
     }
 
-    /// Menu_UpdateGuide: which labels and glyph groups show. Faders a
-    /// state doesn't mention keep their direction (`None`).
+    /// Menu_UpdateSlotGlow (0x8131247C): a slot's picture on the card face
+    /// glows while a card is ready.
+    fn update_slot_glow(&mut self) {
+        for i in 0..2 {
+            let d = if self.cards.state(i) == SlotState::Ready {
+                let user = self.cards.total_blocks(i).max(1) as i32;
+                self.slot_fill[i] = 0xFF - self.cards.free_blocks(i) as i32 * 0xFF / user;
+                4
+            } else {
+                -4
+            };
+            self.slot_glow[i] += d;
+            if self.slot_glow[i] > 0xFF {
+                self.slot_glow[i] = 0xFF;
+            }
+            if self.slot_glow[i] < 60 {
+                self.slot_glow[i] = 60;
+            }
+        }
+    }
+
+    /// Menu_UpdateGuide (0x81312580): which labels and glyph groups show.
+    /// Faders a state doesn't mention keep their direction (`None`).
     fn update_guide(&mut self) {
         // Text faders: 0 Menu Selection, 1 Cancel, 2 Confirm, 3 Select,
         // 4 Change, 5 Cancel, 6 Finish, 7 Confirm.
@@ -634,7 +668,8 @@ impl Menu {
             St::Game if self.game.starting() => [o, o, o, i, o, i, o, i],
             St::Game => [o, o, o, o, o, Some(!self.game.fatal()), o, o],
             St::Option | St::Clock => {
-                let top = if self.state == St::Option { !self.opt_edit } else { self.clock.sub == 0 };
+                // Option_IsTop, Clock_IsTop.
+                let top = if self.state == St::Option { self.options.is_top() } else { self.calendar.is_top() };
                 [o, o, o, Some(top), Some(!top), Some(!top), Some(top), i]
             }
             St::Card => {
@@ -642,12 +677,14 @@ impl Menu {
                 [o, o, o, i, None, Some(!browsing), Some(browsing), i]
             }
         };
+        // Glyph groups: 0..2 inside submenus, 3 the stick on the front
+        // face, 4..5 B and A on a selected face.
         let icons: [bool; 6] = match self.state {
             St::Top => [false, false, false, true, false, false],
             St::Game if self.game.starting() => [true, true, true, false, false, false],
             St::Game => [false, !self.game.fatal(), false, false, false, false],
             St::GameFace | St::CardFace | St::OptionFace | St::ClockFace => [false, false, false, false, true, true],
-            _ => [true, true, true, false, false, false],
+            St::Card | St::Option | St::Clock => [true, true, true, false, false, false],
         };
         for (f, on) in self.guide_text.iter_mut().zip(text) {
             if let Some(on) = on {
@@ -662,8 +699,55 @@ impl Menu {
         }
     }
 
-    /// One menu frame (Menu_Update). Returns an action for the firmware.
-    pub fn update(&mut self, pad: &Pad, s: &SinTable) -> core::option::Option<Action> {
+    /// Menu_UpdateSubFaders (0x81312A94).
+    fn update_sub_faders(&mut self) {
+        for i in 0..3 {
+            self.sub[SUB_CARD][i].step_if(self.state == St::Card);
+            self.sub[SUB_GAME][i].step_if(self.state == St::Game);
+            self.sub[SUB_OPTION][i].step_if(self.state == St::Option);
+            self.sub[SUB_CLOCK][i].step_if(self.state == St::Clock);
+        }
+    }
+
+    /// Menu_UpdateCube (0x81312B9C): zoom back out of a submenu, then the
+    /// face input.
+    fn update_cube(&mut self, p: &Pad) {
+        let step = self.w.zoom_out_step;
+        if self.w.zoom > step {
+            self.w.zoom -= step;
+        }
+        if self.w.zoom <= step {
+            self.w.zoom = 0;
+        }
+        self.handle_input(p);
+    }
+
+    /// Menu_ZoomIn.
+    fn zoom_in(&mut self) {
+        let step = self.w.zoom_in_step;
+        if self.w.zoom < 0x7FFF - step {
+            self.w.zoom += step;
+        }
+        if self.w.zoom >= 0x7FFF - step {
+            self.w.zoom = 0x7FFF;
+        }
+    }
+
+    /// Menu_AnimCube: the wobble clock and the cube matrix (the big
+    /// cube's joints are calculated where it is drawn).
+    fn anim_cube(&mut self) {
+        self.w.wobble_frame = self.w.wobble_frame.wrapping_add(7);
+        self.calc_cube_mtx();
+    }
+
+    /// One menu frame: Menu_Update (Scene state 5), plus GameCoob's own
+    /// keys and dialog first. `view` is the camera's (`Camera_GetView`).
+    /// Returns an action for the firmware.
+    pub fn update(&mut self, ma: &MenuAssets, view: &Mtx, pad: &Pad) -> core::option::Option<Action> {
+        // GameCoob: the fake drive's tray, the fake card slots and the
+        // system dialog, which takes the input while it is up. The card
+        // and drive backends stand in for the card thread and the DVD
+        // state machine, which run beside Menu_Update on the console.
         self.frame += 1;
         if pad.eject {
             self.drive.toggle_tray();
@@ -676,67 +760,65 @@ impl Menu {
         if pad.system {
             self.sys.toggle();
         }
-        // The system dialog takes the input while it is up.
         let none = Pad::default();
         let sys_action = if self.sys.visible() { self.sys.update(pad) } else { None };
         let p = if self.sys.visible() { &none } else { pad };
         self.drive.update();
         self.cards.update();
+
+        // The SRAM-lost flag and the fatal disc error (SCENE_FATAL_ERROR,
+        // sErrorMsg) don't happen with the dummy backends. disp->menuFlag
+        // is cleared by the scene (Intro::update).
         self.update_rotation();
+        self.update_icons(&ma.icons, view);
         self.update_slot_glow();
         self.update_guide();
-        for i in 0..3 {
-            self.sub[SUB_CARD][i].step_if(self.state == St::Card);
-            self.sub[SUB_GAME][i].step_if(self.state == St::Game);
-            self.sub[SUB_OPTION][i].step_if(self.state == St::Option);
-            self.sub[SUB_CLOCK][i].step_if(self.state == St::Clock);
+        self.update_sub_faders();
+
+        // One-shot actions on state changes.
+        if self.state == St::CardFace && self.next == St::Card {
+            // Card_Enter, CardUi_Reset, CardIcon_ResetFiles.
+            self.card.enter();
         }
         if self.state == St::GameFace && self.next == St::Game {
             self.game.enter();
-        }
-        if self.state == St::OptionFace && self.next == St::Option {
-            self.opt_row = 0;
-            self.opt_edit = false;
-        }
-        if self.state == St::CardFace && self.next == St::Card {
-            self.card.enter();
+            // Game_Enter
+            let env = self.fx_env();
+            self.fx.game_update(&ma.fx, env, self.game.starting(), game::Game::fx_message(&*self.drive) as i16);
         }
         if self.state == St::Game && self.next == St::GameFace {
             self.disc_banner.reset();
             self.disc_none.reset();
             self.disc_unknown.reset();
         }
+        // GameCoob: Options opens on its top row; a note belongs to the
+        // submenu it was shown in.
+        if self.state == St::OptionFace && self.next == St::Option {
+            self.options.enter();
+        }
         if self.state != self.next {
             self.message = None;
         }
+
         self.state = self.next;
 
         let mut action = None;
         if self.state.on_cube() {
-            if self.zoom > ZOOM_OUT {
-                self.zoom -= ZOOM_OUT;
-            }
-            if self.zoom <= ZOOM_OUT {
-                self.zoom = 0;
-            }
-            self.handle_input(p);
-            self.wobble_frame = self.wobble_frame.wrapping_add(7);
-            self.calc_cube(s);
+            self.update_cube(p);
+            self.anim_cube();
             self.update_disc_faders();
+            self.fx.clear();
         } else {
-            if self.zoom < 0x7FFF - ZOOM_IN {
-                self.zoom += ZOOM_IN;
-            }
-            if self.zoom >= 0x7FFF - ZOOM_IN {
-                self.zoom = 0x7FFF;
-            }
-            self.wobble_frame = self.wobble_frame.wrapping_add(7);
-            self.calc_cube(s);
+            // Inside a submenu the cube zooms away and the submenu decides
+            // the next state.
+            self.zoom_in();
+            self.anim_cube();
             let (next, act) = self.update_sub(p);
             self.next = next;
             action = act;
         }
-        // Highlight pulse 50..120 at 2 per frame.
+
+        // GameCoob: the highlight pulse 50..120 at 2 per frame.
         self.highlight += if self.highlight_up { 2 } else { -2 };
         if self.highlight >= 120 {
             self.highlight_up = false;
@@ -746,193 +828,48 @@ impl Menu {
         sys_action.or(action)
     }
 
-    /// Menu_UpdateIcons: face, enter or hide for each submenu's icon.
-    fn update_icons(&mut self, d: &icons::IconData, s: &SinTable) {
-        let phase = |face: St, sub: St| match self.state {
-            st if st == face => icons::Phase::Face,
-            st if st == sub => icons::Phase::Enter,
-            _ => icons::Phase::Hide,
-        };
-        let p = phase(St::GameFace, St::Game);
-        self.game_icon.update(p, s);
-        let p = phase(St::CardFace, St::Card);
-        self.card_icon.update(p);
-        let p = phase(St::ClockFace, St::Clock);
-        self.clock_icon.update(p, s, &self.info.time);
-        let p = phase(St::OptionFace, St::Option);
-        self.option_icon.update(p, d);
-    }
-
-    /// Menu_UpdateSlotGlow: a slot's picture glows while a card is ready.
-    fn update_slot_glow(&mut self) {
-        for k in 0..2 {
-            let d = if self.cards.state(k) == SlotState::Ready {
-                let total = self.cards.total_blocks(k).max(1) as i32;
-                self.slot_fill[k] = 255 - self.cards.free_blocks(k) as i32 * 255 / total;
-                4
-            } else {
-                -4
-            };
-            self.slot_glow[k] = (self.slot_glow[k] + d).clamp(60, 255);
-        }
-    }
-
-    /// Menu_UpdateDiscFaders: banner, "no disc" or "unknown disc".
-    fn update_disc_faders(&mut self) {
-        let banner = self.drive.banner().is_some();
-        let none = !banner && self.drive.state() == DiscState::NoDisc;
-        self.disc_banner.step_if(banner);
-        self.disc_none.step_if(none);
-        self.disc_unknown.step_if(!banner && !none);
-    }
-
     /// The submenus' input; returns the next menu state and any action.
     fn update_sub(&mut self, p: &Pad) -> (St, core::option::Option<Action>) {
         if self.state == St::Game {
-            // Game Play keeps its drive state and faders running.
-            let ready = self.zoom == 0x7FFF;
-            return self.game.update(p, &*self.drive, &self.info, ready);
+            let c = game::Ctx { icon_settled: self.game_icon.settled(), fx_ready: self.fx.is_ready(0), zoomed_in: self.w.zoomed_in() };
+            return self.game.update(p, &c, &*self.drive, &self.info);
         }
         if self.state == St::Card {
             let fade_done = self.sub[SUB_CARD].iter().all(|f| f.alpha() > 172);
-            let next = self.card.update(p, &mut *self.cards, self.zoom == 0x7FFF, fade_done);
+            let next = self.card.update(p, &mut *self.cards, &self.w, self.card_icon.settled(), self.w.zoomed_in(), fade_done);
             return (next, None);
         }
-        // Input waits until the zoom is complete, and in Options and
-        // Calendar until the mosaic has assembled (Fx_IsReady(0)).
-        if self.zoom != 0x7FFF || (matches!(self.state, St::Option | St::Clock) && !self.fx.ready(0)) {
-            return (self.state, None);
-        }
-        match self.state {
-            St::Option => {
-                if !self.opt_edit {
-                    if p.b {
-                        return (St::OptionFace, None);
-                    }
-                    if p.up && self.opt_row > 0 {
-                        self.opt_row -= 1;
-                    }
-                    if p.down && self.opt_row < 1 {
-                        self.opt_row += 1;
-                    }
-                    if p.a {
-                        self.opt_edit = true;
-                        self.opt_timeout = self.info.timeout;
-                        self.opt_lang = self.lang;
-                    }
-                    return (St::Option, None);
-                }
-                match self.opt_row {
-                    0 => {
-                        if p.left {
-                            self.opt_timeout = self.opt_timeout.saturating_sub(1);
-                        }
-                        if p.right {
-                            self.opt_timeout = (self.opt_timeout + 1).min(MAX_TIMEOUT);
-                        }
-                        if p.b {
-                            self.opt_edit = false;
-                        }
-                        if p.a {
-                            self.opt_edit = false;
-                            if self.opt_timeout != self.info.timeout {
-                                self.info.timeout = self.opt_timeout;
-                                self.notify(format!("Firmware boot timeout: {} s", self.opt_timeout));
-                                return (St::Option, Some(Action::SetTimeout(self.opt_timeout)));
-                            }
-                        }
-                    }
-                    _ => {
-                        if p.left && self.opt_lang > 0 {
-                            self.opt_lang -= 1;
-                        }
-                        if p.right && self.opt_lang + 1 < LANGS {
-                            self.opt_lang += 1;
-                        }
-                        self.guide_lang = self.opt_lang;
-                        if p.b {
-                            self.opt_edit = false;
-                            self.guide_lang = self.lang;
-                        }
-                        if p.a {
-                            self.opt_edit = false;
-                            self.lang = self.opt_lang;
-                        }
-                    }
-                }
-                (St::Option, None)
+        if self.state == St::Option {
+            let mut note = None;
+            let mut c = options::Ctx {
+                fx_ready: self.fx.is_ready(0),
+                zoomed_in: self.w.zoomed_in(),
+                lang: &mut self.lang,
+                guide_lang: &mut self.guide_lang,
+                timeout: &mut self.info.timeout,
+                note: &mut note,
+            };
+            let r = self.options.update(p, &mut c);
+            if let Some(n) = note {
+                self.notify(n);
             }
-            St::Clock => self.update_clock(p),
-            _ => (self.state, None),
+            return r;
         }
-    }
-
-    /// Clock_Update: Up/Down pick the date or the time row, A edits it.
-    /// While editing, Left/Right move between the fields, Up/Down change
-    /// the value, A writes the firmware clock and B cancels.
-    fn update_clock(&mut self, p: &Pad) -> (St, core::option::Option<Action>) {
-        let c = &mut self.clock;
-        // Left/Right only count without Up/Down in the same frame.
-        let side = !(p.up || p.down);
-        match c.sub {
-            0 => {
-                if p.up {
-                    c.row = 0;
-                }
-                if p.down {
-                    c.row = 1;
-                }
-                if p.a {
-                    let t = self.info.time;
-                    if c.row == 0 {
-                        c.value = [t[0], t[1], t[2]];
-                        c.sub = 1;
-                    } else {
-                        c.value = [t[3], t[4], 0];
-                        c.sub = 2;
-                    }
-                    return (St::Clock, None);
-                }
-                if p.b {
-                    return (St::ClockFace, None);
-                }
+        if self.state == St::Clock {
+            let mut note = None;
+            let mut c = calendar::Ctx {
+                fx_ready: self.fx.is_ready(0),
+                zoomed_in: self.w.zoomed_in(),
+                now: &mut self.info.time,
+                note: &mut note,
+            };
+            let r = self.calendar.update(p, &mut c);
+            if let Some(n) = note {
+                self.notify(n);
             }
-            sub => {
-                let date = sub == 1;
-                let field = if date { &mut c.date_field } else { &mut c.time_field };
-                // On PAL the date reads day / month / year, so Left moves
-                // toward the year (Clock_FieldStep); the time always reads
-                // hour, minute, second.
-                let step: i8 = if date { 1 } else { -1 };
-                if p.left && side {
-                    *field = (*field as i8 + step).rem_euclid(3) as u8;
-                }
-                if p.right && side {
-                    *field = (*field as i8 - step).rem_euclid(3) as u8;
-                }
-                let f = *field as usize;
-                let d = p.up as i32 - p.down as i32;
-                if d != 0 {
-                    c.value[f] += d;
-                    if date {
-                        c.fix_date();
-                    } else {
-                        c.fix_time();
-                    }
-                }
-                if p.b {
-                    c.sub = 0;
-                }
-                if p.a {
-                    c.sub = 0;
-                    let t = c.shown_with(sub, self.info.time);
-                    self.info.time = t;
-                    self.notify(format!("Firmware clock set: {:02}/{:02}/{} {:02}:{:02}:{:02}", t[2], t[1], t[0], t[3], t[4], t[5]));
-                    return (St::Clock, Some(Action::SetTime(t)));
-                }
-            }
+            return r;
         }
-        (St::Clock, None)
+        (self.state, None)
     }
 
     // -----------------------------------------------------------------
@@ -940,58 +877,70 @@ impl Menu {
     // -----------------------------------------------------------------
 
     /// Scene_Draw2DSpinOut's face: the front layout on the spinning cube.
-    pub fn draw_spin_out_face<'a>(list: &mut Vec<Prim<'a>>, ma: &'a MenuAssets, view: &View, cube: &Mtx, alpha: u8, s: &SinTable) {
-        let mut ui = Ui { list, view, mv: mtx::IDENTITY };
-        draw_front(&mut ui, ma, 0, view, cube, alpha, s);
+    pub fn draw_spin_out_face<'a>(gx: &mut Gx<'a>, ma: &'a MenuAssets, view: &View, cube: &Mtx, alpha: u8) {
+        let mut ui = Ui { gx, view, mv: psmtx::IDENTITY };
+        draw_front(&mut ui, ma, 0, view, cube, alpha);
     }
 
-    /// Scene_Draw2DMenu + Menu_Draw2D.
-    pub fn draw<'a>(&'a self, list: &mut Vec<Prim<'a>>, a: &'a Assets, ma: &'a MenuAssets, view: &View, s: &SinTable) {
-        let bg = (255 * (0x7FFF - self.zoom as i32) / 0x7FFF) as u8;
-        // The glass cube, translucent as it zooms away.
-        let mut v = View { ambient: [40.0 / 255.0, 40.0 / 255.0, 40.0 / 255.0, 1.0], ..clone_view(view) };
-        v.vp = view.vp;
-        // The icon cubes sit inside the glass cube.
-        self.game_icon.draw(list, &ma.icons, view, &self.cube, s);
-        self.card_icon.draw(list, &ma.icons, view, &self.cube, s);
-        self.clock_icon.draw(list, &ma.icons, view, &self.cube, s);
-        self.option_icon.draw(list, &ma.icons, view, &self.cube, s);
-        if bg > 0 {
-            let m = mtx::concat(&self.cube, &mtx::scale(1.1, 1.1, 1.1));
-            render::draw_model(list, &a.big_cube, &m, &v, &DrawOpts { alpha: bg, ..Default::default() });
-        }
-        let mut ui = Ui { list, view, mv: mtx::IDENTITY };
-        self.draw_faces(&mut ui, ma, view, bg, s);
+    /// Scene_Draw2DMenu (0x8130E5C0) + Menu_Draw2D.
+    pub fn draw<'a>(&'a self, gx: &mut Gx<'a>, a: &'a Assets, ma: &'a MenuAssets, view: &View) {
+        // The glass cube fades out to bgMinAlpha as it zooms away.
+        let w = &self.w;
+        let bg = (w.bg_min_alpha as i32 + (255 - w.bg_min_alpha as i32) * (0x7FFF - w.zoom as i32) / 0x7FFF) as u8;
+        // Menu_CalcCubeMtx's model and view, then Menu_AnimCube's joints.
+        let mut cube = Instance::new(&a.big_cube.model);
+        gmr::set_model_mtx(&mut cube, &self.cube, [1.1; 3]);
+        gmr::set_view_mtx(&mut cube, &view.view);
+        gmr::calc_joints(&a.big_cube.model, &mut cube);
+        cube.alpha = bg;
+        // The glass cube's back faces, the icon cubes inside it, then its
+        // front faces, each glass pass between Scene_SetAmbDark and
+        // Scene_SetAmbFull.
+        let glass = |gx: &mut Gx<'a>, cube: &mut Instance, packet: u16| {
+            if cube.alpha > 0 {
+                gx.set_chan_amb_color(GX_COLOR0A0, [0x28, 0x28, 0x28, 0xFF]);
+                gmr::draw_packet(gx, &a.big_cube, cube, packet);
+                gx.set_chan_amb_color(GX_COLOR0A0, [0xFF; 4]);
+            }
+        };
+        glass(gx, &mut cube, BIG_CUBE_BACK);
+        self.card_icon.draw(gx, &ma.icons);
+        self.game_icon.draw(gx, &ma.icons);
+        self.option_icon.draw(gx, &ma.icons);
+        self.clock_icon.draw(gx, &ma.icons);
+        glass(gx, &mut cube, BIG_CUBE_FRONT);
+        let mut ui = Ui { gx, view, mv: psmtx::IDENTITY };
+        self.draw_faces(&mut ui, ma, view, bg);
         let mut v2 = View::intro(0.0, false);
         v2.vp = view.vp;
-        let mut ui = Ui { list: ui.list, view: &v2, mv: screen_2d() };
-        self.draw_submenus(&mut ui, ma, s);
+        let mut ui = Ui { gx: ui.gx, view: &v2, mv: screen_2d() };
+        self.draw_submenus(&mut ui, ma);
         self.draw_guide(&mut ui, ma, 255);
         let pulse = (self.highlight - 50) as f32 / 70.0;
         self.sys.draw(&mut ui, ma, self.lang, pulse);
     }
 
-    fn face_mtx(&self, view: &View, rot: (i32, i32), t: [f32; 3], s: &SinTable) -> Mtx {
-        face_mtx(view, &self.cube, rot, t, s)
+    fn face_mtx(&self, view: &View, rot: (i32, i32), t: [f32; 3]) -> Mtx {
+        face_mtx(view, &self.cube, rot, t)
     }
 
     /// Menu_DrawFaces.
-    fn draw_faces<'a>(&'a self, ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, view: &View, alpha: u8, s: &SinTable) {
+    fn draw_faces<'a>(&'a self, ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, view: &View, alpha: u8) {
         let clampf = |r: i16| (r as i32).abs().min(FACE_FADE);
-        let (ax, ay) = (clampf(self.rot_x), clampf(self.rot_y));
+        let (ax, ay) = (clampf(self.w.rot_x), clampf(self.w.rot_y));
         let front = if ax != ay { Some(ax.max(ay)) } else if ax == 0 { Some(0) } else { None };
         if let Some(m) = front {
             // Menu_DrawTopFace ignores the menu alpha.
             let fa = (255 - m * 255 / FACE_FADE) as u8;
-            draw_front(ui, ma, self.lang, view, &self.cube, fa, s);
+            draw_front(ui, ma, self.lang, view, &self.cube, fa);
         }
         let face_a = |r: i16| ((alpha as i32) * (255 - (0x4000 - (r as i32).abs()) * 255 / FACE_FADE) / 255).clamp(0, 255) as f32 / 255.0;
         let l = self.lang;
         let bank = &ma.bank[..];
         // Bottom: Memory Card.
-        if self.rot_x <= -FACE_SHOW {
-            let a = face_a(self.rot_x);
-            ui.mv = self.face_mtx(view, (0x4000, 0), [-FACE_HALF, -FACE_HALF, FACE_HALF], s);
+        if self.w.rot_x <= -FACE_SHOW {
+            let a = face_a(self.w.rot_x);
+            ui.mv = self.face_mtx(view, (0x4000, 0), [-FACE_HALF, -FACE_HALF, FACE_HALF]);
             let g = &ma.card_face[l];
             let c = with_a(WHITE, a * a);
             for f in g.frame(tag(b"fram")) {
@@ -1003,21 +952,21 @@ impl Menu {
             }
         }
         // Top: Game Play.
-        if self.rot_x >= FACE_SHOW {
-            let a = face_a(self.rot_x);
-            ui.mv = self.face_mtx(view, (-0x4000, 0), [-FACE_HALF, FACE_HALF, -FACE_HALF], s);
+        if self.w.rot_x >= FACE_SHOW {
+            let a = face_a(self.w.rot_x);
+            ui.mv = self.face_mtx(view, (-0x4000, 0), [-FACE_HALF, FACE_HALF, -FACE_HALF]);
             self.draw_game_face(ui, ma, a);
         }
         // Right: Calendar.
-        if self.rot_y <= -FACE_SHOW {
-            let a = face_a(self.rot_y);
-            ui.mv = self.face_mtx(view, (0, 0x4000), [FACE_HALF, FACE_HALF, FACE_HALF], s);
+        if self.w.rot_y <= -FACE_SHOW {
+            let a = face_a(self.w.rot_y);
+            ui.mv = self.face_mtx(view, (0, 0x4000), [FACE_HALF, FACE_HALF, FACE_HALF]);
             self.draw_clock_face(ui, ma, a);
         }
         // Left: Options.
-        if self.rot_y >= FACE_SHOW {
-            let a = face_a(self.rot_y);
-            ui.mv = self.face_mtx(view, (0, -0x4000), [-FACE_HALF, FACE_HALF, -FACE_HALF], s);
+        if self.w.rot_y >= FACE_SHOW {
+            let a = face_a(self.w.rot_y);
+            ui.mv = self.face_mtx(view, (0, -0x4000), [-FACE_HALF, FACE_HALF, -FACE_HALF]);
             self.draw_option_face(ui, ma, a);
         }
     }
@@ -1153,7 +1102,7 @@ impl Menu {
     }
 
     /// Menu_DrawSubmenus: each is drawn while its first fader is above 0.
-    fn draw_submenus<'a>(&'a self, ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, s: &SinTable) {
+    fn draw_submenus<'a>(&'a self, ui: &mut Ui<'a, '_>, ma: &'a MenuAssets) {
         for k in [SUB_CARD, SUB_GAME, SUB_OPTION, SUB_CLOCK] {
             let f = &self.sub[k];
             let al = [f[0].alpha(), f[1].alpha(), f[2].alpha()].map(|v| v as f32 / 255.0);
@@ -1162,25 +1111,28 @@ impl Menu {
             }
             let fx_alpha = f[0].alpha() as u8;
             match k {
-                SUB_GAME => self.draw_game(ui, ma, al),
-                SUB_CARD => self.card.draw(ui, ma, &*self.cards, self.lang, al, s),
+                SUB_GAME => self.game.draw_back(ui, ma, &self.w, &*self.drive, [0, 1, 2].map(|i| f[i].alpha())),
+                SUB_CARD => self.card.draw(ui, ma, &self.w, &*self.cards, self.lang, al),
                 SUB_OPTION => {
-                    draw_backdrop(ui, ma, al[1]);
-                    self.draw_options(ui, ma, al);
+                    draw_backdrop(ui, ma, &self.w, al[1]);
+                    self.options.draw_text(ui, ma, f[2].alpha());
                 }
                 _ => {
-                    draw_backdrop(ui, ma, al[1]);
-                    self.draw_clock(ui, ma, al);
+                    draw_backdrop(ui, ma, &self.w, al[1]);
+                    self.calendar.draw_text(ui, ma, self.lang, f[2].alpha());
                 }
             }
-            let set = match k {
-                SUB_GAME => Some(fx::set::GAME),
-                SUB_OPTION => Some(fx::set::OPTION),
-                SUB_CLOCK => Some(fx::set::CLOCK),
-                _ => None,
+            let settled = match k {
+                SUB_GAME => self.game_icon.settled(),
+                SUB_OPTION => self.option_icon.settled(),
+                SUB_CLOCK => self.clock_icon.settled(),
+                _ => false,
             };
-            if set.is_some() && set == self.fx.screen() {
-                self.fx.draw(ui.list, &ma.fx, ui.view, fx_alpha, s);
+            if settled {
+                self.fx.draw(ui.gx, &ma.fx, ui.view, fx_alpha);
+            }
+            if k == SUB_GAME {
+                self.game.draw_text(ui, ma, &self.info, self.lang, f[2].alpha());
             }
             self.draw_message(ui, ma, al[2]);
         }
@@ -1191,81 +1143,6 @@ impl Menu {
             let age = self.frame.saturating_sub(*at) as f32;
             let k = (1.0 - (age - 180.0) / 30.0).clamp(0.0, 1.0) * a;
             ui.label(&ma.font, 292.0, 372.0, 18.0, &cp1252(msg), [1.0, 0.93, 0.6, k], 0);
-        }
-    }
-
-    /// Game Play: the drive screen, with the mosaic between the banner and
-    /// the status lines.
-    fn draw_game<'a>(&'a self, ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, al: [f32; 3]) {
-        self.game.draw(ui, ma, &*self.drive, &self.info, self.lang, al);
-    }
-
-    /// Options: the firmware boot timeout and the menu language.
-    fn draw_options<'a>(&'a self, ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, al: [f32; 3]) {
-        let g = &ma.option;
-        let green = rgb(0, 255, 120);
-        let pairs = [(rgb(180, 255, 0), rgb(20, 100, 50)), (rgb(120, 220, 35), rgb(0, 80, 25))];
-        if let Some(p) = g.text(tag(b"mesg")) {
-            ui.text(&ma.font, p, &cp1252("Choose GameCoob boot settings."), with_a(WHITE, al[2]), 0.0, 0.0);
-        }
-        let hl = self.highlight as f32 / 120.0;
-        // Row 0: timeout.
-        if let Some(p) = g.text(tag(b"txt1")) {
-            let k = if self.opt_row == 0 { 1.0 } else { 0.55 };
-            ui.text(&ma.font, p, &cp1252("Boot Timeout"), with_a(scale(green, k), al[2]), 0.0, 0.0);
-        }
-        // Row 1: language.
-        let lang = if self.opt_edit && self.opt_row == 1 { self.opt_lang } else { self.lang };
-        if let Some(p) = g.text(tag(b"txt3")) {
-            let k = if self.opt_row == 1 { 1.0 } else { 0.55 };
-            let s = ma.option_str[self.guide_lang].get(3).map(|s| s.text.clone()).unwrap_or_else(|| cp1252("Language"));
-            ui.text(&ma.font, p, &s, with_a(scale(green, k), al[2]), 0.0, 0.0);
-        }
-        let (l, d) = pairs[1];
-        for i in 0..LANGS {
-            let t = [b'l', b'a', b'n', b'1' + i as u8];
-            let a = if i == lang { 1.0 } else { 0.45 };
-            for p in g.pic(tag(&t)) {
-                if let Some(tex) = ma.bank.get(p.tex as usize) {
-                    ui.pic(p, tex, with_a(WHITE, a * al[2]), 0.0, 0.0);
-                }
-                if i == lang {
-                    ui.fill(p.x - 30.0, p.y + 16.0, 60.0, 4.0, with_a(l, al[0] * if self.opt_row == 1 { 1.0 } else { 0.5 }));
-                    ui.fill(p.x - 30.0, p.y + 20.0, 60.0, 2.0, with_a(d, al[0]));
-                }
-            }
-        }
-        for i in 0..5u8 {
-            for p in g.pic(tag(&[b's', b'l', b'a', b'1' + i])) {
-                if let Some(tex) = ma.bank.get(p.tex as usize) {
-                    ui.pic(p, tex, with_a(WHITE, 0.5 * al[2]), 0.0, 0.0);
-                }
-            }
-        }
-        // Selection marker on the current row.
-        let y = if self.opt_row == 0 { 102.0 } else { 316.0 };
-        ui.fill(150.0, y - 2.0, 6.0, 6.0, with_a(green, hl * al[2]));
-        ui.fill(432.0, y - 2.0, 6.0, 6.0, with_a(green, hl * al[2]));
-    }
-
-    /// Calendar: the firmware clock.
-    fn draw_clock<'a>(&'a self, ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, al: [f32; 3]) {
-        let g = &ma.clock;
-        let s = &ma.clock_str[self.lang];
-        if let Some(p) = g.text(tag(b"mesg")) {
-            ui.text(&ma.font, p, &cp1252("The firmware clock."), with_a(WHITE, al[2]), 0.0, 0.0);
-        }
-        // Clock_Draw: the row labels use the calendar text colour.
-        let yellow = rgb(255, 255, 0);
-        for (i, t) in [(1usize, b"txt1"), (2, b"txt2")] {
-            if let (Some(p), Some(st)) = (g.text(tag(t)), s.get(i)) {
-                ui.text(&ma.font, p, &st.text, with_a(yellow, al[2]), 0.0, 0.0);
-            }
-        }
-        for t in [b"bar1", b"bar2"] {
-            for f in g.frame(tag(t)) {
-                ui.frame(f, &ma.bank, [1.0, 1.0, 0.0, al[1]]);
-            }
         }
     }
 
@@ -1281,8 +1158,8 @@ impl Menu {
         for i in 0..2u8 {
             let k = i as usize * 3;
             pics(ui, gl, &[b'b', b'a', b'c', b'1' + i * 3], bank, col([150, 150, 150], base * g[k] / 255));
-            pics(ui, gl, &[b'b', b'a', b'c', b'2' + i * 3], bank, col([210, 0, 70], base * g[k + 1] / 255));
-            pics(ui, gl, &[b'b', b'a', b'c', b'3' + i * 3], bank, col([0, 200, 140], base * g[k + 2] / 255));
+            pics(ui, gl, &[b'b', b'a', b'c', b'2' + i * 3], bank, col(self.w.guide_color_b.map(|c| c as u8), base * g[k + 1] / 255));
+            pics(ui, gl, &[b'b', b'a', b'c', b'3' + i * 3], bank, col(self.w.guide_color_a.map(|c| c as u8), base * g[k + 2] / 255));
         }
         // The stick cross-fades between neutral and a tilted sprite.
         let k = (blink / 128) % 8;
@@ -1322,40 +1199,36 @@ impl Menu {
         }
     }
 
-    /// The icon cubes' and the mosaic's frame (Menu_UpdateIcons, the
-    /// submenus' Fx*_Update + Fx_Update). Call once per frame after
-    /// [`Menu::update`].
-    pub fn update_fx(&mut self, ma: &MenuAssets, s: &SinTable) {
-        self.update_icons(&ma.icons, s);
-        let d = &ma.fx;
+    /// What the mosaic reads from the menu: the languages, the Options
+    /// language rows and the calendar time.
+    fn fx_env(&self) -> fx::Env {
+        let mut now = self.info.time;
+        now[1] -= 1;
+        fx::Env {
+            lang: self.lang,
+            opt_lang: self.options.lang,
+            lang_y: self.options.lang_y,
+            now,
+        }
+    }
+
+    /// The mosaic's frame: the submenus' Fx*_Update (Fx_Update is part of
+    /// the draw). Call once per frame after [`Menu::update`].
+    pub fn update_fx(&mut self, ma: &MenuAssets) {
+        let env = self.fx_env();
         match self.state {
-            St::Game if !self.game.starting() && self.game_icon.settled() => {
-                let msg = game::Game::fx_message(&*self.drive);
-                self.fx.frame(d, fx::set::GAME, self.lang, &fx::GAME_COLORS, s, |b| screen::game(b, msg));
+            St::Game if self.game_icon.settled() => {
+                let msg = game::Game::fx_message(&*self.drive) as i16;
+                self.fx.game_update(&ma.fx, env, self.game.starting(), msg);
             }
             St::Option if self.option_icon.settled() => {
-                // Ours has two rows: the boot timeout sits in the IPL's
-                // screen-position row, the language in its language row.
-                let row = self.opt_row as u8 + 1;
-                let t = if self.opt_edit && self.opt_row == 0 { self.opt_timeout } else { self.info.timeout };
-                let o = screen::Options { sub: if self.opt_edit { row + 1 } else { 0 }, row, stereo: None, offset: Some(t as i32), lang: true };
-                self.fx.frame(d, fx::set::OPTION, self.lang, &fx::OPTION_COLORS, s, |b| screen::options(b, &o));
+                let o = &self.options;
+                self.fx.option_update(&ma.fx, env, o.prev_sub, o.row, o.offset, o.sound);
             }
             St::Clock if self.clock_icon.settled() => {
-                let k = &mut self.clock;
-                let c = screen::Clock {
-                    sub: k.sub,
-                    prev_sub: k.shown_sub,
-                    row: k.row,
-                    date_field: k.date_field,
-                    time_field: k.time_field,
-                    time: k.shown(self.info.time),
-                    keep_sway: true,
-                };
-                k.shown_sub = k.sub;
-                self.fx.frame(d, fx::set::CLOCK, self.lang, &fx::CLOCK_COLORS, s, |b| screen::clock(b, &c));
+                let k = &self.calendar;
+                self.fx.clock_update(&ma.fx, env, k.shown_sub, k.row, k.date_field, k.time_field, k.value);
             }
-            st if st.on_cube() => self.fx.clear(),
             _ => {}
         }
     }
@@ -1374,31 +1247,31 @@ impl Menu {
     }
 }
 
-fn clone_view(v: &View) -> View {
-    View { view: v.view, ortho: v.ortho, fovy: v.fovy, aspect: v.aspect, near: v.near, far: v.far, light: v.light, ambient: v.ambient, vp: v.vp }
-}
+/// `sBigCube`'s packets: the faces behind the icons (`packets + 0x78`) and
+/// in front of them (`packets + 0x168`).
+const BIG_CUBE_BACK: u16 = 0x78 / 0x18;
+const BIG_CUBE_FRONT: u16 = 0x168 / 0x18;
 
 /// The 2D screen of Setup2DView: 584 x 448 layout units, y down, at z 0
 /// in front of a camera 224 / tan(fovy / 2) away.
 pub fn screen_2d() -> Mtx {
-    let s = mtx::scale(1.0, -1.0, 1.0);
-    mtx::concat(&mtx::concat(&View::intro(0.0, false).view, &mtx::trans(-292.0, 224.0, 0.0)), &s)
+    camera::setup_2d_view(bs2main::disp_settings())
 }
 
 /// `view · cube · SRT` of a face layout (scale (1, -1, 1)).
-fn face_mtx(view: &View, cube: &Mtx, rot: (i32, i32), t: [f32; 3], s: &SinTable) -> Mtx {
-    let srt = mtx::concat(&mtx::rot_trans(s, rot.0, rot.1, 0, t), &mtx::scale(1.0, -1.0, 1.0));
-    mtx::concat(&mtx::concat(&view.view, cube), &srt)
+fn face_mtx(view: &View, cube: &Mtx, rot: (i32, i32), t: [f32; 3]) -> Mtx {
+    let srt = psmtx::concat(&mtx::rot_trans(rot.0, rot.1, 0, t), &psmtx::scale(1.0, -1.0, 1.0));
+    psmtx::concat(&psmtx::concat(&view.view, cube), &srt)
 }
 
 /// The front face (Menu_DrawTopFace / Menu_DrawSpinOutFace); its alpha is
 /// applied twice.
-fn draw_front<'a>(ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, lang: usize, view: &View, cube: &Mtx, alpha: u8, s: &SinTable) {
+fn draw_front<'a>(ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, lang: usize, view: &View, cube: &Mtx, alpha: u8) {
     if alpha == 0 {
         return;
     }
     let a = alpha as f32 / 255.0;
-    ui.mv = face_mtx(view, cube, (0, 0), [-FACE_HALF, FACE_HALF, FACE_HALF], s);
+    ui.mv = face_mtx(view, cube, (0, 0), [-FACE_HALF, FACE_HALF, FACE_HALF]);
     let g = &ma.front[lang];
     for p in g.pics.iter() {
         if let Some(t) = ma.bank.get(p.tex as usize) {
@@ -1409,73 +1282,25 @@ fn draw_front<'a>(ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, lang: usize, view: &V
 
 /// Backdrop_Draw, simplified: the 8x8 grid tile repeated over the screen,
 /// lit by a soft spot from the centre instead of the GX spot light.
-fn draw_backdrop<'a>(ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, a: f32) {
-    draw_backdrop_lit(ui, ma, a, &[BackdropLight::main(1.0)]);
+/// The 2D plane's matrices with its normal matrix, as the submenus load
+/// them before `Backdrop_Draw`.
+fn load_backdrop_mtx(ui: &mut Ui) {
+    ui.load();
+    let nrm = mtx::inverse33(&ui.mv).unwrap_or(psmtx::IDENTITY);
+    ui.gx.load_nrm_mtx_imm(&nrm, GX_PNMTX0);
 }
 
-/// One GX spot light over the backdrop (Backdrop_DrawLit): the plane only
-/// shows where the lights reach, through its lit alpha channel.
-#[derive(Clone, Copy)]
-pub(crate) struct BackdropLight {
-    pub pos: [f32; 3],
-    /// Light colour alpha, 0..1 (a fader).
-    pub alpha: f32,
-    /// Spot cutoff in degrees (GX_SP_COS2).
-    pub cutoff: f32,
-    /// Brightness at 500 units (GX_DA_GENTLE).
-    pub ref_br: f32,
+/// `Backdrop_Draw` on the 2D plane at fader alpha `a` (0..1).
+fn draw_backdrop<'a>(ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, w: &Work, a: f32) {
+    load_backdrop_mtx(ui);
+    backdrop::draw(ui.gx, w, &ma.backdrop, &ui.mv, (a * 255.0 + 0.5) as u8);
 }
 
-impl BackdropLight {
-    /// The MenuWork light every submenu backdrop uses.
-    pub fn main(alpha: f32) -> Self {
-        BackdropLight { pos: [296.0, 224.0, 474.0], alpha, cutoff: 36.0, ref_br: 0.375 }
-    }
-
-    /// One of the Memory Card screen's slot spots (Backdrop_DrawSpots).
-    pub fn slot(xy: [f32; 2], z: f32, alpha: f32) -> Self {
-        BackdropLight { pos: [xy[0], xy[1], z], alpha, cutoff: 28.0, ref_br: 0.525 }
-    }
-
-    /// GX per-vertex light on the z = 0 plane with normal +z, the spot
-    /// pointing down -z: clamped N.L x spot x distance attenuation.
-    fn at(&self, q: [f32; 2]) -> f32 {
-        if self.alpha <= 0.0 {
-            return 0.0;
-        }
-        let (dx, dy, h) = (q[0] - self.pos[0], q[1] - self.pos[1], self.pos[2]);
-        let d = libm::sqrtf(dx * dx + dy * dy + h * h);
-        let cos = h / d;
-        let cr = libm::cosf(self.cutoff * core::f32::consts::PI / 180.0);
-        let spot = ((cos * cos - cr * cos) / (1.0 - cr)).max(0.0);
-        let k1 = (1.0 - self.ref_br) / (self.ref_br * 500.0);
-        self.alpha * cos * spot / (1.0 + k1 * d)
-    }
-}
-
-/// Backdrop_DrawLit: the I4 grid tile across the 576 x 448 plane, its
-/// vertices lit by `lights` (summed, clamped), times the screen alpha `a`.
-fn draw_backdrop_lit<'a>(ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, a: f32, lights: &[BackdropLight]) {
-    if a <= 0.0 {
-        return;
-    }
-    const NX: usize = 20;
-    const NY: usize = 16;
-    let (x0, y0, w, h) = (-30.0f32, -20.0f32, 644.0f32, 488.0f32);
-    let cell = 20.0;
-    for j in 0..NY {
-        for i in 0..NX {
-            let p = |ii: usize, jj: usize| [x0 + w * ii as f32 / NX as f32, y0 + h * jj as f32 / NY as f32];
-            let lit = |q: [f32; 2]| {
-                let v = lights.iter().map(|l| l.at(q)).sum::<f32>().min(1.0);
-                [v, v, v, a]
-            };
-            let q = [p(i, j), p(i + 1, j), p(i + 1, j + 1), p(i, j + 1)];
-            let uv = q.map(|v| [v[0] / cell, v[1] / cell]);
-            let col = q.map(lit);
-            ui.quad(q, uv, col, super::raster::Sh::Modulate { tex: &ma.backdrop });
-        }
-    }
+/// `Backdrop_DrawSpots` on the 2D plane at fader alpha `a` (0..1).
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn draw_backdrop_spots<'a>(ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, w: &Work, a: f32, pos: [[f32; 3]; 2], alpha: [u8; 2], spot_alpha: u8) {
+    load_backdrop_mtx(ui);
+    backdrop::draw_spots(ui.gx, w, &ma.backdrop, &ui.mv, (a * 255.0 + 0.5) as u8, pos[0], pos[1], alpha[0], alpha[1], spot_alpha);
 }
 
 fn pics<'a>(ui: &mut Ui<'a, '_>, g: &Layout, t: &[u8; 4], bank: &'a [FastTex], c: Rgba) {
@@ -1495,10 +1320,6 @@ fn with_a(c: Rgba, a: f32) -> Rgba {
 
 fn rgb(r: u8, g: u8, b: u8) -> Rgba {
     ui::rgba8([r, g, b, 255])
-}
-
-fn scale(c: Rgba, k: f32) -> Rgba {
-    [c[0] * k, c[1] * k, c[2] * k, c[3]]
 }
 
 /// Cut `s` with "..." so it fits `w` at glyph size `size`.

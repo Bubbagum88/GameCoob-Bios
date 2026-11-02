@@ -1,7 +1,7 @@
 //! J3D keyframe animations used by the intro: joint animation (`bck1`,
 //! ANK1) and the IPL's material color animation (`IPK1`).
 
-use super::mtx::hermite;
+use super::gbase::hermite;
 use alloc::vec::Vec;
 
 fn be16(b: &[u8], o: usize) -> Option<u16> {

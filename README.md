@@ -40,6 +40,15 @@ The matching decompilation of the IPL's BS2 program lives in [decomp/](decomp/RE
   the firmware boot menu timeout (the `Timeout` variable). F10 opens the
   system dialog: Firmware Setup (reboots into your vendor's BIOS setup via
   `OsIndications`), Restart and Power Off.
+- **Your own memory cards.** Put card images (`.raw`, `.mcp` or `.gcp` from
+  Dolphin, Nintendont, a MemCard PRO GC and the like, any size from 59 to
+  2043 blocks) at `\EFI\GameCoob\cards\slot-a.raw` and `slot-b.raw` and the
+  Memory Card screen shows their saves, banners and icons; Copy, Move, Erase
+  and Format work on them and are written back to the files (the first
+  change of each boot keeps the old file as `slot-a.raw.bak`). Without card
+  images, both slots hold made-up test cards. `tools/card-tool` converts
+  saves between `.gci`, `.gcs` and `.sav` and builds or unpacks card images
+  on the PC.
 - **No dump, no show.** Without `ipl.bin`, GameCoob says where to put it and
   hands back to the firmware, which boots its next entry.
 
@@ -129,7 +138,11 @@ IPL=~/ipl.bin scripts/run-qemu.sh         # same, with a dump from somewhere oth
 scripts/screenshots.py out/               # headless run that saves PNGs (needs Pillow and your dump)
 ```
 
-In QEMU: arrow keys are the d-pad, Enter is A, Esc or Backspace is B, Space is START.
+Keys (`src/input.rs` has the full table): arrow keys are the d-pad, Enter or A is A
+(hold to spin the cube), Esc or Backspace is B, Space or S is START, X / Y / Q / E
+are X, Y, L and R, and z held at boot (shift-Z for all four controllers) picks an
+easter-egg jingle. Esc skips the intro, F10 opens the system dialog, R is the
+reset switch and F3 shows frame timings. Held arrows repeat at the IPL's own rate.
 
 ### On real hardware
 
@@ -147,13 +160,16 @@ src/
   bs2/       the intro and cube menu rebuilt from BS2: cube and scene state machines,
              GX-style TEV renderer and banded rasterizer, J3D animations, menus
   ipl/       ipl.bin parsing: descrambling, resource archive, Yay0, J3D, textures
+  card/      memory card images (.raw/.mcp/.gcp, 59 to 2043 blocks) and saves
+             (.gci, .gcs, .sav): read, write, convert, banners and icons
   gfx.rs     backbuffer: scales each frame to a 4:3 picture, one GOP blit
   firmware.rs  menu actions: BootNext, Timeout, firmware setup, restart, power off
   vars.rs    UEFI variables: Boot####, BootOrder, BootNext, Timeout, OsIndications
   clock.rs   TSC-based timer for frame-rate-independent animation
 scripts/     build.ps1 (Windows build), QEMU runner, screenshot automation
 local/       your own dump and reference files, never committed
-tools/       host-side checks: ipl-preview (models to PNG), intro-render and menu-render (frames to PNG)
+tools/       host-side checks: ipl-preview (models to PNG), intro-render and menu-render (frames to PNG),
+             card-tool (memory card images and saves on the PC; `cargo test` there tests src/card)
 docs/        roadmap
 ```
 

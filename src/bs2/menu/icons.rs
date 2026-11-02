@@ -8,10 +8,12 @@
 //! `face` while the cube shows its face, `enter` inside the submenu and
 //! `hide` anywhere else.
 
-use super::super::mtx::{self, Mtx, SinTable};
-use super::super::raster::Prim;
-use super::super::render::{self, DrawOpts, Prepared, View};
-use super::super::shader::Shader;
+use crate::bs2::{gbase, rnd};
+use crate::bs2::mtx::{self, cos_s, sin_s};
+use crate::sdk::mtx::{self as psmtx, Mtx};
+use super::super::gmr::{self, Instance};
+use super::super::render::Prepared;
+use crate::sdk::gx::Gx;
 use crate::ipl::j3d::Model;
 use crate::ipl::Ipl;
 use alloc::vec::Vec;
@@ -27,12 +29,10 @@ pub enum Phase {
     Hide,
 }
 
-/// The cube model and one copy of its shader per tint. The model's TEV
-/// stage is `2 * (0.5 * tex + C0)`: TEVREG0 is a signed tint added to the
-/// grey shading.
+/// The cube model. Its TEV stage is `2 * (0.5 * tex + C0)`: TEVREG0 is a
+/// signed tint added to the grey shading.
 pub struct IconData {
     model: Prepared,
-    shaders: Vec<Shader>,
     /// Options picture: one position per set cell of its bitmap (empty if
     /// the IPL is not PAL 1.0).
     picture: Vec<[f32; 2]>,
@@ -47,20 +47,11 @@ pub const TINT_CLOCK_DIAL: usize = 4;
 
 /// `Game_GetParams`, `Card_GetParams`, `Option_GetParams`,
 /// `Clock_GetParams` tints, in the order of the `TINT_*` ids.
-const TINTS: [[i16; 3]; 5] = [[0, -90, 20], [-45, -40, 50], [-30, 20, -50], [40, 20, -50], [80, 0, -60]];
+const TINTS: [[i16; 4]; 5] = [[0, -90, 20, 255], [-45, -40, 50, 255], [-30, 20, -50, 255], [40, 20, -50, 255], [80, 0, -60, 255]];
 
 impl IconData {
     pub fn load(ipl: &Ipl) -> Option<IconData> {
         let model = Prepared::new(Model::parse(&ipl.resource(RES_CUBE).ok()?).ok()?);
-        let base = model.shader(0)?.clone();
-        let shaders = TINTS
-            .iter()
-            .map(|t| {
-                let mut s = base.clone();
-                s.set_reg(0, [t[0] as f32 / 255.0, t[1] as f32 / 255.0, t[2] as f32 / 255.0, 1.0]);
-                s
-            })
-            .collect();
         let cells = Ipl::ram_to_rom(OPTION_PICTURE_RAM)
             .and_then(|o| ipl.rom().get(o..o + 72))
             .filter(|b| b.iter().all(|&c| c <= 1))
@@ -71,16 +62,34 @@ impl IconData {
             .filter(|&(_, &c)| c != 0)
             .map(|(k, _)| [(k % 9) as f32 * 20.0 - 80.0, 70.0 - (k / 9) as f32 * 20.0])
             .collect();
-        Some(IconData { model, shaders, picture })
+        Some(IconData { model, picture })
     }
 
-    /// Queue one cube: `m` is its model-to-world matrix (scale included).
-    fn cube<'a>(&'a self, list: &mut Vec<Prim<'a>>, tint: usize, m: &Mtx, view: &View, alpha: i16) {
+    /// `J3D_InitModel` (or `J3D_CopyInstance`) of one cube.
+    fn instance(&self) -> Instance {
+        Instance::new(&self.model.model)
+    }
+
+    /// One cube's part of `*Icon_CalcMtx`: `J3D_SetModelMtx(m, scale)`,
+    /// `J3D_SetViewMtx(Camera_GetView())`, `J3D_CalcJoints`.
+    fn calc(&self, inst: &mut Instance, m: &Mtx, scale: f32, view: &Mtx) {
+        gmr::set_model_mtx(inst, m, [scale; 3]);
+        gmr::set_view_mtx(inst, view);
+        gmr::calc_joints(&self.model.model, inst);
+    }
+
+    /// `J3D_Draw` of one cube with a tint (`model->material->tevColor`
+    /// swapped for the draw). The Options and Calendar icons draw their
+    /// cubes at alpha 0 too; that draws nothing (alpha below 255 also
+    /// turns z off), so every icon skips them.
+    fn draw<'a>(&'a self, gx: &mut Gx<'a>, inst: &Instance, tint: usize, alpha: i16) {
         if alpha <= 0 {
             return;
         }
-        let o = DrawOpts { alpha: alpha.min(255) as u8, ..Default::default() };
-        render::draw_model_with(list, &self.model, self.shaders.get(tint), m, view, &o);
+        let mut inst = inst.clone();
+        inst.alpha = alpha.min(255) as u8;
+        inst.tev_color.extend(TINTS.get(tint).map(|&c| (0, 0, c)));
+        gmr::draw(gx, &self.model, &mut inst);
     }
 }
 
@@ -117,6 +126,8 @@ struct RingCube {
 }
 
 pub struct GameIcon {
+    /// `sGameIconInst`.
+    inst: Vec<Instance>,
     cubes: [RingCube; 16],
     frame: i16,
     rx: i16,
@@ -128,19 +139,19 @@ pub struct GameIcon {
 
 impl GameIcon {
     /// GameIcon_Init + GameIcon_InitRing.
-    pub fn new() -> GameIcon {
+    pub fn new(d: &IconData) -> GameIcon {
         let cubes = core::array::from_fn(|i| RingCube {
             start: i as i16 * 10,
             end: i as i16 * 10 + 20,
             angle: (i as i32) << 12,
             ..Default::default()
         });
-        GameIcon { cubes, frame: 0, rx: 0, rz: 0, spin: 0, drx: 100, drz: 50 }
+        GameIcon { inst: (0..16).map(|_| d.instance()).collect(), cubes, frame: 0, rx: 0, rz: 0, spin: 0, drx: 100, drz: 50 }
     }
 
-    pub fn update(&mut self, phase: Phase, s: &SinTable) {
+    pub fn update(&mut self, phase: Phase) {
         match phase {
-            Phase::Face => self.update_face(s),
+            Phase::Face => self.update_face(),
             Phase::Enter => self.update_enter(),
             Phase::Hide => self.update_hide(),
         }
@@ -148,7 +159,7 @@ impl GameIcon {
 
     /// GameIcon_UpdateFace: one cube after another grows out to the ring
     /// while the ring spins; once complete it also tumbles.
-    fn update_face(&mut self, s: &SinTable) {
+    fn update_face(&mut self) {
         let f = self.frame;
         for c in &mut self.cubes {
             if f > c.start && f < c.end {
@@ -163,8 +174,8 @@ impl GameIcon {
                 c.alpha = 255;
             }
             let a = c.angle - self.spin as i32;
-            c.x = c.r as f32 * s.sin(a);
-            c.y = c.r as f32 * s.cos(a);
+            c.x = c.r as f32 * sin_s(a);
+            c.y = c.r as f32 * cos_s(a);
         }
         self.frame += 1;
         self.spin = self.spin.wrapping_add(0x199);
@@ -230,14 +241,33 @@ impl GameIcon {
         self.cubes.iter().all(|c| c.x == 0.0 && c.y == 0.0)
     }
 
-    /// GameIcon_CalcMtx + GameIcon_Draw: `cube · RotX(-90°) · R(rx, 0, rz)
-    /// · T(x, y, 0) · S(0.65)`, in the plane of the top face.
-    pub fn draw<'a>(&self, list: &mut Vec<Prim<'a>>, d: &'a IconData, view: &View, cube: &Mtx, s: &SinTable) {
-        let base = mtx::concat(cube, &mtx::rot_trans(s, -0x4000, 0, 0, [0.0; 3]));
-        let base = mtx::concat(&base, &mtx::rot_trans(s, self.rx as i32, 0, self.rz as i32, [0.0; 3]));
-        for c in &self.cubes {
-            let m = mtx::concat(&base, &mtx::concat(&mtx::trans(c.x, c.y, 0.0), &mtx::scale(GAME_SCALE, GAME_SCALE, GAME_SCALE)));
-            d.cube(list, TINT_GAME, &m, view, c.alpha);
+    /// GameIcon_CalcMtx (0x813235D4): `cube · RotX(-90°) · R(rx, 0, rz) ·
+    /// T(x, y, 0)`, scaled 0.65, in the plane of the top face.
+    pub fn calc_mtx(&mut self, d: &IconData, cube: &Mtx, view: &Mtx) {
+        for (c, inst) in self.cubes.iter().zip(&mut self.inst) {
+            let mut m = psmtx::trans(c.x, c.y, 0.0);
+            let rot = mtx::rot_trans(self.rx as i32, 0, self.rz as i32, [0.0; 3]);
+            m = psmtx::concat(&rot, &m);
+            let rot = mtx::rot_trans(-0x4000, 0, 0, [0.0; 3]);
+            m = psmtx::concat(&rot, &m);
+            m = psmtx::concat(cube, &m);
+            d.calc(inst, &m, GAME_SCALE, view);
+        }
+    }
+
+    /// GameIcon_Draw (0x8132373C): once the ring is complete it is drawn
+    /// back to front.
+    pub fn draw<'a>(&self, gx: &mut Gx<'a>, d: &'a IconData) {
+        let one = |gx: &mut Gx<'a>, i: usize| d.draw(gx, &self.inst[i], TINT_GAME, self.cubes[i].alpha);
+        if self.frame < GAME_BUILD {
+            for i in 0..16 {
+                one(gx, i);
+            }
+        } else {
+            for i in 0..8 {
+                one(gx, 7 - i);
+                one(gx, i + 8);
+            }
         }
     }
 }
@@ -248,7 +278,7 @@ impl GameIcon {
 
 /// `CardParams`: cube scale, collapse speed, fade speed.
 const CARD_SCALE: f32 = 0.7;
-const CARD_SHRINK: f32 = 5.0;
+const CARD_SHRINK: i16 = 5;
 const CARD_FADE: i16 = 13;
 /// Fade of every cube while another face shows.
 const CARD_HIDE_FADE: i16 = 10;
@@ -260,7 +290,6 @@ const CARD_LOOP: (i32, i32) = (210, 490);
 const CARD_WAVES: [(i32, i32, i32); 3] = [(150, 195, 0), (300, 345, 0), (440, 485, 10)];
 /// The label fades in from this frame, in diagonal steps.
 const CARD_LABEL_FROM: i32 = 340;
-const CARD_LABEL: [&[usize]; 6] = [&[7], &[8, 13], &[9, 14, 19], &[10, 15, 20], &[16, 21], &[22]];
 /// Group yaw over the loop: frame (from 210) and angle at each segment end.
 const CARD_YAW: [(i32, i32); 6] = [(0, 0), (50, -8000), (90, 32768), (140, 32768), (190, 40768), (230, 0)];
 
@@ -280,29 +309,31 @@ struct CardCube {
 }
 
 pub struct CardIcon {
+    /// `sCardIconInst`.
+    inst: Vec<Instance>,
     cubes: [CardCube; 36],
     frame: i32,
     yaw: i16,
-    rand: u32,
+    settled: bool,
 }
 
 impl CardIcon {
     /// CardIcon_Init + CardIcon_InitGrid.
-    pub fn new() -> CardIcon {
+    pub fn new(d: &IconData) -> CardIcon {
         let cubes = core::array::from_fn(|i| CardCube {
             target: [(i % 6) as f32 * 20.0 - 50.0, 50.0 - (i / 6) as f32 * 20.0],
             ..Default::default()
         });
-        let mut c = CardIcon { cubes, frame: 0, yaw: 0, rand: 1 };
+        let mut c = CardIcon { inst: (0..36).map(|_| d.instance()).collect(), cubes, frame: 0, yaw: 0, settled: false };
         c.roll();
         c
     }
 
-    /// Each cube flies out over 20 frames from a random start in 0..31.
+    /// CardIcon_RandomStarts: each cube flies out over 20 frames from a
+    /// random start in 0..31.
     fn roll(&mut self) {
         for i in 0..36 {
-            self.rand = self.rand.wrapping_mul(1103515245).wrapping_add(12345);
-            let start = (self.rand >> 16) as i32 & 31;
+            let start = (rnd::rand() & 0x1F) as i16 as i32;
             self.cubes[i].start = start;
             self.cubes[i].end = start + 20;
         }
@@ -332,7 +363,7 @@ impl CardIcon {
                     } else if f >= c.end {
                         c.target[k]
                     } else {
-                        mtx::hermite(f as f32, t0, 0.0, c.target[k] / (t1 - t0), t1, c.target[k], 0.0)
+                        gbase::hermite(f as f32, t0, 0.0, c.target[k] / (t1 - t0), t1, c.target[k], 0.0)
                     };
                 }
                 c.pos[2] = 0.0;
@@ -364,41 +395,87 @@ impl CardIcon {
                 _ => 0,
             };
         }
-        if f >= CARD_LABEL_FROM {
-            let mut prev_ready = true;
-            for group in CARD_LABEL {
-                if prev_ready {
-                    for &i in group {
-                        self.cubes[i].alpha = (self.cubes[i].alpha + 30).clamp(0, 255);
-                    }
-                }
-                prev_ready = prev_ready && group.iter().all(|&i| self.cubes[i].alpha > 100);
-            }
-        } else {
-            for (i, c) in self.cubes.iter_mut().enumerate() {
-                if card_inner(i) {
-                    c.alpha = (c.alpha - 15).max(0);
-                }
-            }
-        }
+        self.fade_inner(f >= CARD_LABEL_FROM);
         if (CARD_LOOP.0..=CARD_LOOP.1).contains(&f) {
             let u = f - CARD_LOOP.0;
             self.yaw = match CARD_YAW.windows(2).find(|w| u < w[1].0) {
-                Some(w) => mtx::to_s16(mtx::hermite(u as f32, w[0].0 as f32, w[0].1 as f32, 0.0, w[1].0 as f32, w[1].1 as f32, 0.0)),
+                Some(w) => mtx::to_s16(gbase::hermite(u as f32, w[0].0 as f32, w[0].1 as f32, 0.0, w[1].0 as f32, w[1].1 as f32, 0.0)),
                 None => 0,
             };
         }
         self.frame = if f + 1 > CARD_LOOP.1 { CARD_LOOP.0 } else { f + 1 };
     }
 
-    /// CardIcon_UpdateEnter: everything shrinks to the centre and fades.
-    fn update_enter(&mut self) {
-        for c in &mut self.cubes {
-            c.alpha = (c.alpha - CARD_FADE).max(0);
-            for p in &mut c.pos {
-                *p = toward_zero(*p, CARD_SHRINK);
+    /// CardIcon_AddAlpha.
+    fn add_alpha(&mut self, i: usize, step: i16) {
+        let a = &mut self.cubes[i].alpha;
+        *a = (*a + step).clamp(0, 255);
+    }
+
+    /// CardIcon_FadeInner (0x81321F60): the label fades in one diagonal
+    /// after the other, and back out all at once.
+    fn fade_inner(&mut self, fade_in: bool) {
+        let a = |c: &Self, i: usize| c.cubes[i].alpha;
+        if fade_in {
+            self.add_alpha(7, 30);
+            if a(self, 7) > 100 {
+                self.add_alpha(8, 30);
+                self.add_alpha(13, 30);
+            }
+            if a(self, 8) > 100 {
+                self.add_alpha(9, 30);
+                self.add_alpha(14, 30);
+                self.add_alpha(19, 30);
+            }
+            if a(self, 9) > 100 {
+                self.add_alpha(10, 30);
+                self.add_alpha(15, 30);
+                self.add_alpha(20, 30);
+            }
+            if a(self, 10) > 100 {
+                self.add_alpha(16, 30);
+                self.add_alpha(21, 30);
+            }
+            if a(self, 16) > 100 {
+                self.add_alpha(22, 30);
+            }
+        } else {
+            for i in [7, 8, 13, 9, 14, 19, 10, 15, 20, 16, 21, 22] {
+                self.add_alpha(i, -15);
             }
         }
+    }
+
+    /// CardIcon_UpdateEnter (0x81322EE8): everything shrinks to the centre
+    /// and fades. The positions go through an `s16` on the way, so they
+    /// lose their fractions.
+    fn update_enter(&mut self) {
+        let mut settled = 0;
+        for c in &mut self.cubes {
+            c.alpha -= CARD_FADE;
+            if c.alpha < 0 {
+                c.alpha = 0;
+            }
+            for p in &mut c.pos {
+                let mut v = *p as i16;
+                if v > 0 {
+                    v -= CARD_SHRINK;
+                    if v < 0 {
+                        v = 0;
+                    }
+                } else if v < 0 {
+                    v += CARD_SHRINK;
+                    if v > 0 {
+                        v = 0;
+                    }
+                }
+                *p = v as f32;
+                if v == 0 && c.alpha == 0 {
+                    settled += 1;
+                }
+            }
+        }
+        self.settled = settled == 36 * 3;
         self.frame = 0;
         self.yaw = 0;
     }
@@ -406,28 +483,42 @@ impl CardIcon {
     /// CardIcon_UpdateHide: fade out where the cubes are.
     fn update_hide(&mut self) {
         for c in &mut self.cubes {
-            c.alpha = (c.alpha - CARD_HIDE_FADE).max(0);
+            c.alpha -= CARD_HIDE_FADE;
+            if c.alpha < 0 {
+                c.alpha = 0;
+            }
         }
         self.frame = 0;
         self.yaw = 0;
     }
 
-    /// CardIcon_IsSettled: every cube invisible and at the centre.
+    /// CardIcon_IsSettled: whether the last UpdateEnter left every cube
+    /// invisible and at the centre.
     pub fn settled(&self) -> bool {
-        self.cubes.iter().all(|c| c.alpha == 0 && c.pos == [0.0; 3])
+        self.settled
     }
 
-    /// CardIcon_CalcMtx + CardIcon_Draw: `cube · RotX(90°) · RotY(yaw) ·
-    /// T(pos) · R(flip, flip, 0) · S`, on the bottom face. Label cubes are
-    /// half size.
-    pub fn draw<'a>(&self, list: &mut Vec<Prim<'a>>, d: &'a IconData, view: &View, cube: &Mtx, s: &SinTable) {
-        let base = mtx::concat(cube, &mtx::rot_trans(s, 0x4000, 0, 0, [0.0; 3]));
-        let base = mtx::concat(&base, &mtx::rot_trans(s, 0, self.yaw as i32, 0, [0.0; 3]));
-        for (i, c) in self.cubes.iter().enumerate() {
-            let k = if card_inner(i) { CARD_SCALE * 0.5 } else { CARD_SCALE };
+    /// CardIcon_CalcMtx (0x81322A18): `cube · RotX(90°) · RotY(yaw) ·
+    /// T(pos) · R(flip, flip, 0)`, on the bottom face. Label cubes are half
+    /// size.
+    pub fn calc_mtx(&mut self, d: &IconData, cube: &Mtx, view: &Mtx) {
+        let tilt = mtx::rot_trans(0x4000, 0, 0, [0.0; 3]);
+        for (i, (c, inst)) in self.cubes.iter().zip(&mut self.inst).enumerate() {
             let a = c.flip as i32;
-            let m = mtx::concat(&base, &mtx::concat(&mtx::rot_trans(s, a, a, 0, c.pos), &mtx::scale(k, k, k)));
-            d.cube(list, TINT_CARD, &m, view, c.alpha);
+            let mut m = mtx::rot_trans(a, a, 0, c.pos);
+            let rot = mtx::rot(0, self.yaw as i32, 0);
+            m = psmtx::concat(&rot, &m);
+            m = psmtx::concat(&tilt, &m);
+            m = psmtx::concat(cube, &m);
+            let k = if card_inner(i) { CARD_SCALE / 2.0 } else { CARD_SCALE };
+            d.calc(inst, &m, k, view);
+        }
+    }
+
+    /// CardIcon_Draw (0x81322C8C).
+    pub fn draw<'a>(&self, gx: &mut Gx<'a>, d: &'a IconData) {
+        for (c, inst) in self.cubes.iter().zip(&self.inst) {
+            d.draw(gx, inst, TINT_CARD, c.alpha);
         }
     }
 }
@@ -458,6 +549,8 @@ const CLOCK_HOUR: core::ops::Range<usize> = 9..12;
 const CLOCK_SEC: usize = 12;
 
 pub struct ClockIcon {
+    /// `sClockDial`, `sClockMin`, `sClockHour`, `sClockSec`.
+    inst: Vec<Instance>,
     pos: [[f32; 2]; 13],
     alpha: [i16; 13],
     frame: i16,
@@ -465,14 +558,14 @@ pub struct ClockIcon {
 }
 
 impl ClockIcon {
-    pub fn new() -> ClockIcon {
-        ClockIcon { pos: [[0.0; 2]; 13], alpha: [0; 13], frame: 0, settled: false }
+    pub fn new(d: &IconData) -> ClockIcon {
+        ClockIcon { inst: (0..13).map(|_| d.instance()).collect(), pos: [[0.0; 2]; 13], alpha: [0; 13], frame: 0, settled: false }
     }
 
     /// `time` is year, month, day, hour, minute, second.
-    pub fn update(&mut self, phase: Phase, s: &SinTable, time: &[i32; 6]) {
+    pub fn update(&mut self, phase: Phase, time: &[i32; 6]) {
         match phase {
-            Phase::Face => self.update_face(s, time),
+            Phase::Face => self.update_face(time),
             Phase::Enter => self.update_enter(),
             Phase::Hide => self.update_hide(),
         }
@@ -481,7 +574,7 @@ impl ClockIcon {
     /// ClockIcon_UpdateFace: the dial fades in, then the hands grow out
     /// from the centre; the hands follow the clock. Angles are negative
     /// because the face is mirrored (it sits on the cube's side).
-    fn update_face(&mut self, s: &SinTable, time: &[i32; 6]) {
+    fn update_face(&mut self, time: &[i32; 6]) {
         self.frame = (self.frame + 1).min(CLOCK_DONE);
         let f = self.frame as i32;
         let (hour, min, sec) = (time[3], time[4], time[5]);
@@ -494,18 +587,18 @@ impl ClockIcon {
         for i in 0..5 {
             self.alpha[i] = (dial * 255 / CLOCK_DIAL_IN as i32) as u8 as i16;
             let (r, a) = if i == 0 { (0.0, 0) } else { (CLOCK_RIM, (i as i32 - 1) * 0x4000) };
-            self.pos[i] = [r * s.sin(a), r * s.cos(a)];
+            self.pos[i] = [r * sin_s(a), r * cos_s(a)];
         }
         let hand_alpha = (g * 255 / 10) as u8 as i16;
         for (range, a) in [(CLOCK_MIN, min_a), (CLOCK_HOUR, hour_a)] {
             for (j, i) in range.enumerate() {
                 self.alpha[i] = hand_alpha;
                 let r = (20 * (j as i32 + 1) * g) as f32;
-                self.pos[i] = [r * s.sin(a) / 10.0, r * s.cos(a) / 10.0];
+                self.pos[i] = [r * sin_s(a) / 10.0, r * cos_s(a) / 10.0];
             }
         }
         self.alpha[CLOCK_SEC] = hand_alpha;
-        self.pos[CLOCK_SEC] = [CLOCK_RIM * s.sin(sec_a), CLOCK_RIM * s.cos(sec_a)];
+        self.pos[CLOCK_SEC] = [CLOCK_RIM * sin_s(sec_a), CLOCK_RIM * cos_s(sec_a)];
     }
 
     /// ClockIcon_UpdateEnter: everything shrinks to the centre and fades.
@@ -544,23 +637,31 @@ impl ClockIcon {
         self.settled
     }
 
-    /// ClockIcon_CalcMtx + ClockIcon_Draw: `cube · RotY(-90°) · T(x, y, 0)
-    /// · S`, on the right face. The dial and the seconds cube scale in with
-    /// the frame count; the dial has its own tint.
-    pub fn draw<'a>(&self, list: &mut Vec<Prim<'a>>, d: &'a IconData, view: &View, cube: &Mtx, s: &SinTable) {
-        let base = mtx::concat(cube, &mtx::rot_trans(s, 0, -0x4000, 0, [0.0; 3]));
-        let f = self.frame as f32;
+    /// ClockIcon_CalcMtx (0x81326808): `cube · RotY(-90°) · T(x, y, 0)`,
+    /// on the right face. The dial and the seconds cube scale in with the
+    /// frame count.
+    pub fn calc_mtx(&mut self, d: &IconData, cube: &Mtx, view: &Mtx) {
+        let rot = mtx::rot_trans(0, -0x4000, 0, [0.0; 3]);
+        let base = psmtx::concat(cube, &rot);
+        let n = self.frame;
+        let hand_t = if n > CLOCK_HANDS_FROM { n - CLOCK_HANDS_FROM } else { 0 };
         for i in 0..13 {
-            let (k, tint) = match i {
-                0..=4 => (CLOCK_DIAL_SCALE * f.min(CLOCK_DIAL_IN as f32) / CLOCK_DIAL_IN as f32, TINT_CLOCK_DIAL),
-                CLOCK_SEC => (CLOCK_HAND_SCALE * (f - CLOCK_HANDS_FROM as f32).max(0.0) / 10.0, TINT_CLOCK),
-                _ => (CLOCK_HAND_SCALE, TINT_CLOCK),
+            let t = psmtx::trans(self.pos[i][0], self.pos[i][1], 0.0);
+            let m = psmtx::concat(&base, &t);
+            let k = match i {
+                0..=4 => CLOCK_DIAL_SCALE * n.min(CLOCK_DIAL_IN) as f32 / CLOCK_DIAL_IN as f32,
+                CLOCK_SEC => CLOCK_HAND_SCALE * hand_t as f32 / 10.0,
+                _ => CLOCK_HAND_SCALE,
             };
-            if k <= 0.0 {
-                continue;
-            }
-            let m = mtx::concat(&base, &mtx::concat(&mtx::trans(self.pos[i][0], self.pos[i][1], 0.0), &mtx::scale(k, k, k)));
-            d.cube(list, tint, &m, view, self.alpha[i]);
+            d.calc(&mut self.inst[i], &m, k, view);
+        }
+    }
+
+    /// ClockIcon_Draw (0x81326CA4): the dial has its own tint.
+    pub fn draw<'a>(&self, gx: &mut Gx<'a>, d: &'a IconData) {
+        for i in 0..13 {
+            let tint = if i < 5 { TINT_CLOCK_DIAL } else { TINT_CLOCK };
+            d.draw(gx, &self.inst[i], tint, self.alpha[i]);
         }
     }
 }
@@ -598,6 +699,8 @@ pub struct OptionIcon {
     frame_cubes: [OptionCube; 30],
     /// One cube per set cell of the picture.
     picture: Vec<OptionCube>,
+    /// `sOptRing` then `sOptShape`.
+    inst: Vec<Instance>,
     f: i16,
     settled: bool,
 }
@@ -607,8 +710,9 @@ fn option_slot(k: usize) -> [f32; 2] {
 }
 
 impl OptionIcon {
-    pub fn new() -> OptionIcon {
-        OptionIcon { frame_cubes: [OptionCube::default(); 30], picture: Vec::new(), f: 0, settled: false }
+    pub fn new(d: &IconData) -> OptionIcon {
+        let inst = (0..30 + d.picture.len()).map(|_| d.instance()).collect();
+        OptionIcon { frame_cubes: [OptionCube::default(); 30], picture: Vec::new(), inst, f: 0, settled: false }
     }
 
     /// OptionIcon_ResetShape: the frame edges at their places, corners in
@@ -662,13 +766,13 @@ impl OptionIcon {
         if f == 0 {
             self.reset_shape(d);
         }
-        let h = |t: i16, p0: f32, p1: f32, d: f32| mtx::hermite(t as f32, 0.0, p0, 0.0, d, p1, 0.0);
+        let h = |t: i16, p0: f32, p1: f32, d: f32| gbase::hermite(t as f32, 0.0, p0, 0.0, d, p1, 0.0);
         match f {
             0..=19 => {
                 for i in OPTION_CORNERS {
                     let c = &mut self.frame_cubes[i];
                     c.base = [0.0; 2];
-                    c.alpha += 6;
+                    c.alpha = (c.alpha + 6).clamp(0, 255);
                 }
                 self.snap();
             }
@@ -678,9 +782,9 @@ impl OptionIcon {
                     let to = option_slot(k);
                     let c = &mut self.frame_cubes[i];
                     for a in 0..2 {
-                        c.base[a] = mtx::hermite(t, 0.0, 0.0, (to[a] as i32 / 20) as f32, 20.0, to[a], 0.0);
+                        c.base[a] = gbase::hermite(t, 0.0, 0.0, (to[a] as i32 / 20) as f32, 20.0, to[a], 0.0);
                     }
-                    c.alpha += 6;
+                    c.alpha = (c.alpha + 6).clamp(0, 255);
                 }
                 self.snap();
             }
@@ -691,7 +795,7 @@ impl OptionIcon {
                     let c = &mut self.frame_cubes[i];
                     for a in 0..2 {
                         let v = ((to[a] - from[a]) as i32 / 30) as f32;
-                        c.base[a] = mtx::hermite(t, 0.0, from[a], v, 30.0, to[a], 0.0);
+                        c.base[a] = gbase::hermite(t, 0.0, from[a], v, 30.0, to[a], 0.0);
                     }
                     c.alpha = (c.alpha + 6).min(255);
                     let [x, y] = c.base;
@@ -809,15 +913,29 @@ impl OptionIcon {
         self.settled
     }
 
-    /// OptionIcon_CalcMtx + OptionIcon_Draw: frame cubes `face · T(cur) ·
-    /// R(rot) · S`, picture cubes `face · T(cur) · S`, on the left face.
-    pub fn draw<'a>(&self, list: &mut Vec<Prim<'a>>, d: &'a IconData, view: &View, cube: &Mtx, s: &SinTable) {
-        let base = mtx::concat(cube, &mtx::rot_trans(s, 0, -0x4000, 0, [0.0; 3]));
-        let k = mtx::scale(OPTION_SCALE, OPTION_SCALE, OPTION_SCALE);
-        for c in self.frame_cubes.iter().chain(&self.picture) {
-            let r = mtx::rot_trans(s, c.rot[0] as i32, c.rot[1] as i32, 0, [c.cur[0], c.cur[1], 0.0]);
-            let m = mtx::concat(&base, &mtx::concat(&r, &k));
-            d.cube(list, TINT_OPTION, &m, view, c.alpha);
+    /// OptionIcon_CalcMtx (0x81325960): frame cubes `cube · RotY(-90°) ·
+    /// T(cur) · R(rot)`, picture cubes `cube · RotY(-90°) · T(cur)`, scaled
+    /// 0.67, on the left face.
+    pub fn calc_mtx(&mut self, d: &IconData, cube: &Mtx, view: &Mtx) {
+        let rot = mtx::rot_trans(0, -0x4000, 0, [0.0; 3]);
+        let base = psmtx::concat(cube, &rot);
+        let (ring, shape) = self.inst.split_at_mut(30);
+        for (c, inst) in self.frame_cubes.iter().zip(ring) {
+            let t = mtx::rot_trans(c.rot[0] as i32, c.rot[1] as i32, 0, [c.cur[0], c.cur[1], 0.0]);
+            let m = psmtx::concat(&base, &t);
+            d.calc(inst, &m, OPTION_SCALE, view);
+        }
+        for (c, inst) in self.picture.iter().zip(shape) {
+            let t = psmtx::trans(c.cur[0], c.cur[1], 0.0);
+            let m = psmtx::concat(&base, &t);
+            d.calc(inst, &m, OPTION_SCALE, view);
+        }
+    }
+
+    /// OptionIcon_Draw (0x81325B48).
+    pub fn draw<'a>(&self, gx: &mut Gx<'a>, d: &'a IconData) {
+        for (c, inst) in self.frame_cubes.iter().chain(&self.picture).zip(&self.inst) {
+            d.draw(gx, inst, TINT_OPTION, c.alpha);
         }
     }
 }

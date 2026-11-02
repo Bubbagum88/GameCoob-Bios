@@ -9,10 +9,15 @@ extern crate alloc;
 
 mod boot_intro;
 mod bs2;
+// Used by the memory card explorer and card backend (next steps).
+#[allow(dead_code, unused_imports)]
+mod card;
 mod clock;
 mod firmware;
 mod gfx;
+mod input;
 mod ipl;
+mod sdk;
 mod vars;
 
 use core::time::Duration;
@@ -24,6 +29,9 @@ fn main() -> Status {
     uefi::helpers::init().unwrap();
     // The firmware's 5-minute watchdog would reset us while idling in the menu.
     let _ = boot::set_watchdog_timer(0, 0x10000, None);
+    // BS2Main builds the sine table first thing (SinTableInit(12), RandInit).
+    bs2::mtx::sin_table_init(12);
+    bs2::rnd::rand_init();
 
     // Checked before taking the screen, so the text console can still say why.
     let Some((assets, menu_assets)) = boot_intro::load() else {

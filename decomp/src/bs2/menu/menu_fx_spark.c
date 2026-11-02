@@ -122,12 +122,34 @@ void fn_81334928(void) {
     }
 }
 
-static inline f32 FxMod(f32 x, f32 y) {
-    f32 m = y;
-    u64 n;
-    s64 k;
+/* The two wraps in fn_8133498C were written differently: this one compares
+   through a double helper and casts straight to s64, the other takes both
+   magnitudes first and goes through u64. Each form gives its own FPR order. */
+static inline f64 FxAbs(f64 v) {
+    return __fabs(v);
+}
 
-    if (__fabs(m) > __fabs(x)) {
+static inline f32 FxMod(f32 x, f32 y) {
+    f32 m;
+
+    m = y;
+    if (FxAbs(m) > FxAbs(x)) {
+        return x;
+    }
+    return x - m * (s64)(x / m);
+}
+
+static inline f32 FxWrap(f32 x, f32 y) {
+    u64 n;
+    f64 am;
+    s64 k;
+    f64 ax;
+    f32 m;
+
+    ax = __fabs(x);
+    m = y;
+    am = __fabs(m);
+    if (am > ax) {
         return x;
     }
     n = x / m;
@@ -137,13 +159,20 @@ static inline f32 FxMod(f32 x, f32 y) {
 
 /* 0x8133498C: spark flight offsets and spin angles at time t (0..1). */
 void fn_8133498C(f32 *dx, f32 *dy, u16 *rx, u16 *ry, f32 t) {
-    f32 px;
     f32 py;
+    f32 q;
+    f32 px;
     f32 pr;
 
-    px = fn_81334BA8(t + Menu_Get()->fxC4 / 2.0f, 1.0f);
-    py = fn_81334BA8(0.25f + 2.0f * FxMod(t, 1.0f), 1.0f);
-    pr = FxMod(0.25f + t, 1.0f);
+    px = fn_81334BA8(Menu_Get()->fxC4 / 2.0f + t, 1.0f);
+    q = fn_81334BA8(0.25f + 2.0f * FxMod(t, 1.0f), 1.0f);
+    py = q;
+    {
+        f32 quarter;
+
+        quarter = 0.25f;
+        pr = FxWrap(quarter + t, 1.0f);
+    }
     *dx = fn_81334B40(Menu_Get()->fxC4, px, -Menu_Get()->fxB4, Menu_Get()->fxB4);
     *dy = fn_81334B40(0.5f, py, -Menu_Get()->fxB8, Menu_Get()->fxB8);
     *rx = fn_8132CB60(fn_81334B40(0.5f, pr, -Menu_Get()->fxBC, Menu_Get()->fxBC));

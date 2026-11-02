@@ -2,10 +2,13 @@
 //! `ipl.bin` is on the boot partition, and runs on into the rebuilt cube
 //! menu. Without a usable dump, `main` explains where to put it.
 
-use crate::bs2::menu::backend::{FakeCards, FakeDrive};
-use crate::bs2::menu::{Action, Menu, MenuAssets, Pad, SysInfo};
+use crate::bs2::bs2main::{Bs2Main, FrameInput};
+use crate::bs2::menu::backend::{FakeCards, FakeDrive, MemCards};
+use crate::bs2::menu::card_image::ImageCards;
+use crate::bs2::menu::{Action, MenuAssets, SysInfo};
 use alloc::boxed::Box;
-use crate::bs2::{Assets, Input, Intro, cube::Jingle, raster::{Job, Target, Work}, render};
+use crate::bs2::{Assets, raster::{Job, Target, Work}, render};
+use crate::input::{self, AppAction, KeyCode, Keyboard};
 use crate::clock::Clock;
 use crate::gfx::{Canvas, ResScale};
 use crate::ipl::Ipl;
@@ -28,6 +31,53 @@ fn read_dump() -> Option<Vec<u8>> {
     let sfs = boot::get_image_file_system(boot::image_handle()).ok()?;
     let mut fs = FileSystem::new(sfs);
     PATHS.iter().find_map(|p| fs.read(*p).ok())
+}
+
+/// Card images loaded into slots A and B at boot, on the partition
+/// GameCoob booted from. The first name found per slot is used.
+const CARD_PATHS: [[&uefi::CStr16; 3]; 2] = [
+    [cstr16!("\\EFI\\GameCoob\\cards\\slot-a.raw"), cstr16!("\\EFI\\GameCoob\\cards\\slot-a.mcp"), cstr16!("\\EFI\\GameCoob\\cards\\slot-a.gcp")],
+    [cstr16!("\\EFI\\GameCoob\\cards\\slot-b.raw"), cstr16!("\\EFI\\GameCoob\\cards\\slot-b.mcp"), cstr16!("\\EFI\\GameCoob\\cards\\slot-b.gcp")],
+];
+
+fn boot_fs() -> Option<FileSystem> {
+    boot::get_image_file_system(boot::image_handle()).ok().map(FileSystem::new)
+}
+
+/// Real cards when the boot partition holds card images, else the
+/// made-up stand-ins.
+fn load_cards() -> Box<dyn MemCards> {
+    let mut found = false;
+    let mut cards = ImageCards::new();
+    if let Some(mut fs) = boot_fs() {
+        for (slot, paths) in CARD_PATHS.iter().enumerate() {
+            if let Some((p, b)) = paths.iter().find_map(|p| fs.read(*p).ok().map(|b| (p, b))) {
+                log::info!("memory card in slot {}: {p}", ["A", "B"][slot]);
+                cards.insert(slot, p.to_string(), b);
+                found = true;
+            }
+        }
+    }
+    if found { Box::new(cards) } else { Box::new(FakeCards::new()) }
+}
+
+/// Write a changed card back to its file. The first write of a boot keeps
+/// the file as it was as `<name>.bak`.
+fn save_card(path: &str, bytes: &[u8], backed_up: &mut bool) {
+    let (Ok(p), Some(mut fs)) = (uefi::CString16::try_from(path), boot_fs()) else { return };
+    if !*backed_up {
+        let Ok(bak) = uefi::CString16::try_from(alloc::format!("{path}.bak").as_str()) else { return };
+        if let Ok(old) = fs.read(p.as_ref()) {
+            if let Err(e) = fs.write(bak.as_ref(), &old) {
+                log::warn!("{path}: no backup written ({e:?}); not saving the card");
+                return;
+            }
+        }
+        *backed_up = true;
+    }
+    if let Err(e) = fs.write(p.as_ref(), bytes) {
+        log::warn!("{path}: card not saved ({e:?})");
+    }
 }
 
 /// Load the dump and its intro and menu assets, if present and valid.
@@ -153,18 +203,21 @@ impl Cores {
     }
 }
 
-/// Run the intro at 60 logic frames per second, then the cube menu. Never
-/// returns: the menu's actions boot or reset.
+/// Run [`Bs2Main`] at 60 logic frames per second: the intro, then the cube
+/// menu. Never returns: the menu's actions boot or reset.
 ///
-/// Intro: Enter, Space or A is the A button (hold to spin the cube); Z at
-/// boot picks the easter-egg jingle; Escape skips to the menu.
-/// Menu: the arrows are the d-pad, Enter is A, Escape or Backspace is B and
-/// Space or S is START. F10 opens the system dialog (firmware setup,
-/// restart, power off); D opens and closes the stand-in disc drive's tray
-/// and 1 / 2 pull, format-break and re-insert the stand-in memory cards.
+/// Keys go through [`input::DEFAULT_KEYS`]: the arrows are the d-pad, Enter
+/// or A is A (hold to spin the cube), Escape or Backspace is B, Space or S is
+/// START, X / Y / Q / E are X, Y, L and R, and z (shift-Z: all four
+/// controllers) held at boot picks an easter-egg jingle. Escape also skips
+/// the intro. F10 opens the system dialog (firmware setup, restart, power
+/// off); D opens and closes the stand-in disc drive's tray, 1 / 2 pull,
+/// format-break and re-insert the stand-in memory cards (or pull and put
+/// back the card images), R is the
+/// console's reset switch and F3 shows frame timings.
 pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &Assets, ma: &MenuAssets) -> ! {
-    let mut intro = Intro::new(assets);
-    let mut menu: Option<Menu> = None;
+    let mut bs2 = Bs2Main::new(assets, Box::new(FakeDrive::new()), load_cards());
+    let mut backed_up = [false; 2];
     let cores = Cores::open();
     // Rendered at the screen's resolution, adjusted to keep 60 fps.
     let mut res = ResScale::new(cv);
@@ -176,56 +229,18 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
     let mut target = Target::new(render::EFB_W, render::EFB_H);
     let t0 = clock.now();
     let mut done_frames = 0u32;
-    let mut a_until = -1.0f32;
-    let mut egg: Option<Jingle> = None;
-
-    let mut pad = Pad::default();
+    let mut keys = Keyboard::new(input::DEFAULT_KEYS);
     let mut clock_at = 0.0;
 
     loop {
         let now = clock.now() - t0;
-        loop {
-            let key = match system::with_stdin(|i| i.read_key()) {
-                Ok(Some(k)) => k,
-                _ => break,
-            };
-            if menu.is_some() {
-                // Presses are latched until the next logic frame.
-                match key {
-                    Key::Printable(c) => match char::from(c) {
-                        '\r' => pad.a = true,
-                        '\u{8}' => pad.b = true,
-                        ' ' | 's' | 'S' => pad.start = true,
-                        'd' | 'D' => pad.eject = true,
-                        '1' => pad.slot[0] = true,
-                        '2' => pad.slot[1] = true,
-                        _ => {}
-                    },
-                    Key::Special(ScanCode::UP) => pad.up = true,
-                    Key::Special(ScanCode::DOWN) => pad.down = true,
-                    Key::Special(ScanCode::LEFT) => pad.left = true,
-                    Key::Special(ScanCode::RIGHT) => pad.right = true,
-                    Key::Special(ScanCode::ESCAPE) => pad.b = true,
-                    Key::Special(ScanCode::FUNCTION_10) => pad.system = true,
-                    Key::Special(ScanCode::FUNCTION_3) => show_stats = !show_stats,
-                    _ => {}
-                }
-                continue;
-            }
-            match key {
-                Key::Printable(c) => match char::from(c) {
-                    '\r' | ' ' | 'a' | 'A' => a_until = now + 0.15,
-                    'z' if intro.frame < 30 => egg = Some(Jingle::Pad1Z),
-                    'Z' if intro.frame < 30 => egg = Some(Jingle::AllPadsZ),
-                    _ => {}
-                },
-                Key::Special(ScanCode::ESCAPE) => {
-                    // Skip straight to the menu.
-                    while !intro.finished() {
-                        intro.update(Input { a: false, egg: None });
-                    }
-                }
-                _ => {}
+        while let Ok(Some(key)) = system::with_stdin(|i| i.read_key()) {
+            let Some(k) = key_code(key) else { continue };
+            keys.press(k, now);
+            // The easter eggs: Z pressed while the cube falls stays held
+            // until the menu, so the jingle can see it.
+            if matches!(k, KeyCode::Char('z' | 'Z')) && bs2.menu.is_none() && bs2.intro.frame < 30 {
+                keys.latch(k);
             }
         }
         // Catch logic up to real time, drawing only the latest frame.
@@ -234,25 +249,37 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
         while done_frames < due {
             done_frames += 1;
             stepped = true;
-            if let Some(m) = &mut menu {
-                if let Some(act) = m.update(&pad, &intro.sin) {
-                    if let Some(msg) = perform(act) {
+            let mut input = FrameInput { pads: keys.pads(now), ..FrameInput::default() };
+            for a in keys.take_actions() {
+                match a {
+                    AppAction::System => input.system = true,
+                    AppAction::Eject => input.eject = true,
+                    AppAction::Slot(s) => input.slot[s as usize & 1] = true,
+                    AppAction::Reset => input.reset = true,
+                    AppAction::SkipIntro if bs2.menu.is_none() => bs2.skip_intro(),
+                    AppAction::SkipIntro => {}
+                    AppAction::Stats => show_stats = !show_stats,
+                }
+            }
+            if let Some(act) = bs2.update(assets, ma, &input, sys_info) {
+                if let Some(msg) = perform(act) {
+                    if let Some(m) = &mut bs2.menu {
                         m.notify(msg);
                     }
                 }
-                m.tick_guide();
-                m.update_fx(ma, &intro.sin);
-                pad = Pad::default();
-                continue;
             }
-            intro.update(Input { a: now < a_until, egg });
-            if intro.finished() {
-                menu = Some(Menu::new(sys_info(), ma, Box::new(FakeDrive::new()), Box::new(FakeCards::new()), intro.wobble_frame, &intro.sin));
-                // Keys pressed during the intro don't leak into the menu.
-                pad = Pad::default();
+            if bs2.menu.is_some() {
+                keys.unlatch();
             }
         }
-        if let Some(m) = &mut menu {
+        if let Some(cards) = bs2.cards_mut() {
+            for slot in 0..2 {
+                if let Some((path, bytes)) = cards.take_changed(slot) {
+                    save_card(&path, &bytes, &mut backed_up[slot]);
+                }
+            }
+        }
+        if let Some(m) = &mut bs2.menu {
             if now - clock_at > 0.25 {
                 clock_at = now;
                 m.info.time = now_time();
@@ -274,7 +301,7 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
             target = Target::new(w, h);
         }
         let d0 = clock.now();
-        intro.render_with_menu(&mut target, assets, ma, menu.as_ref(), &par);
+        bs2.render(&mut target, assets, ma, &par);
         let d1 = clock.now();
         cv.blit_frame(&target.color, target.w, target.h, &|w| {
             run(w);
@@ -289,6 +316,24 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
     }
 }
 
+
+/// The firmware's key as a [`KeyCode`].
+fn key_code(key: Key) -> Option<KeyCode> {
+    Some(match key {
+        Key::Printable(c) => KeyCode::Char(char::from(c)),
+        Key::Special(ScanCode::UP) => KeyCode::Up,
+        Key::Special(ScanCode::DOWN) => KeyCode::Down,
+        Key::Special(ScanCode::LEFT) => KeyCode::Left,
+        Key::Special(ScanCode::RIGHT) => KeyCode::Right,
+        Key::Special(ScanCode::ESCAPE) => KeyCode::Esc,
+        Key::Special(s) if (ScanCode::FUNCTION_1.0..=ScanCode::FUNCTION_10.0).contains(&s.0) => {
+            KeyCode::F((s.0 - ScanCode::FUNCTION_1.0 + 1) as u8)
+        }
+        Key::Special(ScanCode::FUNCTION_11) => KeyCode::F(11),
+        Key::Special(ScanCode::FUNCTION_12) => KeyCode::F(12),
+        _ => return None,
+    })
+}
 
 /// Average frame timings, reported every couple of seconds.
 #[derive(Default)]

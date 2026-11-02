@@ -1,10 +1,21 @@
 //! A material's TEV stages compiled once into a compact form, and textures
 //! converted to float texels, so the per-pixel path is plain arithmetic.
-//! Semantics follow `Material::shade` (konst inputs read as 1.0).
+//! Semantics follow `Material::shade` (konst inputs read as 1.0 unless
+//! [`Shader::set_konst`] sets them).
+//!
+//! The rasterizer shades four pixels at once ([`Shader::eval4`],
+//! [`FastTex::sample4`]): one SIMD lane per pixel, with the same operations
+//! in the same order as the one-pixel versions, so results are identical.
 
 use crate::ipl::gx::{self, Texture};
-use crate::ipl::j3d::{Material, TevStage};
+use crate::ipl::j3d::{AlphaCompare, Material, TevStage};
 use alloc::vec::Vec;
+use wide::{f32x4, i32x4, CmpGt};
+
+type I4 = i32x4;
+
+/// Four pixels' worth of one value.
+pub type F4 = f32x4;
 
 pub struct FastTex {
     w: i32,
@@ -118,6 +129,77 @@ impl FastTex {
     }
 }
 
+impl FastTex {
+    /// [`FastTex::sample`] for four pixels; returns R, G, B, A.
+    #[inline]
+    pub fn sample4(&self, s: F4, t: F4) -> [F4; 4] {
+        let fx = s * F4::splat(self.w as f32) - F4::splat(0.5);
+        let fy = t * F4::splat(self.h as f32) - F4::splat(0.5);
+        let (x0, y0) = (floor4(fx), floor4(fy));
+        let (ax, ay) = (fx - x0, fy - y0);
+        let (x0, y0) = (x0.trunc_int(), y0.trunc_int());
+        let one = I4::splat(1);
+        let (xa, xb) = (wrap4(x0, self.w, self.wrap_s), wrap4(x0 + one, self.w, self.wrap_s));
+        let w = I4::splat(self.w);
+        let (ya, yb) = (wrap4(y0, self.h, self.wrap_t) * w, wrap4(y0 + one, self.h, self.wrap_t) * w);
+        let texel = |i: i32| F4::from(*self.texels.get(i as usize).unwrap_or(&[1.0; 4]));
+        // Four texels per corner, turned from RGBA per lane into one
+        // vector per channel.
+        let corner = |i: I4| {
+            let i = i.to_array();
+            F4::transpose([texel(i[0]), texel(i[1]), texel(i[2]), texel(i[3])])
+        };
+        let (a, b, c, d) = (corner(ya + xa), corner(ya + xb), corner(yb + xa), corner(yb + xb));
+        core::array::from_fn(|i| {
+            let top = a[i] + (b[i] - a[i]) * ax;
+            let bot = c[i] + (d[i] - c[i]) * ax;
+            top + (bot - top) * ay
+        })
+    }
+}
+
+/// [`floor`] on four lanes (SSE2 has no rounding instruction).
+#[inline(always)]
+fn floor4(x: F4) -> F4 {
+    let i = x.trunc_int().round_float();
+    i - (i.cmp_gt(x) & F4::splat(1.0))
+}
+
+/// [`wrap`] on four lanes.
+#[inline(always)]
+fn wrap4(i: I4, n: i32, mode: u8) -> I4 {
+    if n & (n - 1) == 0 {
+        return match mode {
+            gx::REPEAT => i & I4::splat(n - 1),
+            gx::MIRROR => {
+                let m = i & I4::splat(2 * n - 1);
+                m.cmp_gt(I4::splat(n - 1)).blend(I4::splat(2 * n - 1) - m, m)
+            }
+            _ => i.max(I4::splat(0)).min(I4::splat(n - 1)),
+        };
+    }
+    I4::from(i.to_array().map(|v| wrap(v, n, mode)))
+}
+
+/// Textures a [`Shader`] reads by index.
+pub trait Texs {
+    fn tex(&self, i: usize) -> Option<&FastTex>;
+}
+
+impl Texs for [FastTex] {
+    #[inline]
+    fn tex(&self, i: usize) -> Option<&FastTex> {
+        self.get(i)
+    }
+}
+
+impl Texs for [Option<&FastTex>] {
+    #[inline]
+    fn tex(&self, i: usize) -> Option<&FastTex> {
+        self.get(i).copied().flatten()
+    }
+}
+
 #[derive(Clone)]
 struct Stage {
     tex: Option<(usize, usize)>, // (texture index in model, texcoord)
@@ -127,6 +209,9 @@ struct Stage {
     cbias: f32,
     ascale: f32,
     abias: f32,
+    /// What GX_CC_KONST and GX_CA_KONST read (1.0 unless set).
+    kc: [f32; 3],
+    ka: f32,
 }
 
 #[derive(Clone)]
@@ -134,7 +219,7 @@ pub struct Shader {
     regs: [[f32; 4]; 4],
     stages: Vec<Stage>,
     alpha_always: bool,
-    mat_alpha_test: Material,
+    alpha_compare: AlphaCompare,
 }
 
 #[inline]
@@ -194,31 +279,34 @@ impl Shader {
                     cbias: bias(st.color_bias),
                     ascale: scale(st.alpha_scale),
                     abias: bias(st.alpha_bias),
+                    kc: [1.0; 3],
+                    ka: 1.0,
                 }
             })
             .collect();
         let ac = m.alpha_compare;
         let alpha_always = (ac.op == 1 && (ac.comp0 == 7 || ac.comp1 == 7)) || (ac.op == 0 && ac.comp0 == 7 && ac.comp1 == 7);
-        Shader { regs, stages, alpha_always, mat_alpha_test: m.clone() }
+        Shader { regs, stages, alpha_always, alpha_compare: ac }
     }
 
-    /// Replace the colour a material's `tev_colors[i]` loaded (0..2 are
-    /// TEVREG0..2, 3 is TEVPREV), RGBA 0..1.
-    pub fn set_reg(&mut self, i: usize, c: [f32; 4]) {
-        let r = if i == 3 { 0 } else { i + 1 };
-        if let Some(reg) = self.regs.get_mut(r) {
-            *reg = c;
+    /// Set the konst color and alpha stage `i` reads (`GXSetTevKColorSel`,
+    /// `GXSetTevKAlphaSel`).
+    pub fn set_konst(&mut self, i: usize, c: [f32; 3], a: f32) {
+        if let Some(s) = self.stages.get_mut(i) {
+            s.kc = c;
+            s.ka = a;
         }
     }
 
-    /// Run the stages. `tex(index, texcoord)` samples a model texture.
+    /// Run the stages over the textures in `texs` (a model's, or GX's
+    /// loaded maps).
     #[inline]
-    pub fn eval(&self, ras0: [f32; 4], uv: &[[f32; 2]], texs: &[FastTex]) -> Option<[f32; 4]> {
+    pub fn eval<T: Texs + ?Sized>(&self, ras0: [f32; 4], uv: &[[f32; 2]], texs: &T) -> Option<[f32; 4]> {
         let mut regs = self.regs;
         let mut last = 0usize;
         for s in &self.stages {
             let t = match s.tex {
-                Some((ti, tc)) => match (texs.get(ti), uv.get(tc)) {
+                Some((ti, tc)) => match (texs.tex(ti), uv.get(tc)) {
                     (Some(tx), Some(c)) => tx.sample(c[0], c[1]),
                     _ => [1.0; 4],
                 },
@@ -239,8 +327,9 @@ impl Shader {
                     9 => [t[3]; 4],
                     10 => r,
                     11 => [r[3]; 4],
-                    12 | 14 => [1.0; 4],
+                    12 => [1.0; 4],
                     13 => [0.5; 4],
+                    14 => return s.kc,
                     _ => [0.0; 4],
                 };
                 [v[0], v[1], v[2]]
@@ -250,7 +339,7 @@ impl Shader {
                     0..=3 => regs[id as usize][3],
                     4 => t[3],
                     5 => r[3],
-                    6 => 1.0,
+                    6 => s.ka,
                     _ => 0.0,
                 }
             };
@@ -281,9 +370,94 @@ impl Shader {
             last = cr;
         }
         let o = regs[last].map(c01);
-        if !self.alpha_always && !self.mat_alpha_test.alpha_test((o[3] * 255.0) as u8) {
+        if !self.alpha_always && !self.alpha_compare.test((o[3] * 255.0) as u8) {
             return None;
         }
         Some(o)
+    }
+
+    /// [`Shader::eval`] for four pixels: `ras0` and `uv` per channel and
+    /// coordinate. Returns R, G, B, A and which lanes pass the alpha test.
+    #[inline]
+    pub fn eval4<T: Texs + ?Sized>(&self, ras0: [F4; 4], uv: &[[F4; 2]], texs: &T) -> ([F4; 4], [bool; 4]) {
+        let (zero, one) = (F4::splat(0.0), F4::splat(1.0));
+        let c01 = |v: F4| v.max(zero).min(one);
+        let mut regs: [[F4; 4]; 4] = self.regs.map(|r| r.map(F4::splat));
+        let mut last = 0usize;
+        for s in &self.stages {
+            let t = match s.tex {
+                Some((ti, tc)) => match (texs.tex(ti), uv.get(tc)) {
+                    (Some(tx), Some(c)) => tx.sample4(c[0], c[1]),
+                    _ => [one; 4],
+                },
+                None => [one; 4],
+            };
+            let r = match s.ras {
+                0 => ras0,
+                1 => [one; 4],
+                _ => [zero; 4],
+            };
+            let kc = s.kc.map(F4::splat);
+            let cin = |id: u8, regs: &[[F4; 4]; 4]| -> [F4; 3] {
+                let v = match id {
+                    0 | 2 | 4 | 6 => regs[(id / 2) as usize],
+                    1 | 3 | 5 | 7 => [regs[(id / 2) as usize][3]; 4],
+                    8 => t,
+                    9 => [t[3]; 4],
+                    10 => r,
+                    11 => [r[3]; 4],
+                    12 => [one; 4],
+                    13 => [F4::splat(0.5); 4],
+                    14 => return kc,
+                    _ => [zero; 4],
+                };
+                [v[0], v[1], v[2]]
+            };
+            let ain = |id: u8, regs: &[[F4; 4]; 4]| -> F4 {
+                match id {
+                    0..=3 => regs[id as usize][3],
+                    4 => t[3],
+                    5 => r[3],
+                    6 => F4::splat(s.ka),
+                    _ => zero,
+                }
+            };
+            let st = &s.st;
+            let [ca, cb, cc, cd] = st.color_in.map(|id| cin(id, &regs));
+            let sub = st.color_op & 1 == 1;
+            let (lo, hi) = (F4::splat(-4.0), F4::splat(4.0));
+            let (cbias, cscale) = (F4::splat(s.cbias), F4::splat(s.cscale));
+            let mut outc = [zero; 3];
+            for k in 0..3 {
+                let (a, b, c, d) = (c01(ca[k]), c01(cb[k]), c01(cc[k]), cd[k]);
+                let l = a * (one - c) + b * c;
+                let v = ((if sub { d - l } else { d + l }) + cbias) * cscale;
+                outc[k] = if st.color_clamp { c01(v) } else { v.max(lo).min(hi) };
+            }
+            let (a, b, c, d) = (
+                c01(ain(st.alpha_in[0], &regs)),
+                c01(ain(st.alpha_in[1], &regs)),
+                c01(ain(st.alpha_in[2], &regs)),
+                ain(st.alpha_in[3], &regs),
+            );
+            let l = a * (one - c) + b * c;
+            let v = ((if st.alpha_op & 1 == 1 { d - l } else { d + l }) + F4::splat(s.abias)) * F4::splat(s.ascale);
+            let outa = if st.alpha_clamp { c01(v) } else { v.max(lo).min(hi) };
+            let cr = (st.color_reg & 3) as usize;
+            regs[cr][0] = outc[0];
+            regs[cr][1] = outc[1];
+            regs[cr][2] = outc[2];
+            regs[(st.alpha_reg & 3) as usize][3] = outa;
+            last = cr;
+        }
+        let o = regs[last].map(c01);
+        let mut pass = [true; 4];
+        if !self.alpha_always {
+            let a = o[3].to_array();
+            for l in 0..4 {
+                pass[l] = self.alpha_compare.test((a[l] * 255.0) as u8);
+            }
+        }
+        (o, pass)
     }
 }
