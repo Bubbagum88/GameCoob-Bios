@@ -112,7 +112,6 @@ fn perform(a: Action) -> Option<String> {
         Action::FirmwareSetup => Some(firmware::firmware_setup()),
         Action::Restart => firmware::restart(),
         Action::PowerOff => firmware::power_off(),
-        Action::CardFiles => None,
     }
 }
 
@@ -195,7 +194,7 @@ impl Cores {
 /// START, X / Y / Q / E are X, Y, L and R, and z (shift-Z: all four
 /// controllers) held at boot picks an easter-egg jingle. Escape also skips
 /// the intro. F10 opens the system dialog (firmware setup, restart, power
-/// off, Card Files); D opens and closes the stand-in disc drive's tray, 1 / 2 pull,
+/// off); D opens and closes the stand-in disc drive's tray, 1 / 2 pull,
 /// format-break and re-insert the stand-in memory cards (or pull and put
 /// back the card images), R is the
 /// console's reset switch and F3 shows frame timings.
