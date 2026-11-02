@@ -1,7 +1,7 @@
-//! GameCoob's sub-cubes: picking Memory Card or Options on the main cube
-//! dives into a second cube with its own four sides, turned and entered
-//! the same way. Not in BS2; the main cube and every screen it already
-//! had stay as they were.
+//! GameCoob's sub-cubes: pressing toward Game Play, Memory or Options on
+//! the main cube's front dives straight into a second cube (no face and
+//! no A in between) with its own sides, turned and entered as BS2's.
+//! Not in BS2; the screens it already had stay as they were.
 //!
 //! The sides reuse the main cube's face positions (and so its turning,
 //! zoom and icon code): up is `GameFace`, down `CardFace`, left
@@ -88,16 +88,6 @@ impl Level {
             (Level::Settings, St::CardFace) => Target::Page(Page::Controls),
             _ => return None,
         })
-    }
-
-    /// The main cube's side this cube was entered from.
-    pub fn home_face(self) -> St {
-        match self {
-            Level::Main => St::Top,
-            Level::Memory => St::CardFace,
-            Level::Game => St::GameFace,
-            Level::Settings => St::OptionFace,
-        }
     }
 
     /// The side whose screen (and icon cube) BS2 already had on this cube.
