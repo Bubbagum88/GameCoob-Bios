@@ -26,6 +26,7 @@ pub mod render;
 pub mod rnd;
 pub mod scene;
 pub mod shader;
+pub mod sound;
 pub mod ui;
 
 use crate::ipl::{bti, j3d::Model, Ipl};
@@ -128,6 +129,9 @@ pub struct Intro {
     spin_out_mtx: Mtx,
     /// GX registers as the last rendered frame left them.
     gx_regs: core::cell::Cell<Option<GxRegs>>,
+    /// `sAmbientPending`: the menu starts the ambient loop on its first
+    /// frame after a spin-out.
+    ambient_pending: bool,
 }
 
 impl Intro {
@@ -162,6 +166,7 @@ impl Intro {
             world: psmtx::IDENTITY,
             spin_out_mtx: psmtx::IDENTITY,
             gx_regs: core::cell::Cell::new(None),
+            ambient_pending: true,
         }
     }
 
@@ -187,8 +192,17 @@ impl Intro {
                 jingle = j;
                 self.draw_world();
             }
-            SceneState::SpinOut => self.next_state = self.spin_out(),
-            SceneState::Menu => self.ortho = false,
+            SceneState::SpinOut => {
+                self.next_state = self.spin_out();
+                self.ambient_pending = true;
+            }
+            SceneState::Menu => {
+                if self.ambient_pending {
+                    sound::start_ambient(0);
+                    self.ambient_pending = false;
+                }
+                self.ortho = false;
+            }
             // The disc boot, the SRAM-lost language select and the cover
             // open state need a drive.
             SceneState::Mode0 | SceneState::Disc | SceneState::Mode3 => {}
@@ -201,7 +215,9 @@ impl Intro {
         let s = &mut self.scene;
         let cube = &mut self.cube;
         if !cube.done {
-            let _whoosh = s.update_spin(input.a, cube.running, false);
+            if let Some(level) = s.update_spin(input.a, cube.running, false) {
+                sound::update_spin(0, level);
+            }
         }
         s.update_wobble();
         let jingle = cube.update(s, Some(input.egg.unwrap_or(Jingle::Normal)));
@@ -230,7 +246,9 @@ impl Intro {
                 }
                 disc.fade_out_start();
                 if disc.fade_alpha() == 0 {
-                    let _whoosh = s.update_spin(false, cube.running, true);
+                    if let Some(level) = s.update_spin(false, cube.running, true) {
+                        sound::update_spin(0, level);
+                    }
                     s.update_wobble();
                     if s.spin_speed > s.spin_threshold as f32 {
                         s.spin = s.spin_rest;
@@ -266,7 +284,9 @@ impl Intro {
             s.out_start = s.spin;
             s.out_first = false;
         }
-        let _whoosh = s.update_spin_out();
+        if let Some((slow, level)) = s.update_spin_out() {
+            sound::update_spin(slow as u8, level);
+        }
         s.out_frame += 1;
         if s.spin_speed <= 0.0 && s.spin == 0 {
             s.out_first = true;

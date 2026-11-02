@@ -249,7 +249,6 @@ impl Pads {
     }
 
     /// `Pad_IsRepeat` (0x81302DE0): this frame's directions are a repeat.
-    #[allow(dead_code)] // the C reads it only to skip buzzer sounds
     pub fn is_repeat(&self) -> bool {
         self.repeat
     }

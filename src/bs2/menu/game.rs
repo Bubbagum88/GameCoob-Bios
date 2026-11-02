@@ -6,9 +6,11 @@
 //! Disc_StartGame). Here START on a ready disc opens the PC's firmware
 //! boot list instead (BootNext): while it is up, up/down pick an entry,
 //! A or START boots it and B closes it. "Press START" fades out under the
-//! list. Sound and the ambient loop are left out.
+//! list. The ambient loop stops while the list is up, as it does for
+//! the boot on the console.
 
 use super::backend::{DiscDrive, DiscState};
+use crate::bs2::sound::{self, se};
 use super::{draw_backdrop, fit, with_a, Action, Fade, Fader, MenuAssets, Pad, St, SysInfo, Work, WHITE};
 use super::super::glh as bglh;
 use super::super::ui::{cp1252, Ui};
@@ -49,12 +51,14 @@ pub struct Game {
     sel: usize,
     /// The boot list's fader.
     list: Fader,
+    /// `sAmbientStopped`: START stopped the ambient loop.
+    ambient_stopped: bool,
 }
 
 impl Game {
     /// Game_Init (0x813275F4).
     pub fn new() -> Game {
-        Game { faders: [Fader::default(); 6], starting: false, fatal: false, sel: 0, list: Fader::default() }
+        Game { faders: [Fader::default(); 6], starting: false, fatal: false, sel: 0, list: Fader::default(), ambient_stopped: false }
     }
 
     /// Game_Enter (0x81327A10), less FxGame_Update (the menu runs it):
@@ -96,9 +100,13 @@ impl Game {
         }
         // Disc_GetFadeAlpha is 0 here: Disc_FadeOutStart keeps it parked.
         if p.b && c.zoomed_in {
+            sound::play(se::EXIT);
             next = St::GameFace;
         }
         if p.start && drive.state() == DiscState::Ready {
+            self.ambient_stopped = true;
+            sound::stop_ambient();
+            sound::play(se::GAME_START);
             self.starting = true;
             self.sel = 0;
         }
@@ -110,13 +118,18 @@ impl Game {
         let n = info.entries.len();
         let mut action = None;
         if p.up && self.sel > 0 {
+            sound::play(se::CURSOR);
             self.sel -= 1;
         }
         if p.down && self.sel + 1 < n {
+            sound::play(se::CURSOR);
             self.sel += 1;
         }
         if (p.a || p.start) && n > 0 {
             action = Some(Action::Boot(info.entries[self.sel.min(n - 1)].0));
+        }
+        if p.b {
+            sound::play(se::CANCEL);
         }
         if p.b || drive.state() != DiscState::Ready {
             self.starting = false;
@@ -132,6 +145,10 @@ impl Game {
         if self.starting {
             action = self.update_list(p, drive, info);
         } else {
+            if self.ambient_stopped {
+                sound::start_ambient(0);
+                self.ambient_stopped = false;
+            }
             next = self.handle_input(p, c, drive);
         }
         self.update_messages(drive);

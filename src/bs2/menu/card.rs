@@ -7,8 +7,7 @@
 //!
 //! UI states (`sCardUiState`): 1 browse, 2 operation menu, 3 Yes/No,
 //! 4 format question, 5 message. Input sets the *next* state, which takes
-//! effect on the following frame, like on the console. Sound effects are
-//! noted as `SE n` comments; there is no sound yet.
+//! effect on the following frame, like on the console.
 
 use super::backend::{CardError, CardOp, MemCards, Save, SlotState, DIR_ENTRIES};
 use super::card_blocks::{Blocks, Sel, SlotInfo};
@@ -17,6 +16,7 @@ use super::super::render::View;
 use super::super::shader::FastTex;
 use super::super::ui::{self, Rgba, Ui, UiFont};
 use super::{rgb, with_a, Fade, Fader, MenuAssets, Pad, St, Work, WHITE};
+use crate::bs2::sound::{self, se};
 use crate::ipl::glh::{tag, Strings, Text};
 use alloc::vec;
 use alloc::vec::Vec;
@@ -502,11 +502,15 @@ impl Card {
             if self.op_err == 0 {
                 self.blocks.land(cards.dest_file().unwrap_or(0));
                 self.op_kind = match self.op_kind {
-                    // SE 20 (from A) / SE 21 (from B)
-                    K_MOVE => K_MOVE_DONE,
+                    K_MOVE => {
+                        sound::play(if self.op_slot == 0 { se::CARD_MOVED_FROM_A } else { se::CARD_MOVED_FROM_B });
+                        K_MOVE_DONE
+                    }
                     K_ERASE => K_ERASE_DONE,
-                    // SE 19
-                    _ => K_COPY_DONE,
+                    _ => {
+                        sound::play(se::CARD_COPIED);
+                        K_COPY_DONE
+                    }
                 };
             } else {
                 self.blocks.cancel();
@@ -527,7 +531,9 @@ impl Card {
     fn poll_op_result(&mut self, cards: &dyn MemCards) {
         if matches!(self.op_kind, K_COPY | K_MOVE | K_ERASE) {
             if self.op_err == BUSY {
-                // SE 17 (slot A) / SE 18 (slot B) at frame 10.
+                if matches!(self.op_kind, K_COPY | K_MOVE) && self.busy_frames == 10 {
+                    sound::play(if self.op_slot == 0 { se::CARD_SEND_A } else { se::CARD_SEND_B });
+                }
                 self.busy_frames = (self.busy_frames + 1).min(20);
                 self.op_err = self.result(cards);
             }
@@ -538,14 +544,14 @@ impl Card {
                     _ => K_COPY_DONE,
                 };
                 self.blocks.cancel();
-                // SE 13
+                sound::play(se::BUZZER);
             }
         } else if self.op_kind == K_FORMAT {
             if self.op_err == BUSY {
                 self.op_err = self.result(cards);
             }
             if self.op_err != BUSY {
-                // SE 16 on success, else SE 13.
+                sound::play(if self.op_err == 0 { se::CARD_DONE } else { se::BUZZER });
                 self.op_kind = K_FORMAT_DONE;
             }
         }
@@ -561,6 +567,13 @@ impl Card {
         if self.ready(cards, s) {
             self.max_scroll[s] = Self::calc_max_scroll(cards)(s);
             let at = |col: i8, row: i8, scroll: i8| col as i32 + (row as i32 + scroll as i32) * 4;
+            // A step plays the cursor; a blocked one the buzzer.
+            let mv = || sound::play(se::CURSOR);
+            let buzz = || {
+                if !p.repeat {
+                    sound::play(se::BUZZER);
+                }
+            };
             if p.up {
                 self.row[s] -= 1;
                 if self.row[s] < 0 {
@@ -568,35 +581,58 @@ impl Card {
                     if self.scroll[s] > 0 {
                         self.scroll[s] -= 1;
                         self.rebuild_grid();
+                        mv();
+                    } else {
+                        buzz();
                     }
+                } else {
+                    mv();
                 }
             }
             if p.down {
                 self.row[s] += 1;
                 if at(self.col[s], self.row[s], self.scroll[s]) >= N as i32 {
+                    buzz();
                     self.row[s] -= 1;
                 } else if self.row[s] > 3 {
                     self.row[s] = 3;
                     if self.scroll[s] < self.max_scroll[s] {
                         self.scroll[s] += 1;
                         self.rebuild_grid();
+                        mv();
+                    } else {
+                        buzz();
                     }
+                } else {
+                    mv();
                 }
             }
             if p.left {
                 if s == 0 {
                     if self.col[0] > 0 {
+                        mv();
                         self.col[0] -= 1;
+                    } else {
+                        buzz();
                     }
                 } else {
                     self.col[1] -= 1;
                     if self.col[1] < 0 {
                         self.col[1] = 0;
-                        if self.ready(cards, o) && at(self.col[o], self.row[s], self.scroll[o]) < N as i32 {
-                            self.slot = o;
-                            self.row[o] = self.row[s];
-                            self.col[o] = 3;
+                        if self.ready(cards, o) {
+                            if at(self.col[o], self.row[s], self.scroll[o]) >= N as i32 {
+                                buzz();
+                            } else {
+                                self.slot = o;
+                                self.row[o] = self.row[s];
+                                self.col[o] = 3;
+                                mv();
+                            }
+                        } else {
+                            buzz();
                         }
+                    } else {
+                        mv();
                     }
                 }
             }
@@ -607,31 +643,43 @@ impl Card {
                         self.col[1] += 1;
                         if at(self.col[1], self.row[1], self.scroll[1]) >= N as i32 {
                             self.col[1] -= 1;
+                            buzz();
+                        } else {
+                            mv();
                         }
+                    } else {
+                        buzz();
                     }
                 } else {
                     self.col[0] += 1;
                     if at(self.col[0], self.row[0], self.scroll[0]) >= N as i32 {
                         self.col[0] -= 1;
+                        buzz();
                     } else if self.col[0] > 3 {
                         self.col[0] = 3;
                         if self.ready(cards, 1) {
                             self.slot = 1;
                             self.row[1] = self.row[0];
                             self.col[1] = 0;
+                            mv();
+                        } else {
+                            buzz();
                         }
+                    } else {
+                        mv();
                     }
                 }
             }
             let s = self.slot;
             let used = Self::save(cards, s, self.selected(s)).is_some();
             if p.a && used && self.settled(cards, fade_done) {
-                // SE 8
                 self.ui_next = 2;
+                sound::play(se::DECIDE);
             }
         }
         if p.b && zoom_full && self.settled(cards, fade_done) {
-            // SE 6. Leaving asks again about cards it was told to leave alone.
+            sound::play(se::EXIT);
+            // Leaving asks again about cards it was told to leave alone.
             for k in 0..2 {
                 if self.asked[k] {
                     self.asked[k] = false;
@@ -646,10 +694,11 @@ impl Card {
     /// CardUi_OpMenu.
     fn op_menu(&mut self, p: &Pad, cards: &dyn MemCards) {
         if p.up {
-            // SE 10
+            sound::play(se::CURSOR_H);
             self.op_next = if self.op_next == 0 { 2 } else { self.op_next - 1 };
         }
         if p.down {
+            sound::play(se::CURSOR_H);
             self.op_next = if self.op_next >= 2 { 0 } else { self.op_next + 1 };
         }
         if p.a && self.op_next == self.op {
@@ -658,11 +707,17 @@ impl Card {
             self.op_slot = s;
             self.yes_no = 1;
             match self.op {
-                OP_ERASE => self.ui_next = 3,
+                OP_ERASE => {
+                    sound::play(se::DECIDE);
+                    self.ui_next = 3;
+                }
                 op => match self.check(cards, s, file, op == OP_MOVE) {
-                    Ok(()) => self.ui_next = 3,
+                    Ok(()) => {
+                        sound::play(se::DECIDE);
+                        self.ui_next = 3;
+                    }
                     Err(e) => {
-                        // SE 13
+                        sound::play(se::BUZZER);
                         self.op_kind = if op == OP_MOVE { K_MOVE_DONE } else { K_COPY_DONE };
                         self.op_err = e;
                         self.ui_next = 5;
@@ -671,7 +726,7 @@ impl Card {
             }
         }
         if p.b {
-            // SE 7
+            sound::play(se::CANCEL);
             self.browse_enter(cards, false);
         }
     }
@@ -679,9 +734,15 @@ impl Card {
     /// CardUi_Confirm.
     fn confirm(&mut self, p: &Pad, cards: &mut dyn MemCards) {
         if p.up {
+            if self.yes_no != 0 {
+                sound::play(se::CHANGE);
+            }
             self.yes_no = 0;
         }
         if p.down {
+            if self.yes_no != 1 {
+                sound::play(se::CHANGE);
+            }
             self.yes_no = 1;
         }
         if p.a {
@@ -693,6 +754,7 @@ impl Card {
                 match self.op {
                     OP_ERASE => {
                         self.op_kind = K_ERASE;
+                        sound::play(se::DECIDE);
                         self.dispatch(K_ERASE);
                         cards.start(CardOp::Erase, s, file);
                         self.busy_frames = 0;
@@ -702,6 +764,7 @@ impl Card {
                         let (kind, cop) = if op == OP_COPY { (K_COPY, CardOp::Copy) } else { (K_MOVE, CardOp::Move) };
                         self.op_kind = kind;
                         if other_ready {
+                            sound::play(se::DECIDE);
                             self.dispatch(kind);
                             cards.start(cop, s, file);
                             self.op_err = BUSY;
@@ -713,10 +776,12 @@ impl Card {
                 }
                 self.ui_next = 5;
             } else {
+                sound::play(se::CANCEL);
                 self.ui_next = 2;
             }
         }
         if p.b {
+            sound::play(se::CANCEL);
             self.ui_next = 2;
         }
         if !self.ready(&*cards, self.slot ^ 1) && (0..2).contains(&self.op) {
@@ -731,21 +796,28 @@ impl Card {
         if !(self.settled(&*cards, fade_done) && shown) {
             return;
         }
-        if p.up {
-            self.fmt_next[s] &= !1;
-        }
-        if p.down {
-            self.fmt_next[s] |= 1;
+        for (pressed, v) in [(p.up, self.fmt_next[s] & !1), (p.down, self.fmt_next[s] | 1)] {
+            if pressed {
+                if v != self.fmt_next[s] {
+                    sound::play(se::CURSOR);
+                }
+                self.fmt_next[s] = v;
+            }
         }
         let decline = |c: &mut Card, cards: &dyn MemCards| {
+            sound::play(se::CANCEL);
             c.asked[s] = true;
             c.fmt_next[s] = 1;
             c.browse_enter(cards, false);
         };
         if p.a {
             match self.fmt[s] & 3 {
-                0 => self.fmt_next[s] = 3,
+                0 => {
+                    self.fmt_next[s] = 3;
+                    sound::play(se::DECIDE);
+                }
                 2 => {
+                    sound::play(se::DECIDE);
                     cards.start(CardOp::Format, s, 0);
                     self.ui_next = 5;
                     self.op_slot = s;
@@ -765,13 +837,21 @@ impl Card {
         if !self.settled(cards, fade_done) || cards.result().is_none() {
             return;
         }
-        // SE 16 (copy) / SE 15 (erase) once, when the operation ran.
+        // The result sound, once, when an operation ran.
+        if self.busy_frames != 0 && self.op_err == 0 {
+            match self.op_kind {
+                K_COPY | K_COPY_DONE => sound::play(se::CARD_DONE),
+                K_ERASE | K_ERASE_DONE => sound::play(se::CARD_ERASED),
+                _ => {}
+            }
+        }
         self.busy_frames = 0;
         if p.a || p.b {
             self.op_kind = K_NONE;
             self.yes_no = 1;
             self.op_err = 0;
             self.browse_enter(cards, true);
+            sound::play(se::CANCEL);
         }
     }
 

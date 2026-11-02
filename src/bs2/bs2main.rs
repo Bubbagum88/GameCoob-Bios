@@ -11,19 +11,11 @@ use super::menu::volumes::Volumes;
 use super::menu::{Action, Menu, MenuAssets, Pad, SysInfo};
 use super::cube::Jingle;
 use super::pad::{self, PadStatus, Pads};
+pub use super::sound::SoundCmd;
+use super::sound;
 use super::{raster, Assets, Input, Intro};
 use alloc::boxed::Box;
-use alloc::vec::Vec;
 
-/// A JAudio glue call BS2 made this pass (`jaudio/ipl_8135A8E0.c`); the
-/// caller hands them to the sound engine.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum SoundCmd {
-    /// `Sound_Play(id)`.
-    Play(u32),
-    /// gInit's reset (`fn_8135B180`): stop everything, restart the sequence.
-    Reset,
-}
 
 /// The display settings record (`DispSettings`, 0x50 bytes) with the fields
 /// the ported units read.
@@ -135,14 +127,15 @@ pub struct Bs2Main {
     /// The disc drive and memory cards while no menu holds them (the C's
     /// DVD and card threads outlive a reset).
     backends: Option<(Box<dyn DiscDrive>, Box<dyn MemCards>, Box<dyn Volumes>)>,
-    /// Sound calls made since the caller last took them.
-    pub sounds: Vec<SoundCmd>,
 }
 
 impl Bs2Main {
     /// `BS2Main` up to the loop: the scene with `Scene_Init(TRUE)`.
     pub fn new(a: &Assets, drive: Box<dyn DiscDrive>, cards: Box<dyn MemCards>, vols: Box<dyn Volumes>) -> Bs2Main {
-        Bs2Main { intro: Intro::new(a), menu: None, pads: Pads::new(), backends: Some((drive, cards, vols)), sounds: Vec::new() }
+        // bs2main.c: Sound_SetOutputMode(OSGetSoundMode()); the sound mode
+        // is kept in RAM and starts out stereo.
+        sound::set_output_mode(1);
+        Bs2Main { intro: Intro::new(a), menu: None, pads: Pads::new(), backends: Some((drive, cards, vols)) }
     }
 
     /// Run the intro to its end at once (a skip).
@@ -150,6 +143,12 @@ impl Bs2Main {
         while !self.intro.finished() {
             self.intro.update(Input::default());
         }
+        // Not the whooshes of a whole intro at once.
+        sound::drain(|c| {
+            if let SoundCmd::OutputMode(m) = c {
+                sound::set_output_mode(m);
+            }
+        });
     }
 
     /// The logic of one loop pass: `DEMOPadRead`, `fn_81302DF0` and `Scene_Update` (the
@@ -173,6 +172,7 @@ impl Bs2Main {
                     down: mp.dirs_new & pad::DIR_DOWN != 0,
                     left: mp.dirs_new & pad::DIR_LEFT != 0,
                     right: mp.dirs_new & pad::DIR_RIGHT != 0,
+                    repeat: self.pads.is_repeat(),
                     system: input.system,
                     eject: input.eject,
                     slot: input.slot,
@@ -189,7 +189,7 @@ impl Bs2Main {
                     _ => None,
                 };
                 if let Some(j) = self.intro.update(Input { a: mp.pst.button & pad::PAD_BUTTON_A != 0, egg }) {
-                    self.sounds.push(SoundCmd::Play(j as u32));
+                    sound::play(j as u32);
                 }
                 if self.intro.finished() {
                     if let Some((drive, cards, vols)) = self.backends.take() {
@@ -204,7 +204,7 @@ impl Bs2Main {
                 self.backends = Some((m.drive, m.cards, m.vols));
             }
             self.intro.restart(a);
-            self.sounds.push(SoundCmd::Reset);
+            sound::push(SoundCmd::Reset);
         }
         action
     }

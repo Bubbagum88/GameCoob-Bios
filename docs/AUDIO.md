@@ -8,21 +8,51 @@ which the IPL never runs (see below).
 
 ## In the app (status)
 
-- Done: `src/audio/data.rs` finds the archive in the user's dump (`IBNK`,
-  then `WSYS`, then the waves, each 32-byte aligned) and decodes all 12 waves
-  to PCM at load. `src/audio/mixer.rs` resamples each voice once, straight to
-  48 kHz (Catmull-Rom), mixes in f32 and soft-limits. `src/hda.rs` drives an
-  Intel HD Audio controller (QEMU `intel-hda`, most PCs): codec walk, every
-  analog output pin routed to a DAC, one cyclic 48 kHz stereo stream fed from
-  the main loop. The boot jingles play from `Cube_UpdateJingle`.
-- Stand-in until the sequence is ported: `Sound_Play(0..2)` starts the
-  jingle wave pairs directly (0/1, 2/3, 9/10, hard left/right). Which egg
-  gets which pair is a guess. All other ids are silent.
-- Next: the Jam interpreter (`jammain_2.c`) over `iplrom.com`, voices from
-  the bank, then every `Sound_*` call from the menus.
-- Check on the host: `tools/audio-render <ipl.bin> <out-dir> [id...]` writes
-  48 kHz WAVs of `Sound_Play` ids. In QEMU, add
-  `-audiodev wav,id=snd0,path=out.wav -device intel-hda -device hda-output,audiodev=snd0`.
+All of BS2's sound is in: the boot jingles (normal, pad-1 Z egg, all-pads Z
+egg), the hold-A spin and its whooshes, the spin-out whoosh, the menu's
+ambient loop and every `Sound_Play` the menus make (cube faces, Options,
+Calendar, Memory Card, Game Play). It is the IPL's own sequence running, not
+recordings of it.
+
+- `src/audio/data.rs` finds the archive in the user's dump (`IBNK`, then
+  `WSYS`, then the waves, each 32-byte aligned), decodes all 12 waves to PCM
+  at load and reads each wave's sound id (WSYS scene `C-DF`).
+- `src/audio/bank.rs` reads `IBNK` into instruments, key/velocity regions and
+  envelopes.
+- `src/audio/jam.rs` is the Jam interpreter (`jammain_2.c`, `jamosc.c`,
+  `seqsetup.c`) running `iplrom.com`: the track tree, ports, interrupts,
+  timed parameters, registers, every command 0xC0..0xFF. It ticks once per
+  DSP subframe (80 samples at 32028.5 Hz) with the root tempo of
+  `Jam_InitRoot`.
+- `src/audio/voice.rs` is the channel side (`jcs`, `oneshot.c`,
+  `bankdrv.c`): `Bank_OscToOfs` envelopes, `UpdateEffecterParam`, pan
+  (`PanCalc`), 64 channels with priority stealing.
+- `src/audio/mixer.rs` stands in for the DSP. Each voice is resampled once,
+  straight to 48 kHz (Catmull-Rom), level ramps across the subframe, f32
+  buses, soft limiter. Two echo lines (50-subframe delay, FIR
+  {0,0,0,500,1000,4000,7000,8000}, gain 0x6000) feed back into themselves
+  and play into left and right.
+- `src/audio/mod.rs` is the glue (`Sound_Play`, `Sound_UpdateSpin`,
+  `Sound_StartAmbient`/`StopAmbient`, `Sound_SetOutputMode`, reset).
+  `src/bs2/sound.rs` queues those calls from the menus; the main loop hands
+  them to the engine each frame.
+- `src/hda.rs` drives an Intel HD Audio controller (QEMU `intel-hda`, most
+  PCs): codec walk, every analog output pin routed to a DAC, one cyclic
+  48 kHz stereo stream fed from the main loop.
+
+Mixing facts (the DSP side) come from Dolphin's notes on this microcode
+family (the IPL uses the light protocol, four mixing destinations per voice,
+no command 0x0D). Dolphin is GPL, so only facts were taken. Two guesses:
+bus 9 (0x0FA0, used only by the ambient's lead voice) plays on the right,
+and the third echo line's buffer is never played, so it is left out.
+
+Check on the host: `tools/audio-render <ipl.bin> <out-dir> [id | ambient |
+hold | spinout | bank ...]` writes 48 kHz WAVs (`sound_<name>.wav`). In
+QEMU, add `-audiodev wav,id=snd0,path=out.wav -device intel-hda -device
+hda-output,audiodev=snd0`.
+
+Later: a 32 kHz "Original" output for Minimal mode, and the jingle as a menu
+option (it is a plain 0/1/2 already).
 
 PAL 1.0 waves: 10 at 32000 Hz and 2 at 44100 Hz, AFC 4-bit. The jingles are
 prerecorded stereo (two waves, one per side) of 5.2 to 5.9 s.

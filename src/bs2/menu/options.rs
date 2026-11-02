@@ -16,9 +16,10 @@
 //!
 //! GameCoob: the screen-position row edits the firmware boot timeout
 //! (0..[`MAX_TIMEOUT`] seconds) and its title says so; the sound mode is
-//! kept in RAM (no audio yet). Sound_Play calls are left out.
+//! kept in RAM and goes to the sound engine.
 
 use super::{Action, Fade, Fader, MenuAssets, Pad, St};
+use crate::bs2::sound::{self, se};
 use crate::bs2::ui::{cp1252, Ui};
 use crate::ipl::glh::{tag, Layout};
 use alloc::format;
@@ -121,12 +122,15 @@ impl Options {
             return St::Option;
         }
         if p.up && self.row > 0 {
+            sound::play(se::CURSOR);
             self.row -= 1;
         }
         if p.down && self.row < 2 {
+            sound::play(se::CURSOR);
             self.row += 1;
         }
         if p.a {
+            sound::play(se::DECIDE);
             match self.row {
                 ROW_SOUND => {
                     self.sound = self.sound_mode;
@@ -144,6 +148,7 @@ impl Options {
             }
         }
         if p.b && c.zoomed_in {
+            sound::play(se::EXIT);
             return St::OptionFace;
         }
         St::Option
@@ -151,18 +156,23 @@ impl Options {
 
     /// Option_UpdateSound (0x8132827C).
     fn update_sound(&mut self, p: &Pad) {
-        if p.left {
-            self.sound = 0;
-        }
-        if p.right {
-            self.sound = 1;
+        for (pressed, mode) in [(p.left, 0), (p.right, 1)] {
+            if pressed {
+                change(self.sound != mode, p);
+                self.sound = mode;
+            }
         }
         if p.a {
-            // OSSetSoundMode, Sound_SetOutputMode
-            self.sound_mode = self.sound;
+            if self.sound != self.sound_mode {
+                // OSSetSoundMode
+                self.sound_mode = self.sound;
+                sound::set_output_mode(self.sound as u32);
+            }
+            sound::play(se::CONFIRM);
             self.sub = OPT_MENU;
         }
         if p.b {
+            sound::play(se::CANCEL);
             self.sound = self.sound_mode;
             self.sub = OPT_MENU;
         }
@@ -173,17 +183,20 @@ impl Options {
         let mut action = None;
         if p.left {
             self.offset -= 1;
+            change(self.offset >= 0, p);
             if self.offset < 0 {
                 self.offset = 0;
             }
         }
         if p.right {
             self.offset += 1;
+            change(self.offset <= MAX_TIMEOUT as i16, p);
             if self.offset > MAX_TIMEOUT as i16 {
                 self.offset = MAX_TIMEOUT as i16;
             }
         }
         if p.a {
+            sound::play(se::CONFIRM);
             // The SRAM write.
             let t = self.offset as u16;
             if t != *c.timeout {
@@ -194,6 +207,7 @@ impl Options {
             self.sub = OPT_MENU;
         }
         if p.b {
+            sound::play(se::CANCEL);
             self.offset = *c.timeout as i16;
             self.sub = OPT_MENU;
         }
@@ -203,19 +217,23 @@ impl Options {
     /// Option_UpdateLang (0x81328510).
     fn update_lang(&mut self, p: &Pad, c: &mut Ctx) {
         if p.left {
+            change(self.lang > 0, p);
             self.lang = self.lang.saturating_sub(1);
             *c.guide_lang = self.lang;
         }
         if p.right {
+            change(self.lang < LANGS - 1, p);
             self.lang = (self.lang + 1).min(LANGS - 1);
             *c.guide_lang = self.lang;
         }
         if p.a {
+            sound::play(se::CONFIRM);
             // Lang_Set, then Option_LoadLangRes.
             *c.lang = self.lang;
             self.sub = OPT_MENU;
         }
         if p.b {
+            sound::play(se::CANCEL);
             self.lang = *c.lang;
             *c.guide_lang = self.lang;
             self.sub = OPT_MENU;
@@ -292,5 +310,15 @@ impl Options {
                 }
             }
         }
+    }
+}
+
+/// The sound of a left/right step: a click if the value moved, the buzzer
+/// at the end of its range (not on a held repeat).
+fn change(moved: bool, p: &Pad) {
+    if moved {
+        sound::play(se::CHANGE);
+    } else if !p.repeat {
+        sound::play(se::BUZZER);
     }
 }

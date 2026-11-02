@@ -49,6 +49,7 @@ pub fn minimal() -> bool {
 }
 use subcube::{Page, Target};
 
+use super::sound::{self, se};
 use super::backdrop;
 use super::fx::{self, Fx, FxData};
 use crate::bs2::{bs2main, camera};
@@ -390,6 +391,8 @@ pub struct Pad {
     pub down: bool,
     pub left: bool,
     pub right: bool,
+    /// `Pad_IsRepeat`: the directions are a held repeat (no buzzer then).
+    pub repeat: bool,
     /// GameCoob's own keys: the system dialog, the fake drive's tray and
     /// the fake card slots.
     pub system: bool,
@@ -564,7 +567,7 @@ impl Menu {
     }
 
     /// Menu_HandleInput (0x81311868): turning between faces and entering
-    /// submenus. Sound_Play calls are left out (no audio yet).
+    /// submenus.
     fn handle_input(&mut self, p: &Pad) {
         use St::*;
         // GameCoob: the Memory cube has no up side and the Game cube no
@@ -578,6 +581,7 @@ impl Menu {
             return;
         }
         if self.level != Level::Main && self.state == Top && self.w.at_front() && p.b {
+            sound::play(se::FACE_BACK);
             self.dive(Level::Main);
             return;
         }
@@ -593,6 +597,7 @@ impl Menu {
                         OptionFace => (0, DIVE_TILT),
                         _ => (0, -DIVE_TILT),
                     };
+                    sound::play(se::FACE_SELECT);
                     self.dive(l);
                     return;
                 }
@@ -601,29 +606,53 @@ impl Menu {
         let w = &self.w;
         if p.up {
             match self.state {
-                Top if w.at_front() => self.next = GameFace,
-                CardFace if w.at_face_x(-0x4000) => self.next = Top,
+                Top if w.at_front() => {
+                    sound::play(se::FACE_SELECT);
+                    self.next = GameFace;
+                }
+                CardFace if w.at_face_x(-0x4000) => {
+                    sound::play(se::FACE_BACK);
+                    self.next = Top;
+                }
                 _ => {}
             }
         }
         if p.down {
             match self.state {
-                Top if w.at_front() => self.next = CardFace,
-                GameFace if w.at_face_x(0x4000) => self.next = Top,
+                Top if w.at_front() => {
+                    sound::play(se::FACE_SELECT);
+                    self.next = CardFace;
+                }
+                GameFace if w.at_face_x(0x4000) => {
+                    sound::play(se::FACE_BACK);
+                    self.next = Top;
+                }
                 _ => {}
             }
         }
         if p.left {
             match self.state {
-                Top if w.at_front() => self.next = OptionFace,
-                ClockFace if w.at_face_y(-0x4000) => self.next = Top,
+                Top if w.at_front() => {
+                    sound::play(se::FACE_SELECT);
+                    self.next = OptionFace;
+                }
+                ClockFace if w.at_face_y(-0x4000) => {
+                    sound::play(se::FACE_BACK);
+                    self.next = Top;
+                }
                 _ => {}
             }
         }
         if p.right {
             match self.state {
-                Top if w.at_front() => self.next = ClockFace,
-                OptionFace if w.at_face_y(0x4000) => self.next = Top,
+                Top if w.at_front() => {
+                    sound::play(se::FACE_SELECT);
+                    self.next = ClockFace;
+                }
+                OptionFace if w.at_face_y(0x4000) => {
+                    sound::play(se::FACE_BACK);
+                    self.next = Top;
+                }
                 _ => {}
             }
         }
@@ -636,7 +665,11 @@ impl Menu {
                 _ => false,
             };
             // GameCoob: what a side opens depends on the cube.
-            match self.level.target(self.state).filter(|_| at) {
+            let target = self.level.target(self.state).filter(|_| at);
+            if target.is_some() {
+                sound::play(se::ENTER);
+            }
+            match target {
                 Some(Target::Screen(st)) => self.next = st,
                 Some(Target::Cube(l)) => {
                     self.dive(l);
@@ -650,12 +683,16 @@ impl Menu {
             }
         }
         if p.b {
-            match self.state {
-                CardFace if w.at_face_x(-0x4000) => self.next = Top,
-                GameFace if w.at_face_x(0x4000) => self.next = Top,
-                ClockFace if w.at_face_y(-0x4000) => self.next = Top,
-                OptionFace if w.at_face_y(0x4000) => self.next = Top,
-                _ => {}
+            let back = match self.state {
+                CardFace => w.at_face_x(-0x4000),
+                GameFace => w.at_face_x(0x4000),
+                ClockFace => w.at_face_y(-0x4000),
+                OptionFace => w.at_face_y(0x4000),
+                _ => false,
+            };
+            if back {
+                sound::play(se::FACE_BACK);
+                self.next = Top;
             }
         }
     }
