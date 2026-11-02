@@ -446,6 +446,8 @@ pub struct Menu {
     /// The Files page has opened Card Files (closing it leaves the page).
     files_open: bool,
     page_fade: [Fader; 2],
+    /// GameCoob: the icon cubes of the sub-cubes' new sides.
+    sub_icons: Vec<(Level, St, icons::PixelIcon)>,
 }
 
 const SUB_OPTION: usize = 0;
@@ -505,6 +507,7 @@ impl Menu {
             page: Page::Files,
             files_open: false,
             page_fade: [Fader::default(), Fader::with_delay(8)],
+            sub_icons: subcube::icons(&ma.icons),
         };
         m.calc_cube_mtx();
         m
@@ -716,6 +719,21 @@ impl Menu {
         self.option_icon.update(p, d);
         let p = phase(St::ClockFace, St::Clock);
         self.clock_icon.update(p, &self.info.time);
+        // GameCoob: the new sides' icons, shown on their own cube only.
+        let (level, state, page) = (self.level, self.state, self.page);
+        for (l, face, icon) in self.sub_icons.iter_mut() {
+            let p = if *l != level {
+                icons::Phase::Hide
+            } else if state == *face {
+                icons::Phase::Face
+            } else if state == St::Page && page.face() == *face {
+                icons::Phase::Enter
+            } else {
+                icons::Phase::Hide
+            };
+            icon.update(p);
+            icon.calc_mtx(d, &self.cube, view);
+        }
         self.card_icon.calc_mtx(d, &self.cube, view);
         self.game_icon.calc_mtx(d, &self.cube, view);
         self.option_icon.calc_mtx(d, &self.cube, view);
@@ -805,8 +823,11 @@ impl Menu {
             self.sub[SUB_OPTION][i].step_if(self.state == St::Option);
             self.sub[SUB_CLOCK][i].step_if(self.state == St::Clock);
         }
+        // A page waits for its icon to collapse, as BS2's submenus do.
+        let face = self.page.face();
+        let settled = self.sub_icons.iter().any(|(l, f, i)| *l == self.level && *f == face && i.settled());
         for f in self.page_fade.iter_mut() {
-            f.step_if(self.state == St::Page);
+            f.step_if(self.state == St::Page && settled);
         }
     }
 
@@ -1045,6 +1066,9 @@ impl Menu {
         self.game_icon.draw(gx, &ma.icons);
         self.option_icon.draw(gx, &ma.icons);
         self.clock_icon.draw(gx, &ma.icons);
+        for (_, _, icon) in &self.sub_icons {
+            icon.draw(gx, &ma.icons);
+        }
         glass(gx, &mut cube, BIG_CUBE_FRONT);
         let mut ui = Ui { gx, view, mv: psmtx::IDENTITY };
         self.draw_faces(&mut ui, ma, view, bg);

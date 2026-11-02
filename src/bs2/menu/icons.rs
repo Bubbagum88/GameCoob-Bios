@@ -939,3 +939,169 @@ impl OptionIcon {
         }
     }
 }
+
+// ---------------------------------------------------------------------
+// GameCoob: the sub-cubes' new sides (not in BS2)
+// ---------------------------------------------------------------------
+
+/// Which side of the cube an icon sits behind.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Side {
+    Up,
+    Down,
+    Left,
+    Right,
+}
+
+/// Cell pitch and cube scale, as the Options picture.
+const PIX_PITCH: f32 = 20.0;
+const PIX_SCALE: f32 = 0.67;
+/// Frames for one cube to fly out to its cell, and the delay per cell of
+/// distance from the centre.
+const PIX_FLY: i32 = 18;
+const PIX_STAGGER: i32 = 3;
+/// The idle wave: period, frames for one cube's turn, delay per diagonal.
+const PIX_WAVE_PERIOD: i32 = 300;
+const PIX_WAVE_TURN: i32 = 24;
+const PIX_WAVE_STAGGER: i32 = 3;
+const PIX_SHRINK: f32 = 5.0;
+const PIX_FADE: i16 = 12;
+const PIX_HIDE_FADE: i16 = 10;
+
+#[derive(Clone, Copy, Default)]
+struct PixCube {
+    base: [f32; 2],
+    /// Distance from the centre in cells, for the build order.
+    ring: i32,
+    /// Diagonal index for the wave.
+    diag: i32,
+    cur: [f32; 2],
+    z: f32,
+    turn: i16,
+    alpha: i16,
+}
+
+/// A picture of small cubes (a bitmap, `#` set) that builds out from the
+/// centre while its side shows, ripples a turn along its diagonals now
+/// and then, and collapses into the centre when its page opens: the same
+/// three phases and the same feel as BS2's icons.
+pub struct PixelIcon {
+    side: Side,
+    tint: usize,
+    cubes: Vec<PixCube>,
+    inst: Vec<Instance>,
+    frame: i32,
+    settled: bool,
+}
+
+impl PixelIcon {
+    pub fn new(d: &IconData, side: Side, tint: usize, rows: &[&str]) -> PixelIcon {
+        let h = rows.len() as f32;
+        let w = rows.iter().map(|r| r.len()).max().unwrap_or(0) as f32;
+        let mut cubes = Vec::new();
+        for (r, row) in rows.iter().enumerate() {
+            for (c, ch) in row.bytes().enumerate() {
+                if ch != b'#' {
+                    continue;
+                }
+                let x = (c as f32 - (w - 1.0) / 2.0) * PIX_PITCH;
+                let y = ((h - 1.0) / 2.0 - r as f32) * PIX_PITCH;
+                let ring = ((x / PIX_PITCH).abs().max((y / PIX_PITCH).abs()) + 0.5) as i32;
+                cubes.push(PixCube { base: [x, y], ring, diag: (r + c) as i32, ..Default::default() });
+            }
+        }
+        let inst = (0..cubes.len()).map(|_| d.instance()).collect();
+        PixelIcon { side, tint, cubes, inst, frame: 0, settled: false }
+    }
+
+    pub fn update(&mut self, phase: Phase) {
+        match phase {
+            Phase::Face => self.update_face(),
+            Phase::Enter => self.update_enter(),
+            Phase::Hide => self.update_hide(),
+        }
+    }
+
+    fn update_face(&mut self) {
+        self.settled = false;
+        self.frame += 1;
+        let f = self.frame;
+        let built = f > PIX_FLY + PIX_STAGGER * 6;
+        for c in &mut self.cubes {
+            let t = ((f - c.ring * PIX_STAGGER) as f32 / PIX_FLY as f32).clamp(0.0, 1.0);
+            let e = 1.0 - (1.0 - t) * (1.0 - t);
+            c.cur = [c.base[0] * e, c.base[1] * e];
+            c.z = 40.0 * (1.0 - e);
+            c.alpha = (255.0 * t) as i16;
+            c.turn = 0;
+            if built {
+                // One full turn about the vertical axis, running along the
+                // diagonals, once per period.
+                let k = (f - PIX_FLY) % PIX_WAVE_PERIOD - c.diag * PIX_WAVE_STAGGER;
+                if (0..PIX_WAVE_TURN).contains(&k) {
+                    let s = k as f32 / PIX_WAVE_TURN as f32;
+                    let s = s * s * (3.0 - 2.0 * s);
+                    c.turn = (s * 65536.0) as i32 as i16;
+                }
+            }
+        }
+    }
+
+    fn update_enter(&mut self) {
+        let mut done = true;
+        for c in &mut self.cubes {
+            c.alpha = (c.alpha - PIX_FADE).max(0);
+            for v in &mut c.cur {
+                *v = toward_zero(*v, PIX_SHRINK);
+                done &= *v == 0.0;
+            }
+            c.z = toward_zero(c.z, PIX_SHRINK);
+            c.turn = 0;
+        }
+        self.settled = done;
+        if done {
+            self.frame = 0;
+        }
+    }
+
+    fn update_hide(&mut self) {
+        let mut hidden = true;
+        for c in &mut self.cubes {
+            c.alpha = (c.alpha - PIX_HIDE_FADE).max(0);
+            hidden &= c.alpha == 0;
+        }
+        if hidden {
+            self.frame = 0;
+            self.settled = false;
+        }
+    }
+
+    /// Every cube has reached the centre (its page can show).
+    pub fn settled(&self) -> bool {
+        self.settled
+    }
+
+    /// `cube · R(side) · T(x, y, z) · RotY(turn)`, in the plane of its side
+    /// through the centre, like BS2's icons. The right side's plane is
+    /// seen from behind, so its pictures are mirrored back.
+    pub fn calc_mtx(&mut self, d: &IconData, cube: &Mtx, view: &Mtx) {
+        let (rx, ry, mirror) = match self.side {
+            Side::Up => (-0x4000, 0, 1.0),
+            Side::Down => (0x4000, 0, 1.0),
+            Side::Left => (0, -0x4000, 1.0),
+            Side::Right => (0, 0x4000, 1.0),
+        };
+        let base = psmtx::concat(cube, &mtx::rot_trans(rx, ry, 0, [0.0; 3]));
+        for (c, inst) in self.cubes.iter().zip(&mut self.inst) {
+            let t = mtx::rot_trans(0, c.turn as i32, 0, [c.cur[0] * mirror, c.cur[1], c.z]);
+            let m = psmtx::concat(&base, &t);
+            d.calc(inst, &m, PIX_SCALE, view);
+        }
+    }
+
+    pub fn draw<'a>(&self, gx: &mut Gx<'a>, d: &'a IconData) {
+        for (c, inst) in self.cubes.iter().zip(&self.inst) {
+            d.draw(gx, inst, self.tint, c.alpha);
+        }
+    }
+}
