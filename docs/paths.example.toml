@@ -22,7 +22,6 @@ boot = "Windows Boot Manager"
 id = "arch"
 kind = "linux"
 boot = "Linux Boot Manager"        # systemd-boot; GRUB shows as "GRUB" or "arch"
-esp = "/efi"                       # where Arch mounts the ESP (/efi, /boot or /boot/efi)
 
 # Emulators. `{rom}` in args becomes the game's path.
 # Dolphin: -b quits Dolphin when the game stops, -e runs the file.

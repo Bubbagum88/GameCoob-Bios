@@ -7,7 +7,7 @@ fn example_paths_file_parses() {
     assert_eq!(p.boot, Boot::default());
     assert_eq!(p.os.len(), 2);
     assert_eq!(p.os[0].kind, OsKind::Windows);
-    assert_eq!(p.os[1].esp.as_deref(), Some("/efi"));
+    assert_eq!(p.os[1].kind, OsKind::Linux);
     let dolphin = p.emulator_by_id("dolphin-win").unwrap();
     assert_eq!(dolphin.exe, "C:\\Program Files\\Dolphin\\Dolphin.exe");
     let (exe, args) = dolphin.command("D:\\Games\\GameCube\\Wind Waker.rvz");
