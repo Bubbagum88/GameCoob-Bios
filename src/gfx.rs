@@ -110,9 +110,9 @@ pub struct ResScale {
     frames: u32,
 }
 
-/// Frame time to stay under (60 fps with some headroom), and the time
-/// below which there is room for more pixels.
-const SLOW: f32 = 1.0 / 55.0;
+/// Frame time to stay under (the 50 Hz logic rate with some headroom), and
+/// the time below which there is room for more pixels.
+const SLOW: f32 = 1.0 / 46.0;
 const FAST: f32 = 1.0 / 90.0;
 /// Most pixels ever rendered per frame (2x2 supersampling at 1080p).
 const MAX_PIXELS: f32 = 4.0 * 1440.0 * 1008.0;

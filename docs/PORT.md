@@ -33,7 +33,7 @@ app counterpart yet.
 |-------------|------------|--------|
 | `mtx.c` | `bs2/mtx.rs` | ported |
 | `gBase.c` (Hermite) | `bs2/gbase.rs` | ported; heap is Rust's allocator |
-| `bs2main.c` (DispSettings, projection, `BS2Main` loop) | `bs2/bs2main.rs` `Bs2Main` | ported; pad, 60 Hz pacing, raster cores and present stay in `boot_intro.rs` |
+| `bs2main.c` (DispSettings, projection, `BS2Main` loop) | `bs2/bs2main.rs` `Bs2Main` | ported; pad, 50 Hz pacing (`LOGIC_HZ`, the PAL VI rate), raster cores and present stay in `boot_intro.rs` |
 | `camera.c` | `bs2/camera.rs` | ported |
 | `gInit.c` `GX_Setup2D` | `bs2/ginit.rs` | ported |
 | `gInit.c` disc state (`Disc_GetState`, the disc fade) | `bs2/ginit.rs` `Disc` | ported; no drive behind it, so always "no disc" |
@@ -46,7 +46,7 @@ app counterpart yet.
 | `lang.c`, `res_archive.c` | `ipl/mod.rs` | close |
 | `cube_draw.c` (trail tiles) | `bs2/cube_draw.rs` | ported, on `sdk::gx`; the small cube model is drawn by the caller through `gmr.rs` |
 | `cube.c` | `bs2/cube.rs` | ported |
-| `scene.c`, `scene_intro.c`, `scene_spinout.c` | `bs2/scene.rs` (`Scene`), `bs2/mod.rs` (`Intro`: the state machine and draws) | ported for the no-disc boot and the spin-out; the disc, SRAM-lost and cover-open states and the dialog texts wait for a drive. GameCoob lingers 60 frames on the logo (`HOLD_FRAMES`) |
+| `scene.c`, `scene_intro.c`, `scene_spinout.c` | `bs2/scene.rs` (`Scene`), `bs2/mod.rs` (`Intro`: the state machine and draws) | ported for the no-disc boot and the spin-out; the disc, SRAM-lost and cover-open states and the dialog texts wait for a drive. GameCoob lingers 50 frames (1 s) on the logo (`HOLD_FRAMES`) |
 | `backdrop.c` | `bs2/backdrop.rs` on `sdk::gx` | ported (GX spot lights on the tile grid, `Backdrop_DrawSpots` for the Memory Card slots); `fn_8130AB14` has no caller yet |
 | `pad.c` | `bs2/pad.rs` | ported; controllers come from `input.rs` bindings (keyboard and USB gamepads), no PADClamp/PADReset |
 | `rnd.c` | `bs2/rnd.rs` over `sdk::os::get_tick` | ported; the host tools' tick is a fixed counter so renders repeat, UEFI uses the TSC |

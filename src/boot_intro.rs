@@ -2,7 +2,7 @@
 //! `ipl.bin` is on the boot partition, and runs on into the rebuilt cube
 //! menu. Without a usable dump, `main` explains where to put it.
 
-use crate::bs2::bs2main::{Bs2Main, FrameInput};
+use crate::bs2::bs2main::{Bs2Main, FrameInput, LOGIC_HZ};
 use crate::bs2::menu::backend::{FakeCards, FakeDrive, MemCards};
 use crate::bs2::menu::card_image::ImageCards;
 use crate::bs2::menu::volumes::{self, Volumes};
@@ -147,6 +147,11 @@ impl Audio {
         }
     }
 
+    /// Seconds of sound the card has played (0 with no card).
+    fn played(&self) -> f64 {
+        self.out.as_ref().map_or(0.0, |o| o.played() as f64 / crate::hda::RATE as f64)
+    }
+
     /// Stop the card before control leaves GameCoob (booting an entry).
     fn close(&mut self) {
         if let Some(mut o) = self.out.take() {
@@ -258,7 +263,8 @@ impl Cores {
     }
 }
 
-/// Run [`Bs2Main`] at 60 logic frames per second: the intro, then the cube
+/// Run [`Bs2Main`] at [`LOGIC_HZ`] logic frames per second (50, the PAL
+/// IPL's VI rate): the intro, then the cube
 /// menu. Never returns: the menu's actions boot or reset.
 ///
 /// Keys go through [`input::DEFAULT_KEYS`]: the arrows are the d-pad, Enter
@@ -279,7 +285,7 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
     crate::bs2::menu::set_minimal(crate::vars::minimal());
     let mut bs2 = Bs2Main::new(assets, Box::new(FakeDrive::new()), load_cards(), Box::new(UefiVolumes));
     let cores = Cores::open();
-    // Rendered at the screen's resolution, adjusted to keep 60 fps.
+    // Rendered at the screen's resolution, adjusted to keep up with the logic.
     let mut res = ResScale::new(cv);
     let mut stats = Stats::default();
     // Frame timings go to the first serial port: always under OVMF (QEMU),
@@ -287,14 +293,41 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
     let log_stats = system::firmware_vendor().to_string().contains("EDK II");
     let mut show_stats = false;
     let mut target = Target::new(render::EFB_W, render::EFB_H);
-    let t0 = clock.now();
+    // The logic clock. With a sound card it follows the card's play
+    // position, so the intro stays on its music whatever the CPU clock
+    // says; the CPU clock covers stalls the card's ring cannot (and runs
+    // it with no card).
+    let mut now = 0.0f32;
+    let mut last_tsc = clock.now();
+    let mut last_played = audio.as_ref().map_or(0.0, |a| a.played());
+    let mut stuck = 0.0f32;
     let mut done_frames = 0u32;
     let mut keys = Keyboard::new(input::DEFAULT_KEYS);
     let mut gamepads = Gamepads::new();
     let mut clock_at = 0.0;
 
     loop {
-        let now = clock.now() - t0;
+        if let Some(a) = &mut audio {
+            a.update();
+        }
+        let tsc = clock.now();
+        let played = audio.as_ref().map_or(0.0, |a| a.played());
+        let (dt, da) = (tsc - last_tsc, (played - last_played) as f32);
+        last_tsc = tsc;
+        last_played = played;
+        // A card that stops moving (or was just reopened) or a pass long
+        // enough to wrap its ring falls back to the CPU clock.
+        let card = audio.as_ref().is_some_and(|a| a.out.is_some());
+        let dt = dt.max(0.0);
+        if card && da > 0.0 {
+            stuck = 0.0;
+            now += if dt < 0.5 { da } else { dt };
+        } else {
+            stuck += dt;
+            if !card || stuck > 0.2 {
+                now += dt;
+            }
+        }
         while let Ok(Some(key)) = system::with_stdin(|i| i.read_key()) {
             let Some(k) = key_code(key) else { continue };
             keys.press(k, now);
@@ -305,7 +338,7 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
             }
         }
         // Catch logic up to real time, drawing only the latest frame.
-        let due = (now * 60.0) as u32;
+        let due = (now * LOGIC_HZ) as u32;
         // The gamepads, read when logic frames are due: their buttons hold
         // for each of those frames, their actions fire once.
         let mut gp = [PadStatus::NONE; 4];
