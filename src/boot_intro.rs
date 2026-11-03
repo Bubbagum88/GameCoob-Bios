@@ -186,6 +186,7 @@ fn perform(a: Action) -> Option<String> {
         Action::SetTimeout(s) => firmware::save_timeout(s).err(),
         Action::SetMinimal(on) => firmware::save_minimal(on).err(),
         Action::SetCoobLogo(on) => firmware::save_coob_logo(on).err(),
+        Action::SetIntroDelay(s) => firmware::save_intro_delay(s).err(),
         Action::SetTime(t) => firmware::set_time(t).err(),
         Action::FirmwareSetup => Some(firmware::firmware_setup()),
         Action::Restart => firmware::restart(),

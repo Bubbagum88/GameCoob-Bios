@@ -16,6 +16,7 @@ mod bs2;
 #[allow(dead_code, unused_imports)]
 mod card;
 mod clock;
+mod display;
 mod firmware;
 mod fs;
 mod gamepad;
@@ -38,6 +39,8 @@ fn main() -> Status {
     // BS2Main builds the sine table first thing (SinTableInit(12), RandInit).
     bs2::mtx::sin_table_init(12);
     bs2::rnd::rand_init();
+    // From here the display's hold before the intro is counted.
+    let clock = clock::Clock::calibrate();
 
     // Checked before taking the screen, so the text console can still say why.
     let Some((assets, menu_assets, sound)) = boot_intro::load() else {
@@ -54,7 +57,15 @@ fn main() -> Status {
     let mut gop = boot::open_protocol_exclusive::<GraphicsOutput>(handle).unwrap();
     let (w, h) = gop.current_mode_info().resolution();
     let mut canvas = gfx::Canvas::new(w, h);
-    let clock = clock::Clock::calibrate();
+
+    // Black until an external monitor or TV has had time to sync.
+    let outputs = display::outputs();
+    let auto = display::auto_delay(&outputs);
+    let setting = vars::intro_delay();
+    display::set_auto(auto);
+    display::set_setting(setting);
+    log::info!("Display: {outputs:?}, intro delay {:?} (auto {auto} s)", setting);
+    display::hold(&mut gop, display::delay(setting, &outputs), 0.0, &|| clock.now());
 
     let _ = system::with_stdin(|i| i.reset(false));
     boot_intro::play(&mut gop, &mut canvas, &clock, &assets, &menu_assets, sound)

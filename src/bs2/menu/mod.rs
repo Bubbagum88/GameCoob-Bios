@@ -420,6 +420,8 @@ pub enum Action {
     SetMinimal(bool),
     /// Save the intro logo option (true = "GAMECOOB").
     SetCoobLogo(bool),
+    /// Save the black hold before the intro: seconds, or None for Auto.
+    SetIntroDelay(Option<u8>),
     /// Set the firmware clock: year, month 1..12, day, hour, minute, second.
     SetTime([i32; 6]),
     FirmwareSetup,
@@ -985,6 +987,8 @@ impl Menu {
             Some(Action::SetMinimal(on)) => self.set_minimal(on),
             // Shown from the next intro (the reset switch or the next boot).
             Some(Action::SetCoobLogo(on)) => crate::bs2::wordmark::set_coob(on),
+            // Used from the next boot.
+            Some(Action::SetIntroDelay(s)) => crate::display::set_setting(s),
             _ => {}
         }
         let busy = self.sys.visible() || self.explorer.visible();

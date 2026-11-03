@@ -94,6 +94,20 @@ pub fn set_coob_logo(on: bool) -> uefi::Result {
     runtime::set_variable(cstr16!("GameCoobLogo"), GAMECOOB, attrs(), &[on as u8])
 }
 
+/// The black hold before the intro ([`crate::display`]), saved as
+/// `GameCoobIntroDelay` (one byte: seconds, 0xFF = Auto). Auto (`None`)
+/// when unset.
+pub fn intro_delay() -> Option<u8> {
+    runtime::get_variable_boxed(cstr16!("GameCoobIntroDelay"), GAMECOOB)
+        .ok()
+        .and_then(|(b, _)| b.first().copied())
+        .filter(|&s| s != 0xFF)
+}
+
+pub fn set_intro_delay(secs: Option<u8>) -> uefi::Result {
+    runtime::set_variable(cstr16!("GameCoobIntroDelay"), GAMECOOB, attrs(), &[secs.unwrap_or(0xFF)])
+}
+
 pub fn firmware_ui_supported() -> bool {
     read(cstr16!("OsIndicationsSupported"))
         .filter(|b| b.len() >= 8)
