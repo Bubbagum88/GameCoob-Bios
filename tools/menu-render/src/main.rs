@@ -12,6 +12,7 @@
 //! Lines starting with `#` are ignored. Without frames, every 10th
 //! frame up to the last scripted frame + 200 is written.
 //! Env: THREADS=n rasterizes on n threads; SKIP=1 skips the intro;
+//! COOB=1 turns on the intro logo option ("GAMECOOB");
 //! PADTRACE=1 prints the pad code's new presses;
 //! RES=WxH renders at that size instead of 640x448;
 //! VOLS=dir,dir lists folders as drives for the Card Files explorer (F10);
@@ -200,6 +201,8 @@ fn main() {
     let mut bs = Bs2Main::new(&assets, Box::new(FakeDrive::new()), cards, Box::new(HostVolumes { roots }));
     // MINIMAL=1: minimal mode (no sub-cubes, the console's labels).
     bs2::menu::set_minimal(std::env::var("MINIMAL").is_ok());
+    // COOB=1: the intro logo option ("GAMECOOB").
+    bs2::wordmark::set_coob(std::env::var("COOB").is_ok());
     if std::env::var("SKIP").is_ok() {
         bs.skip_intro();
     }

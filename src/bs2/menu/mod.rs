@@ -418,6 +418,8 @@ pub enum Action {
     SetTimeout(u16),
     /// Save minimal mode (on or off).
     SetMinimal(bool),
+    /// Save the intro logo option (true = "GAMECOOB").
+    SetCoobLogo(bool),
     /// Set the firmware clock: year, month 1..12, day, hour, minute, second.
     SetTime([i32; 6]),
     FirmwareSetup,
@@ -979,8 +981,11 @@ impl Menu {
         }
         let none = Pad::default();
         let sys_action = if self.sys.visible() { self.sys.update(pad, minimal()) } else { None };
-        if let Some(Action::SetMinimal(on)) = sys_action {
-            self.set_minimal(on);
+        match sys_action {
+            Some(Action::SetMinimal(on)) => self.set_minimal(on),
+            // Shown from the next intro (the reset switch or the next boot).
+            Some(Action::SetCoobLogo(on)) => crate::bs2::wordmark::set_coob(on),
+            _ => {}
         }
         let busy = self.sys.visible() || self.explorer.visible();
         let ep = if self.sys.visible() { &none } else { pad };

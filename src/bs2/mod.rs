@@ -28,6 +28,7 @@ pub mod scene;
 pub mod shader;
 pub mod sound;
 pub mod ui;
+pub mod wordmark;
 
 use crate::ipl::{bti, j3d::Model, Ipl};
 use alloc::vec::Vec;
@@ -60,6 +61,9 @@ pub struct Assets {
     pub logo: Prepared,
     pub big_cube: Prepared,
     pub text: Prepared,
+    /// GameCoob: the text model with the wordmark respelled "GAMECOOB"
+    /// ([`wordmark`]); None if the dump's wordmark couldn't be respelled.
+    pub text_coob: Option<Prepared>,
     pub small_cube: Prepared,
     pub tile: shader::FastTex,
     pub text_bck: Bck,
@@ -71,19 +75,36 @@ impl Assets {
     pub fn load(ipl: &Ipl) -> Option<Assets> {
         let model = |id| Model::parse(&ipl.resource(id).ok()?).ok().map(Prepared::new);
         let bs2 = ipl.bs2();
+        let text = Model::parse(&ipl.resource(res::TEXT).ok()?).ok()?;
+        let text_coob = (|| {
+            let mut m = text.clone();
+            let t = m.textures.first_mut()?;
+            *t = wordmark::respell(t)?;
+            Some(Prepared::new(m))
+        })();
         let path = cube::read_path(|a| bs2.get(a.checked_sub(crate::ipl::BS2_RAM)? as usize).copied())?;
         Some(Assets {
             bg_inner: model(res::BG_INNER)?,
             bg_outer: model(res::BG_OUTER)?,
             logo: model(res::LOGO)?,
             big_cube: model(res::BIG_CUBE)?,
-            text: model(res::TEXT)?,
+            text: Prepared::new(text),
+            text_coob,
             small_cube: model(res::SMALL_CUBE)?,
             tile: shader::FastTex::new(&bti::parse(&ipl.resource(res::TILE_TEX).ok()?).ok()?),
             text_bck: Bck::parse(&ipl.resource(res::TEXT_BCK).ok()?)?,
             text_ipk: Ipk::parse(&ipl.resource(res::TEXT_IPK).ok()?)?,
             path,
         })
+    }
+
+    /// The wordmark model the intro draws: GameCoob's when that option is
+    /// on (and the dump's wordmark could be respelled), else the console's.
+    pub fn wordmark(&self) -> &Prepared {
+        match &self.text_coob {
+            Some(t) if wordmark::coob() => t,
+            _ => &self.text,
+        }
     }
 }
 
@@ -386,7 +407,7 @@ impl Intro {
     /// color (`.ipk`) animations on the text clock.
     fn text(&self, a: &Assets, view: &Mtx) -> Instance {
         let tf = self.cube.text_anim_frame();
-        let mut inst = Instance::new(&a.text.model);
+        let mut inst = Instance::new(&a.wordmark().model);
         gmr::set_model_mtx(&mut inst, &psmtx::IDENTITY, [1.0; 3]);
         gmr::set_view_mtx(&mut inst, view);
         let joint = |j: u16| {
@@ -399,7 +420,7 @@ impl Intro {
             let (_, tr) = a.text_ipk.entries.iter().find(|(i, _)| *i == m)?;
             Some([0, 1, 2, 3].map(|k| tr[k].sample(tf).clamp(0.0, 255.0) as u8))
         };
-        gmr::animate_joints(&a.text.model, &mut inst, &joint, Some(&color));
+        gmr::animate_joints(&a.wordmark().model, &mut inst, &joint, Some(&color));
         inst
     }
 
@@ -430,7 +451,7 @@ impl Intro {
         // the state the last frame left; then fn_81304CE8.
         let mut text = self.text(a, view);
         text.alpha = (fade * 255 / 255) as u8;
-        gmr::draw(gx, &a.text, &mut text);
+        gmr::draw(gx, a.wordmark(), &mut text);
         gmr::setup(gx);
 
         // The inner background cube, visible while the impacts shake it.
@@ -482,7 +503,7 @@ impl Intro {
             let mut text = self.text(a, &view.view);
             text.alpha = (inner.alpha as i32 * s.m0_logo_fade as i32 / s.m0_logo_frames as i32) as u8;
             gmr::draw(gx, &a.bg_inner, &mut inner);
-            gmr::draw(gx, &a.text, &mut text);
+            gmr::draw(gx, a.wordmark(), &mut text);
         } else {
             big_alpha = s.bg_alpha;
         }

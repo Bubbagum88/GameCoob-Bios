@@ -57,6 +57,10 @@ pub fn save_minimal(on: bool) -> Result<(), String> {
     vars::set_minimal(on).map_err(|err| format!("Could not save minimal mode: {:?}", err.status()))
 }
 
+pub fn save_coob_logo(on: bool) -> Result<(), String> {
+    vars::set_coob_logo(on).map_err(|err| format!("Could not save the intro logo: {:?}", err.status()))
+}
+
 pub fn save_timeout(secs: u16) -> Result<(), String> {
     vars::set_timeout(secs).map_err(|err| format!("Could not save Timeout: {:?}", err.status()))
 }

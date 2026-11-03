@@ -162,6 +162,7 @@ impl Page {
                 v.push(s(""));
                 v.push(s("Minimal Mode is there too: the menu as"));
                 v.push(s("close to the console's as it gets."));
+                v.push(s("Intro Logo picks GameCube or GameCoob."));
                 v.push(s(""));
                 v.push(s("F10 opens it from anywhere."));
                 v
