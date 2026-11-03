@@ -17,7 +17,6 @@ use super::super::ui::{cp1252, Rgba, Ui};
 use crate::bs2::mtx;
 use crate::ipl::glh::tag;
 use crate::sdk::mtx::{self as psmtx, Mtx};
-use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
@@ -30,7 +29,8 @@ pub enum Level {
     Memory,
     /// Game Play (the console's screen), Boot, Apps; no down side (B goes back).
     Game,
-    /// Console (the Options screen), Boot, Firmware, Controls.
+    /// Console (the Options screen), Firmware, Controls; no right side
+    /// (B goes back).
     Settings,
 }
 
@@ -42,7 +42,6 @@ pub enum Page {
     Apps,
     Files,
     Drives,
-    Boot,
     Firmware,
     Controls,
 }
@@ -63,7 +62,7 @@ fn labels(l: Level) -> [&'static str; 4] {
         Level::Main => ["", "", "", ""],
         Level::Memory => ["", "Files", "Drives", "Memory Card"],
         Level::Game => ["Game Play", "Boot", "Apps", ""],
-        Level::Settings => ["Boot", "Console", "Firmware", "Controls"],
+        Level::Settings => ["Firmware", "Console", "", "Controls"],
     }
 }
 
@@ -86,8 +85,7 @@ impl Level {
             (Level::Game, St::OptionFace) => Target::Page(Page::BootNow),
             (Level::Game, St::ClockFace) => Target::Page(Page::Apps),
             (Level::Settings, St::OptionFace) => Target::Screen(St::Option),
-            (Level::Settings, St::GameFace) => Target::Page(Page::Boot),
-            (Level::Settings, St::ClockFace) => Target::Page(Page::Firmware),
+            (Level::Settings, St::GameFace) => Target::Page(Page::Firmware),
             (Level::Settings, St::CardFace) => Target::Page(Page::Controls),
             _ => return None,
         })
@@ -136,7 +134,6 @@ impl Page {
             Page::Apps => "Apps",
             Page::Files => "Files",
             Page::Drives => "Drives",
-            Page::Boot => "Boot",
             Page::Firmware => "Firmware",
             Page::Controls => "Controls",
         }
@@ -149,8 +146,7 @@ impl Page {
             Page::Apps => St::ClockFace,
             Page::Files => St::OptionFace,
             Page::Drives => St::ClockFace,
-            Page::Boot => St::GameFace,
-            Page::Firmware => St::ClockFace,
+            Page::Firmware => St::GameFace,
             Page::Controls => St::CardFace,
         }
     }
@@ -159,19 +155,6 @@ impl Page {
     pub fn lines(self, entries: &[(u16, String)], fw_ui: bool) -> Vec<String> {
         let s = |t: &str| String::from(t);
         match self {
-            Page::Boot => {
-                let mut v = Vec::new();
-                v.push(s("Boot order:"));
-                for (i, (n, d)) in entries.iter().take(8).enumerate() {
-                    v.push(format!("{}.  {}  (Boot{:04X})", i + 1, d, n));
-                }
-                if entries.is_empty() {
-                    v.push(s("No boot entries."));
-                }
-                v.push(s(""));
-                v.push(s("Editing the order comes later."));
-                v
-            }
             Page::Firmware => {
                 let mut v = Vec::new();
                 v.push(s("A opens the system menu:"));
@@ -192,6 +175,8 @@ impl Page {
                 if entries.is_empty() {
                     v.push(s("No boot entries."));
                 }
+                v.push(s(""));
+                v.push(s("Changing the boot order comes later."));
                 v
             }
             Page::Apps => [
@@ -241,7 +226,7 @@ pub const FRONT_SCALE: f32 = 168.0 / 200.0;
 /// Every word [`word_label`] draws, lettered once at load.
 pub fn words() -> Vec<&'static str> {
     let mut v: Vec<&'static str> = Vec::new();
-    let pages = [Page::BootNow, Page::Apps, Page::Files, Page::Drives, Page::Boot, Page::Firmware, Page::Controls];
+    let pages = [Page::BootNow, Page::Apps, Page::Files, Page::Drives, Page::Firmware, Page::Controls];
     let all = [Level::Memory, Level::Game, Level::Settings].into_iter().flat_map(labels);
     for w in all.chain(pages.into_iter().map(Page::title)).chain([super::MEMORY_LABEL]) {
         if !w.is_empty() && !v.contains(&w) {
@@ -438,8 +423,7 @@ pub fn icons(d: &super::icons::IconData) -> Vec<(Level, St, super::icons::PixelI
         (Level::Memory, St::ClockFace, PixelIcon::new(d, Side::Right, TINT_CARD, DRIVES, DRIVES_MOTION)),
         (Level::Game, St::OptionFace, PixelIcon::new(d, Side::Left, TINT_GAME, BOOT, BOOT_MOTION)),
         (Level::Game, St::ClockFace, PixelIcon::new(d, Side::Right, TINT_GAME, APPS, APPS_MOTION)),
-        (Level::Settings, St::GameFace, PixelIcon::new(d, Side::Up, TINT_OPTION, BOOT, BOOT_MOTION)),
-        (Level::Settings, St::ClockFace, PixelIcon::new(d, Side::Right, TINT_OPTION, FIRMWARE, FIRMWARE_MOTION)),
+        (Level::Settings, St::GameFace, PixelIcon::new(d, Side::Up, TINT_OPTION, FIRMWARE, FIRMWARE_MOTION)),
         (Level::Settings, St::CardFace, PixelIcon::new(d, Side::Down, TINT_OPTION, CONTROLS, CONTROLS_MOTION)),
     ]
 }

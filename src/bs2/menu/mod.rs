@@ -17,7 +17,7 @@
 //! GameCoob: Game Play, Memory Card and Options don't open their screens
 //! straight away. Turning to one rolls the same cube on: that side becomes
 //! the front of a sub-menu ([`subcube`]) whose sides hold those screens
-//! and new ones (Files, Drives, Boot, Firmware, Controls). The main cube's
+//! and new ones (Files, Drives, Boot, Apps, Firmware, Controls). The main cube's
 //! Memory Card side is labelled "Memory".
 
 pub mod backend;
@@ -569,7 +569,8 @@ impl Menu {
         let toward_main = match self.level {
             Level::Memory => p.up,
             Level::Game => p.down,
-            _ => false,
+            Level::Settings => p.right,
+            Level::Main => false,
         };
         if self.level != Level::Main && self.state == Top && self.w.at_front() && (p.b || toward_main) {
             sound::play(se::FACE_BACK);
