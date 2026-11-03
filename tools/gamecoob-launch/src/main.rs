@@ -13,8 +13,10 @@
 //!           --request FILE read the launch request from a file instead of the variable
 //! ```
 //!
-//! `run` is what the login task calls. `cargo test` here runs
-//! `src/launch`'s tests.
+//! `run` is what the login task calls; `install/` sets it up (and on
+//! Linux a boot-time `scan` as root, since the ESP is root-only there).
+//! When the ESP can't be read, the copy of paths.toml the last readable
+//! run kept is used. `cargo test` here runs `src/launch`'s tests.
 
 extern crate alloc;
 
@@ -62,7 +64,13 @@ fn main() -> ExitCode {
         ["check", file] => check(Path::new(file)),
         ["check"] => sys::esp(o.esp.as_deref()).and_then(|esp| check(&on_esp(&esp.dir, PATHS_FILE))),
         ["scan"] => setup(&o).and_then(|s| scan(&s)),
-        ["run"] => setup(&o).and_then(|s| scan(&s).and_then(|_| run(&s, &o))),
+        // A failed scan (ESP not writable here) doesn't stop the launch.
+        ["run"] => setup(&o).and_then(|s| {
+            if let Err(e) = scan(&s) {
+                eprintln!("gamecoob-launch: {}", e);
+            }
+            run(&s, &o)
+        }),
         ["mark"] => setup(&o).and_then(|s| mark(&s, &o)),
         _ => {
             eprintln!("{}", USAGE);
@@ -107,16 +115,45 @@ fn check(file: &Path) -> Result<(), String> {
     Ok(())
 }
 
-/// The ESP, the paths file on it, and which `[[os]]` this is.
+/// The ESP (when this user can read it), the paths file, and which
+/// `[[os]]` this is.
 struct Setup {
-    esp: sys::Esp,
+    esp: Option<sys::Esp>,
     paths: Paths,
     os: String,
 }
 
+/// The paths file from the ESP, keeping a copy outside it; or, when the
+/// ESP can't be read (Arch mounts it root-only), that copy.
+fn read_paths(o: &Opts) -> Result<(Option<sys::Esp>, Paths), String> {
+    let from_esp = sys::esp(o.esp.as_deref()).and_then(|esp| {
+        let file = on_esp(&esp.dir, PATHS_FILE);
+        let text = std::fs::read_to_string(&file).map_err(|e| format!("{}: {}", file.display(), e))?;
+        Ok((esp, text))
+    });
+    let cache = sys::paths_cache();
+    let (esp, text) = match from_esp {
+        Ok((esp, text)) => {
+            // Best effort: only an admin/root run can usually write it.
+            if std::fs::read_to_string(&cache).ok().as_deref() != Some(text.as_str()) {
+                let _ = cache.parent().map(std::fs::create_dir_all);
+                let _ = std::fs::write(&cache, &text);
+            }
+            (Some(esp), text)
+        }
+        Err(e) => match std::fs::read_to_string(&cache) {
+            Ok(text) => (None, text),
+            Err(_) => return Err(e),
+        },
+    };
+    let paths = Paths::parse(&text).map_err(|errs| {
+        errs.iter().map(|e| format!("{}: {}", PATHS_FILE, e)).collect::<Vec<_>>().join("\n")
+    })?;
+    Ok((esp, paths))
+}
+
 fn setup(o: &Opts) -> Result<Setup, String> {
-    let esp = sys::esp(o.esp.as_deref())?;
-    let paths = load_paths(&on_esp(&esp.dir, PATHS_FILE))?;
+    let (esp, paths) = read_paths(o)?;
     let os = match &o.os {
         Some(id) => paths.os_by_id(id).map(|os| os.id.clone()).ok_or_else(|| format!("no [[os]] has id \"{}\"", id))?,
         None => {
@@ -133,7 +170,10 @@ fn setup(o: &Opts) -> Result<Setup, String> {
 }
 
 fn scan(s: &Setup) -> Result<(), String> {
-    let file = on_esp(&s.esp.dir, LIBRARY_FILE);
+    let Some(esp) = &s.esp else {
+        return Err("can't read the ESP as this user: the game list is updated by the boot-time scan (root)".into());
+    };
+    let file = on_esp(&esp.dir, LIBRARY_FILE);
     let mut lib = match std::fs::read_to_string(&file) {
         // A broken list is rebuilt rather than blocking the scan.
         Ok(text) => Library::parse(&text).unwrap_or_default(),
@@ -246,8 +286,16 @@ mod tests {
         };
         std::fs::write(on_esp(&esp, LIBRARY_FILE), other.to_toml()).unwrap();
 
+        // SAFETY: the only test that touches the environment.
+        unsafe { std::env::set_var("GAMECOOB_PATHS_CACHE", root.join("cache").join("paths.toml")) };
         let o = Opts { esp: Some(esp.to_string_lossy().into()), os: Some("arch".into()), ..Opts::default() };
         let s = setup(&o).unwrap();
+        assert!(root.join("cache").join("paths.toml").is_file());
+        // Without the ESP, the copy stands in (and scanning is refused).
+        let gone = Opts { esp: Some(root.join("nowhere").to_string_lossy().into()), os: Some("arch".into()), ..Opts::default() };
+        let cached = setup(&gone).unwrap();
+        assert!(cached.esp.is_none() && cached.paths == s.paths);
+        assert!(scan(&cached).is_err());
         scan(&s).unwrap();
         let lib = Library::parse(&std::fs::read_to_string(on_esp(&esp, LIBRARY_FILE)).unwrap()).unwrap();
         let titles: Vec<_> = lib.games.iter().map(|g| g.title.as_str()).collect();

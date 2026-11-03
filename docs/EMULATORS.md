@@ -65,16 +65,35 @@ Its parts:
    without the helper deleting the variable (reading is allowed for
    normal users on Linux; writing or deleting needs root).
 
-How the helper starts at login:
+How the helper runs:
 
-- **Windows**: a scheduled task at logon with highest privileges (reading
-  firmware variables there needs the SE_SYSTEM_ENVIRONMENT privilege,
-  which only an elevated process has). It mounts the ESP with `mountvol`
-  to update the game list.
-- **Linux (Arch first)**: a systemd user service. Variables are read from
-  `/sys/firmware/efi/efivars`; the ESP is the FAT mount (from
-  `/proc/mounts`) holding `EFI/GameCoob`, usually `/efi`, `/boot` or
-  `/boot/efi`. `--esp DIR` overrides it on either OS.
+- **Windows**: a scheduled task at logon with highest privileges, running
+  `gamecoob-launch run` (reading firmware variables needs the
+  SE_SYSTEM_ENVIRONMENT privilege, which only an elevated process has).
+  It mounts the ESP with `mountvol` to update the game list.
+- **Linux (Arch first)**: Arch mounts the ESP so only root can read it,
+  so the work is split. `gamecoob-scan.service` runs `gamecoob-launch
+  scan` as root at boot: it updates the game list and keeps a readable
+  copy of `paths.toml` in `/var/lib/gamecoob`. An XDG autostart entry
+  runs `gamecoob-launch run` at desktop login, as you, so the emulator
+  opens on your desktop; it reads the variable from
+  `/sys/firmware/efi/efivars` (readable by every user) and the paths
+  from the copy. The ESP is the FAT mount (from `/proc/mounts`) holding
+  `EFI/GameCoob`, usually `/efi`, `/boot` or `/boot/efi`. `--esp DIR`
+  overrides it on either OS.
+
+### Installing
+
+CI's **GameCoob-launch-helper** download has `linux/`, `windows/`, this
+file and `paths.example.toml`.
+
+1. Copy `paths.example.toml` to `\EFI\GameCoob\paths.toml` on the ESP
+   and fill in your OSes, emulators and game folders.
+2. Linux: `cd linux && sudo sh install-linux.sh`.
+   Windows, in an administrator PowerShell: `cd windows` then
+   `powershell -ExecutionPolicy Bypass -File install-windows.ps1`.
+3. Each installer checks the paths file, scans once and marks any old
+   launch request as handled. `--uninstall` / `-Uninstall` removes it.
 
 ## Memory cards
 
@@ -89,10 +108,11 @@ in the boot menu shows up in the game, and the other way round.
 1. File formats, parser, example and `gamecoob-launch check` (#144).
 2. Helper: scan folders, read disc headers, write `library.toml`, read
    `GameCoobLaunch`, start the emulator (`gamecoob-launch scan`, `run`,
-   `mark`).
+   `mark`) (#146).
 3. Boot menu: START on Game Play with no disc opens the game list; a
-   pick writes the launch variable and sets BootNext by boot entry name.
-4. `[boot]` paths replace the built-in ones.
-5. Memory card sync.
-6. Installing the helper: Windows scheduled task, Linux systemd user
-   service.
+   pick writes the launch variable and sets BootNext by boot entry name
+   (#148).
+4. Installing the helper: Windows scheduled task; Linux boot-time scan
+   service and login autostart.
+5. `[boot]` paths replace the built-in ones.
+6. Memory card sync.

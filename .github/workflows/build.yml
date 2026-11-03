@@ -23,11 +23,13 @@ jobs:
       - name: Test the emulator launch code on the host
         working-directory: tools/gamecoob-launch
         run: cargo test --target x86_64-unknown-linux-gnu
-      - name: Check the launch helper builds for Windows
+      - name: Build the launch helper for Linux and Windows
         working-directory: tools/gamecoob-launch
         run: |
+          sudo apt-get install -y --no-install-recommends gcc-mingw-w64-x86-64
           rustup target add x86_64-pc-windows-gnu
-          cargo check --target x86_64-pc-windows-gnu
+          cargo build --release --target x86_64-unknown-linux-gnu
+          cargo build --release --target x86_64-pc-windows-gnu
       - name: Test the BS2 code on the host
         working-directory: tools/menu-render
         run: cargo test --target x86_64-unknown-linux-gnu
@@ -46,3 +48,14 @@ jobs:
         with:
           name: GameCoob-boot-files
           path: dist/
+      - name: Lay out the launch helper
+        run: |
+          h=tools/gamecoob-launch
+          mkdir -p helper/linux helper/windows
+          cp $h/target/x86_64-unknown-linux-gnu/release/gamecoob-launch $h/install/install-linux.sh helper/linux/
+          cp $h/target/x86_64-pc-windows-gnu/release/gamecoob-launch.exe $h/install/install-windows.ps1 helper/windows/
+          cp docs/paths.example.toml docs/EMULATORS.md helper/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GameCoob-launch-helper
+          path: helper/
