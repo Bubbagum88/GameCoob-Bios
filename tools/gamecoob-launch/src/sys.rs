@@ -99,6 +99,19 @@ pub fn read_request() -> Result<Option<Vec<u8>>, String> {
     win::read_var(REQUEST_VAR, VENDOR_GUID)
 }
 
+/// A copy of the paths file outside the ESP, readable by every user, for
+/// runs that can't read the ESP. `GAMECOOB_PATHS_CACHE` overrides it.
+pub fn paths_cache() -> PathBuf {
+    if let Some(p) = std::env::var_os("GAMECOOB_PATHS_CACHE") {
+        return PathBuf::from(p);
+    }
+    #[cfg(windows)]
+    let base = std::env::var_os("ProgramData").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("C:\\ProgramData"));
+    #[cfg(not(windows))]
+    let base = PathBuf::from("/var/lib");
+    base.join("gamecoob").join("paths.toml")
+}
+
 /// Where the helper remembers the last request it ran.
 pub fn state_file() -> PathBuf {
     #[cfg(windows)]
