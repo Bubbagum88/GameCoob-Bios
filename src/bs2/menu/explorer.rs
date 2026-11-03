@@ -35,8 +35,23 @@ const MSG_FRAMES: u32 = 240;
 /// Card sizes offered for a new image, in blocks.
 const NEW_SIZES: [u16; 6] = [59, 123, 251, 507, 1019, 2043];
 const CARD_EXTS: [&str; 3] = ["raw", "mcp", "gcp"];
-/// Where exports go before any folder was browsed (boot volume).
+/// Where exports go before any folder was browsed (boot volume), unless
+/// the paths file's `[boot] saves` says otherwise ([`set_export_dir`]).
 const DEFAULT_EXPORT: &str = "\\EFI\\GameCoob\\saves";
+
+static EXPORT_DIR: core::sync::atomic::AtomicPtr<String> = core::sync::atomic::AtomicPtr::new(core::ptr::null_mut());
+
+/// Sets the default export folder on the boot volume; set once at start
+/// (the previous value is leaked).
+pub fn set_export_dir(dir: String) {
+    EXPORT_DIR.store(alloc::boxed::Box::into_raw(alloc::boxed::Box::new(dir)), core::sync::atomic::Ordering::Relaxed);
+}
+
+fn export_dir() -> &'static str {
+    let p = EXPORT_DIR.load(core::sync::atomic::Ordering::Relaxed);
+    // SAFETY: only ever set to a leaked Box, never freed.
+    if p.is_null() { DEFAULT_EXPORT } else { unsafe { (*p).as_str() } }
+}
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Kind {
@@ -555,9 +570,13 @@ impl Explorer {
             Some(t) => t.clone(),
             None => {
                 let v = vols.volumes().into_iter().find(|v| v.boot).ok_or("No drive to write to")?;
-                let _ = vols.mkdir(&v.id, "\\EFI\\GameCoob");
-                vols.mkdir(&v.id, DEFAULT_EXPORT)?;
-                (v.id, String::from(DEFAULT_EXPORT))
+                let dir = export_dir();
+                // Each parent first; only the folder itself must work.
+                for (i, _) in dir.match_indices('\\').filter(|&(i, _)| i > 0) {
+                    let _ = vols.mkdir(&v.id, &dir[..i]);
+                }
+                vols.mkdir(&v.id, dir)?;
+                (v.id, String::from(dir))
             }
         };
         let taken = vols.list(&vol, &dir)?;
