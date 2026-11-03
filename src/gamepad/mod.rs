@@ -91,6 +91,57 @@ fn io_raw(io: &mut ScopedProtocol<UsbIo>) -> *mut UsbIoProtocol {
     p as *mut UsbIo as *mut UsbIoProtocol
 }
 
+/// PCI I/O, cut to what [`start_usb`] needs: reading config space.
+#[repr(C)]
+#[uefi::proto::unsafe_protocol("4cf5b200-68b8-4ca5-9eec-b23e3f50029a")]
+struct PciIo {
+    poll_mem: usize,
+    poll_io: usize,
+    mem_read: usize,
+    mem_write: usize,
+    io_read: usize,
+    io_write: usize,
+    /// `Pci.Read(This, Width, Offset, Count, Buffer)`.
+    pci_read: unsafe extern "efiapi" fn(*mut PciIo, u32, u32, usize, *mut c_void) -> uefi::Status,
+}
+
+/// Connect every USB host controller and, recursively, the USB bus and
+/// devices behind it. Firmware set to "fast boot" often leaves USB
+/// unconnected when it boots something off a disk, and then there would be
+/// no USB I/O handles at all (no pads, and no USB keyboard either). Where
+/// the firmware already connected USB this changes nothing. Done once, at
+/// start: enumerating the bus can take a moment.
+pub fn start_usb() {
+    let Ok(handles) = boot::locate_handle_buffer(SearchType::ByProtocol(&PciIo::GUID)) else { return };
+    let mut started = 0;
+    for h in handles.iter() {
+        // SAFETY: only config space is read, and the protocol stays open
+        // just for that.
+        let class = unsafe {
+            let Ok(mut pci) = boot::open_protocol::<PciIo>(
+                OpenProtocolParams { handle: *h, agent: boot::image_handle(), controller: None },
+                OpenProtocolAttributes::GetProtocol,
+            ) else {
+                continue;
+            };
+            let p: &mut PciIo = &mut pci;
+            let mut cc = [0u8; 3];
+            // Width 0 = 8-bit; 0x09..0x0B = programming interface, subclass, class.
+            if (p.pci_read)(p, 0, 0x09, 3, cc.as_mut_ptr().cast()).is_error() {
+                continue;
+            }
+            cc
+        };
+        // Class 0C subclass 03: a USB host controller (UHCI, OHCI, EHCI, xHCI).
+        if class[2] == 0x0C && class[1] == 0x03 {
+            if boot::connect_controller(*h, &[], None, true).is_ok() {
+                started += 1;
+            }
+        }
+    }
+    say(format_args!("GameCoob: {started} USB host controllers connected"));
+}
+
 /// The USB gamepads.
 pub struct Gamepads {
     devs: Vec<Device>,
