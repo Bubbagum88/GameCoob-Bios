@@ -23,6 +23,9 @@ mod gfx;
 mod hda;
 mod input;
 mod ipl;
+// Read by the Game side's game list in a later step (docs/EMULATORS.md).
+#[allow(dead_code)]
+mod launch;
 mod sdk;
 mod vars;
 
