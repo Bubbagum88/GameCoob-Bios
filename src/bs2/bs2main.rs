@@ -3,7 +3,7 @@
 //! one pass of the `BS2Main` loop ([`Bs2Main`]).
 //!
 //! The UEFI glue (`boot_intro.rs`) and tools/menu-render own the things
-//! the C gets from the SDK: the pad (keys), the 60 Hz pacing (VI retrace),
+//! the C gets from the SDK: the pad (keys), the pacing (VI retrace, [`LOGIC_HZ`]),
 //! the rasterizer cores and the present (DEMODoneRender's copy out).
 
 use super::menu::backend::{DiscDrive, MemCards};
@@ -15,6 +15,13 @@ pub use super::sound::SoundCmd;
 use super::sound;
 use super::{raster, Assets, Input, Intro};
 use alloc::boxed::Box;
+
+/// Logic frames per second. BS2 runs one loop pass per VI retrace, and the
+/// PAL IPL sets `BS2RenderMode` to `VI_TVMODE_PAL_INT`: 50 Hz. Every timing
+/// in the intro and the menu counts these frames, and the jingles are
+/// recorded to match them, so running at 60 makes the animation 20%
+/// faster than its music.
+pub const LOGIC_HZ: f32 = 50.0;
 
 
 /// The display settings record (`DispSettings`, 0x50 bytes) with the fields

@@ -2,7 +2,7 @@
 //! `ipl.bin` is on the boot partition, and runs on into the rebuilt cube
 //! menu. Without a usable dump, `main` explains where to put it.
 
-use crate::bs2::bs2main::{Bs2Main, FrameInput};
+use crate::bs2::bs2main::{Bs2Main, FrameInput, LOGIC_HZ};
 use crate::bs2::menu::backend::{FakeCards, FakeDrive, MemCards};
 use crate::bs2::menu::card_image::ImageCards;
 use crate::bs2::menu::volumes::{self, Volumes};
@@ -258,7 +258,8 @@ impl Cores {
     }
 }
 
-/// Run [`Bs2Main`] at 60 logic frames per second: the intro, then the cube
+/// Run [`Bs2Main`] at [`LOGIC_HZ`] logic frames per second (50, the PAL
+/// IPL's VI rate): the intro, then the cube
 /// menu. Never returns: the menu's actions boot or reset.
 ///
 /// Keys go through [`input::DEFAULT_KEYS`]: the arrows are the d-pad, Enter
@@ -279,7 +280,7 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
     crate::bs2::menu::set_minimal(crate::vars::minimal());
     let mut bs2 = Bs2Main::new(assets, Box::new(FakeDrive::new()), load_cards(), Box::new(UefiVolumes));
     let cores = Cores::open();
-    // Rendered at the screen's resolution, adjusted to keep 60 fps.
+    // Rendered at the screen's resolution, adjusted to keep up with the logic.
     let mut res = ResScale::new(cv);
     let mut stats = Stats::default();
     // Frame timings go to the first serial port: always under OVMF (QEMU),
@@ -305,7 +306,7 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
             }
         }
         // Catch logic up to real time, drawing only the latest frame.
-        let due = (now * 60.0) as u32;
+        let due = (now * LOGIC_HZ) as u32;
         // The gamepads, read when logic frames are due: their buttons hold
         // for each of those frames, their actions fire once.
         let mut gp = [PadStatus::NONE; 4];

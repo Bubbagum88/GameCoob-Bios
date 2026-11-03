@@ -98,8 +98,8 @@ pub struct Input {
 
 /// Frames to hold the finished logo before it spins to the menu on its own
 /// when no disc is present. The real IPL holds none; GameCoob lingers one
-/// second (60 frames) on the logo.
-pub const HOLD_FRAMES: i32 = 60;
+/// second (50 frames) on the logo.
+pub const HOLD_FRAMES: i32 = 50;
 
 /// The scene (`scene.c`, `scene_intro.c`, `scene_spinout.c`): the scene
 /// state machine and the models it draws, the rolling cube, and the bits of
@@ -170,7 +170,7 @@ impl Intro {
         }
     }
 
-    /// One 1/60 s logic frame: `fn_81302DF0`'s camera for the state the last
+    /// One logic frame (1/50 s, [`bs2main::LOGIC_HZ`]): `fn_81302DF0`'s camera for the state the last
     /// frame left, then `Scene_Update`. Once the menu has taken over this
     /// only latches the state; `Menu_Update` is the menu's own.
     pub fn update(&mut self, input: Input) -> Option<Jingle> {
