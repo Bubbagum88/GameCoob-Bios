@@ -1,9 +1,10 @@
 //! Host tests (run from `tools/audio-render`: `cargo test`). The data here is
 //! made up in the test; nothing comes from a dump.
 
-use super::data::{Wave, decode_afc};
-use super::mixer::Mixer;
-use alloc::vec;
+use super::data::decode_afc;
+use super::bank::{Osc, Table};
+use super::voice::{OscBuf, Tables, osc_to_ofs};
+use alloc::rc::Rc;
 
 #[test]
 fn afc_frame_decodes() {
@@ -30,33 +31,56 @@ fn afc_clamps() {
     assert!(s.iter().all(|&x| x == 32767));
 }
 
-fn ramp(rate: f32, n: usize, looped: Option<(u32, u32)>) -> Wave {
-    Wave { rate, base_key: 60, looped, pcm: (0..n).map(|i| (i % 256) as i16 * 100).collect() }
+fn table(v: &[i16]) -> Table {
+    Rc::from(v)
 }
 
 #[test]
-fn mixer_same_rate_is_identity_and_ends() {
-    let waves = [ramp(48000.0, 64, None)];
-    let mut m = Mixer::new(48000);
-    m.play(&waves, 0, 1.0, [1.0, 0.0]);
-    let mut out = vec![0i16; 2 * 100];
-    m.render(&waves, &mut out);
-    for i in 0..64 {
-        assert!((out[2 * i] as i32 - i as i32 * 100).abs() <= 1, "frame {i}: {}", out[2 * i]);
-        assert_eq!(out[2 * i + 1], 0);
+fn envelope_attack_hold_release() {
+    // The bank's envelope: straight to full, hold, then a squared fall
+    // over 500/600 s.
+    let o = Osc {
+        mode: 0,
+        rate: 1.0,
+        attack: Some(table(&[0, 0, 32767, 0, 100, 32767, 14, 0, 0])),
+        release: Some(table(&[1, 500, 0, 15, 0, 0])),
+        width: 1.0,
+        vertex: 0.0,
+    };
+    let force = Tables::new().force_release;
+    let mut b = OscBuf::default();
+    b.state = 1;
+    for _ in 0..100 {
+        let v = osc_to_ofs(&o, &mut b, &force);
+        assert!((v - 1.0).abs() < 1e-3, "{v}");
     }
-    assert_eq!(m.active(), 0);
+    assert_eq!(b.state, 3);
+    b.state = 4;
+    let mut last = 1.0;
+    let mut n = 0;
+    while b.state != 0 {
+        let v = osc_to_ofs(&o, &mut b, &force);
+        assert!(v <= last + 1e-6);
+        last = v;
+        n += 1;
+        assert!(n < 1000);
+    }
+    // 500/600 s at 32028.5/80 subframes per second.
+    assert!((332..=336).contains(&n), "{n}");
 }
 
 #[test]
-fn mixer_resamples_and_loops() {
-    let waves = [ramp(32000.0, 3200, Some((1600, 3200)))];
-    let mut m = Mixer::new(48000);
-    m.play(&waves, 0, 1.0, [0.5, 0.5]);
-    let mut out = vec![0i16; 2 * 48000];
-    m.render(&waves, &mut out);
-    // 1 s at 48 kHz = 32000 source samples: still looping.
-    assert_eq!(m.active(), 1);
-    // Frame 3 is source sample 2 (3 * 2/3): 200 * 0.5.
-    assert!((out[6] - 100).abs() <= 1);
+fn zero_osc_release_never_ends() {
+    // A track's unset second oscillator (all zeros) gives 1.0 until the
+    // note ends, then 0.0 for good: its rate is 0, so time never passes.
+    let o = Osc::default();
+    let force = Tables::new().force_release;
+    let mut b = OscBuf::default();
+    b.state = 1;
+    assert_eq!(osc_to_ofs(&o, &mut b, &force), 1.0);
+    b.state = 4;
+    for _ in 0..1000 {
+        assert_eq!(osc_to_ofs(&o, &mut b, &force), 0.0);
+    }
+    assert_ne!(b.state, 0);
 }

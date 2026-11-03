@@ -18,10 +18,11 @@
 //! draws the title and the row labels.
 //!
 //! GameCoob: Clock_Commit sets the firmware clock ([`Action::SetTime`])
-//! instead of the SRAM counter bias, and the title says so. Sound_Play
-//! calls are left out, and so is `sClockPulse`, which nothing reads.
+//! instead of the SRAM counter bias, and the title says so.
+//! `sClockPulse`, which nothing reads, is left out.
 
 use super::{Action, MenuAssets, Pad, St};
+use crate::bs2::sound::{self, se};
 use crate::bs2::ui::{cp1252, Ui};
 use crate::ipl::glh::tag;
 use alloc::format;
@@ -86,12 +87,19 @@ impl Calendar {
             return St::Clock;
         }
         if p.up {
+            if self.row != ROW_DATE {
+                sound::play(se::CURSOR);
+            }
             self.row = ROW_DATE;
         }
         if p.down {
+            if self.row != ROW_TIME {
+                sound::play(se::CURSOR);
+            }
             self.row = ROW_TIME;
         }
         if p.a {
+            sound::play(se::DECIDE);
             let t = *c.now;
             match self.row {
                 ROW_DATE => {
@@ -106,6 +114,7 @@ impl Calendar {
             }
         }
         if p.b && c.zoomed_in {
+            sound::play(se::EXIT);
             next = St::ClockFace;
         }
         next
@@ -158,9 +167,11 @@ impl Calendar {
         let field = if date { &mut self.date_field } else { &mut self.time_field };
         let side = !(p.up || p.down);
         if p.left && side {
+            sound::play(se::CURSOR_H);
             *field -= step;
         }
         if p.right && side {
+            sound::play(se::CURSOR_H);
             *field += step;
         }
         if *field < 0 {
@@ -172,6 +183,7 @@ impl Calendar {
         let f = *field as usize;
         for (pressed, d) in [(p.down, -1), (p.up, 1)] {
             if pressed {
+                sound::play(se::CHANGE);
                 self.value[f] += d;
                 if date {
                     self.fix_date();
@@ -182,10 +194,12 @@ impl Calendar {
         }
         let mut action = None;
         if p.a {
+            sound::play(se::CONFIRM);
             action = self.commit(c);
             self.sub = CLOCK_MENU;
         }
         if p.b {
+            sound::play(se::CANCEL);
             self.sub = CLOCK_MENU;
         }
         action

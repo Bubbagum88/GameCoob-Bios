@@ -17,7 +17,7 @@ use crate::clock::Clock;
 use crate::gfx::{Canvas, ResScale};
 use crate::ipl::Ipl;
 use crate::audio::{Engine, data::SoundArchive};
-use crate::bs2::bs2main::SoundCmd;
+use crate::bs2::sound::{self, SoundCmd};
 use crate::hda::Hda;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -131,13 +131,16 @@ impl Audio {
     }
 
     /// Hand BS2's sound calls to the engine and keep the card fed.
-    fn update(&mut self, cmds: &mut Vec<SoundCmd>) {
-        for c in cmds.drain(..) {
-            match c {
-                SoundCmd::Play(id) => self.engine.sound_play(id),
-                SoundCmd::Reset => self.engine.reset(),
-            }
-        }
+    fn update(&mut self) {
+        let e = &mut self.engine;
+        sound::drain(|c| match c {
+            SoundCmd::Play(id) => e.sound_play(id),
+            SoundCmd::Spin(mode, level) => e.update_spin(mode, level),
+            SoundCmd::StartAmbient(id) => e.start_ambient(id),
+            SoundCmd::StopAmbient => e.stop_ambient(),
+            SoundCmd::OutputMode(m) => e.set_output_mode(m),
+            SoundCmd::Reset => e.reset(),
+        });
         if let Some(o) = &mut self.out {
             let e = &mut self.engine;
             o.pump(&mut |buf| e.render(buf));
@@ -356,9 +359,9 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
             }
         }
         if let Some(a) = &mut audio {
-            a.update(&mut bs2.sounds);
+            a.update();
         } else {
-            bs2.sounds.clear();
+            sound::drain(|_| {});
         }
         if let Some(m) = &mut bs2.menu {
             if now - clock_at > 0.25 {

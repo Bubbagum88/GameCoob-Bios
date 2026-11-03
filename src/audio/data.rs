@@ -30,6 +30,9 @@ pub struct SoundArchive {
     pub offset: usize,
     pub bank: Vec<u8>,
     pub waves: Vec<Wave>,
+    /// The sound id of each wave (`C-DF` table), which the bank names
+    /// waves by.
+    pub ids: Vec<u16>,
     /// Bytes from the end of `ipl_0.aw` on: `iplrom.com` starts here.
     pub seq: Vec<u8>,
 }
@@ -146,6 +149,29 @@ fn parse_wsys(rom: &[u8], ws: usize, aw: usize) -> Option<(Vec<Wave>, usize)> {
     Some((waves, end))
 }
 
+/// The sound ids of the first scene's `C-DF` table (`WBCT` -> `SCNE` ->
+/// `C-DF`), one per wave in archive order.
+fn parse_cdf(rom: &[u8], ws: usize) -> Option<Vec<u16>> {
+    let ctrl = ws + be32(rom, ws + 0x14)? as usize;
+    if rom.get(ctrl..ctrl + 4)? != b"WBCT" {
+        return None;
+    }
+    let scne = ws + be32(rom, ctrl + 0xC)? as usize;
+    if rom.get(scne..scne + 4)? != b"SCNE" {
+        return None;
+    }
+    let cdf = ws + be32(rom, scne + 0xC)? as usize;
+    if rom.get(cdf..cdf + 4)? != b"C-DF" {
+        return None;
+    }
+    let mut ids = Vec::new();
+    for i in 0..(be32(rom, cdf + 4)? as usize).min(4096) {
+        let e = ws + be32(rom, cdf + 8 + i * 4)? as usize;
+        ids.push(be32(rom, e)? as u16);
+    }
+    Some(ids)
+}
+
 impl SoundArchive {
     /// Find the archive in a descrambled ROM: the `IBNK` bank, the `WSYS`
     /// table after it, the waves after that (each 32-byte aligned).
@@ -158,8 +184,14 @@ impl SoundArchive {
         }
         let aw = (ws + be32(rom, ws + 4)? as usize + 0x1F) & !0x1F;
         let (waves, end) = parse_wsys(rom, ws, aw)?;
+        let ids = parse_cdf(rom, ws).filter(|v| v.len() == waves.len()).unwrap_or_else(|| (0..waves.len() as u16).collect());
         let seq = aw + ((end + 0x1F) & !0x1F);
         let seq = rom.get(seq..(seq + 0x1000).min(rom.len()))?.to_vec();
-        Some(SoundArchive { offset: bnk, bank: rom[bnk..bnk + bnk_len].to_vec(), waves, seq })
+        Some(SoundArchive { offset: bnk, bank: rom[bnk..bnk + bnk_len].to_vec(), waves, ids, seq })
+    }
+
+    /// The wave with sound id `id`.
+    pub fn wave_by_id(&self, id: u16) -> Option<usize> {
+        self.ids.iter().position(|&x| x == id)
     }
 }

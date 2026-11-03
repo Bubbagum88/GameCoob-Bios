@@ -48,7 +48,7 @@ Language: Rust with the [`uefi`](https://crates.io/crates/uefi) crate, `no_std`.
       camera, shake, wordmark animation and spin-out follow the IPL's code
 - [ ] Port the main menu (the glass cube with Game Play, Memory Card,
       Calendar and Options) from the decompiled BS2 menu code
-- [ ] Boot jingle and spin whoosh from the IPL's own audio
+- [x] Boot jingle and spin whoosh from the IPL's own audio
 - [ ] More easter eggs in spirit: held buttons that change the intro, a
       secret sound or palette on certain dates, a hidden "cube" menu toy
 
@@ -61,7 +61,7 @@ Language: Rust with the [`uefi`](https://crates.io/crates/uefi) crate, `no_std`.
 - [ ] Mouse/pointer support through the Simple Pointer protocol
 - [x] Intro audio through Intel HDA (own driver, `src/hda.rs`); the
       original sounds play only from the user's dump, none are shipped
-- [ ] The IPL's sequence (`iplrom.com`) and every menu sound (docs/AUDIO.md)
+- [x] The IPL's sequence (`iplrom.com`) and every menu sound (docs/AUDIO.md)
 
 ## Phase 5: Real BIOS settings (HII)
 
