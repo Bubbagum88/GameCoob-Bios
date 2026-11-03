@@ -43,8 +43,7 @@ Its parts:
 - `[boot]`: `ipl`, `cards`, `saves` on the ESP. Defaults are today's
   built-in paths (`\EFI\GameCoob\ipl.bin`, `...\cards`, `...\saves`).
 - `[[os]]`: `id`, `kind` (`windows` or `linux`), `boot` (text in the
-  firmware boot entry's name, used to pick BootNext), `esp` (where that OS
-  mounts the ESP, for the helper).
+  firmware boot entry's name, used to pick BootNext).
 - `[[emulator]]`: `id`, `name`, `os`, `exe`, `args` with `{rom}` for the
   game, and `cards` (the emulator's memory card folder, for syncing).
 - `[[roms]]`: `os`, `path`, `emulator`, `ext` (defaults to iso, gcm,
@@ -72,8 +71,9 @@ How the helper starts at login:
   which only an elevated process has). It mounts the ESP with `mountvol`
   to update the game list.
 - **Linux (Arch first)**: a systemd user service. Variables are read from
-  `/sys/firmware/efi/efivars`; the ESP is wherever `esp` says, or `/efi`,
-  `/boot`, `/boot/efi`.
+  `/sys/firmware/efi/efivars`; the ESP is the FAT mount (from
+  `/proc/mounts`) holding `EFI/GameCoob`, usually `/efi`, `/boot` or
+  `/boot/efi`. `--esp DIR` overrides it on either OS.
 
 ## Memory cards
 
@@ -85,9 +85,10 @@ in the boot menu shows up in the game, and the other way round.
 
 ## Steps
 
-1. File formats, parser, example and `gamecoob-launch check` (this step).
+1. File formats, parser, example and `gamecoob-launch check` (#144).
 2. Helper: scan folders, read disc headers, write `library.toml`, read
-   `GameCoobLaunch`, start the emulator.
+   `GameCoobLaunch`, start the emulator (`gamecoob-launch scan`, `run`,
+   `mark`).
 3. Boot menu: game list on the Game side, the launch variable, BootNext
    by boot entry name; `[boot]` paths replace the built-in ones.
 4. Memory card sync.

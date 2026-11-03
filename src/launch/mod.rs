@@ -31,8 +31,11 @@ use toml::{quote, Entry, Error, Table, Value};
 pub const PATHS_FILE: &str = "\\EFI\\GameCoob\\paths.toml";
 /// Where the helper writes the game list on the ESP.
 pub const LIBRARY_FILE: &str = "\\EFI\\GameCoob\\library.toml";
-/// The UEFI variable (under the app's vendor GUID) holding a [`Request`].
+/// The UEFI variable (under [`VENDOR_GUID`]) holding a [`Request`], as
+/// UTF-8 text.
 pub const REQUEST_VAR: &str = "GameCoobLaunch";
+/// The boot app's vendor GUID for its own variables (`src/fs.rs`).
+pub const VENDOR_GUID: &str = "edc5e45c-31db-47a4-8969-2fe623cc0605";
 
 /// File extensions a `[[roms]]` folder scans when it lists none.
 pub const DEFAULT_EXTS: [&str; 7] = ["iso", "gcm", "rvz", "ciso", "gcz", "wbfs", "dol"];
@@ -55,10 +58,6 @@ pub struct Os {
     /// that starts this OS, e.g. `Windows Boot Manager`; the boot app sets
     /// BootNext to the first entry containing it.
     pub boot: String,
-    /// Where this OS mounts the ESP, for the helper (`/efi`, `/boot`,
-    /// `/boot/efi`). Unset: the helper looks in the usual places (Windows
-    /// mounts it itself).
-    pub esp: Option<String>,
 }
 
 /// `[[emulator]]`: a program on one OS that runs games.
@@ -166,10 +165,9 @@ impl Paths {
                         }
                     };
                     let boot = r.str("boot");
-                    let esp = r.opt_str("esp");
                     r.done();
                     if let Some(kind) = kind {
-                        paths.os.push(Os { id, kind, boot, esp });
+                        paths.os.push(Os { id, kind, boot });
                     }
                 }
                 ("emulator", true) => {
@@ -303,6 +301,13 @@ impl Library {
             }
         }
         if errs.is_empty() { Ok(lib) } else { Err(errs) }
+    }
+
+    /// Replaces the games of one OS with `games`, keeping the other OSes'
+    /// (each OS's helper only sees its own disks).
+    pub fn replace_os(&mut self, os: &str, games: Vec<Game>) {
+        self.games.retain(|g| g.os != os);
+        self.games.extend(games);
     }
 
     pub fn to_toml(&self) -> String {
