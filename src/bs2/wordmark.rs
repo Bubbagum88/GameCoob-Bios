@@ -9,14 +9,14 @@
 //! the picture is cut from the dump while the app loads.
 //!
 //! Which wordmark the intro draws is saved as the firmware variable
-//! `GameCoobLogo` ([`crate::vars::coob_logo`]); the console's is the
+//! `GameCoobLogo` ([`crate::vars::coob_logo`]); GameCoob's is the
 //! default.
 
 use crate::ipl::gx::Texture;
 use alloc::vec::Vec;
 use core::sync::atomic::{AtomicBool, Ordering};
 
-static COOB: AtomicBool = AtomicBool::new(false);
+static COOB: AtomicBool = AtomicBool::new(true);
 
 /// Draw "GAMECOOB" (true) or the console's "GAMECUBE" (false).
 pub fn set_coob(on: bool) {
