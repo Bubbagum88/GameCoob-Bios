@@ -282,6 +282,8 @@ impl Cores {
 /// on an adapter as themselves, other pads through
 /// [`input::DEFAULT_PAD`].
 pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &Assets, ma: &MenuAssets, snd: Option<SoundArchive>) -> ! {
+    // Before the clocks start: connecting USB can take a moment.
+    crate::gamepad::start_usb();
     let mut audio = Audio::open(snd);
     crate::bs2::menu::set_minimal(crate::vars::minimal());
     crate::bs2::wordmark::set_coob(crate::vars::coob_logo());
