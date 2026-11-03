@@ -147,6 +147,11 @@ impl Audio {
         }
     }
 
+    /// Seconds of sound the card has played (0 with no card).
+    fn played(&self) -> f64 {
+        self.out.as_ref().map_or(0.0, |o| o.played() as f64 / crate::hda::RATE as f64)
+    }
+
     /// Stop the card before control leaves GameCoob (booting an entry).
     fn close(&mut self) {
         if let Some(mut o) = self.out.take() {
@@ -288,14 +293,41 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
     let log_stats = system::firmware_vendor().to_string().contains("EDK II");
     let mut show_stats = false;
     let mut target = Target::new(render::EFB_W, render::EFB_H);
-    let t0 = clock.now();
+    // The logic clock. With a sound card it follows the card's play
+    // position, so the intro stays on its music whatever the CPU clock
+    // says; the CPU clock covers stalls the card's ring cannot (and runs
+    // it with no card).
+    let mut now = 0.0f32;
+    let mut last_tsc = clock.now();
+    let mut last_played = audio.as_ref().map_or(0.0, |a| a.played());
+    let mut stuck = 0.0f32;
     let mut done_frames = 0u32;
     let mut keys = Keyboard::new(input::DEFAULT_KEYS);
     let mut gamepads = Gamepads::new();
     let mut clock_at = 0.0;
 
     loop {
-        let now = clock.now() - t0;
+        if let Some(a) = &mut audio {
+            a.update();
+        }
+        let tsc = clock.now();
+        let played = audio.as_ref().map_or(0.0, |a| a.played());
+        let (dt, da) = (tsc - last_tsc, (played - last_played) as f32);
+        last_tsc = tsc;
+        last_played = played;
+        // A card that stops moving (or was just reopened) or a pass long
+        // enough to wrap its ring falls back to the CPU clock.
+        let card = audio.as_ref().is_some_and(|a| a.out.is_some());
+        let dt = dt.max(0.0);
+        if card && da > 0.0 {
+            stuck = 0.0;
+            now += if dt < 0.5 { da } else { dt };
+        } else {
+            stuck += dt;
+            if !card || stuck > 0.2 {
+                now += dt;
+            }
+        }
         while let Ok(Some(key)) = system::with_stdin(|i| i.read_key()) {
             let Some(k) = key_code(key) else { continue };
             keys.press(k, now);

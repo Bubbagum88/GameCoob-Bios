@@ -128,6 +128,9 @@ pub struct Hda {
     ahead: u64,
     /// Main-loop gap estimate (frames), for `ahead`.
     gap: u64,
+    /// The first `pump` has run: the time before it (loading, after the
+    /// stream started) is not a main-loop gap.
+    primed: bool,
     scratch: Vec<i16>,
 }
 
@@ -176,6 +179,7 @@ impl Hda {
             last_lpib: 0,
             ahead: (RATE / 20) as u64,
             gap: 0,
+            primed: false,
             scratch: Vec::new(),
         };
         h.reset()?;
@@ -494,7 +498,9 @@ impl Hda {
         self.zero(from, self.played);
         // Track the longest recent gap between calls (decaying) and keep
         // that much plus margin buffered, from 20 ms up to most of the ring.
-        self.gap = (self.gap * 15 / 16).max(d);
+        let gap = if self.primed { d } else { 0 };
+        self.primed = true;
+        self.gap = (self.gap * 15 / 16).max(gap);
         self.ahead = (self.gap * 3 / 2 + (RATE / 50) as u64).clamp((RATE / 50) as u64, RING as u64 * 3 / 4);
         if self.written < self.played {
             // Underrun: the controller ran past what was written.
@@ -510,6 +516,12 @@ impl Hda {
             unsafe { core::ptr::copy_nonoverlapping(self.scratch.as_ptr(), self.ring.add(at * 2), n * 2) };
             self.written += n as u64;
         }
+    }
+
+    /// Frames the controller has played, as of the last `pump`: the clock
+    /// the sound is on.
+    pub fn played(&self) -> u64 {
+        self.played
     }
 
     fn zero(&mut self, from: u64, to: u64) {
