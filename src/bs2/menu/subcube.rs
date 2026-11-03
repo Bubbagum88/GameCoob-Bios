@@ -1,7 +1,10 @@
-//! GameCoob's sub-cubes: pressing toward Game Play, Memory or Options on
-//! the main cube's front dives straight into a second cube (no face and
-//! no A in between) with its own sides, turned and entered as BS2's.
-//! Not in BS2; the screens it already had stay as they were.
+//! GameCoob's sub-menus: turning the main menu's cube to Game Play, Memory
+//! or Options keeps the same cube going. Once it has turned all the way,
+//! that side is a new front with its own sides around it, turned to and
+//! entered with A as BS2's (`Menu::roll_in`); B, or turning back the way
+//! it came, rolls back to the main front (`Menu::roll_back`). No A, no
+//! zoom and no second cube in between. Not in BS2; the screens it already
+//! had stay as they were.
 //!
 //! The sides reuse the main cube's face positions (and so its turning,
 //! zoom and icon code): up is `GameFace`, down `CardFace`, left
@@ -90,10 +93,21 @@ impl Level {
         })
     }
 
+    /// The main menu's side this sub-menu rolled in from.
+    pub fn home_face(self) -> St {
+        match self {
+            Level::Main => St::Top,
+            Level::Memory => St::CardFace,
+            Level::Game => St::GameFace,
+            Level::Settings => St::OptionFace,
+        }
+    }
+
     /// The side whose screen (and icon cube) BS2 already had on this cube.
     pub fn shows_icon(self, face: St) -> bool {
         match self {
-            Level::Main => true,
+            // its sub-menu sides show no icon: they roll on to a new front
+            Level::Main => super::minimal() || face == St::ClockFace,
             Level::Memory => face == St::CardFace,
             Level::Game => face == St::GameFace,
             Level::Settings => face == St::OptionFace,
