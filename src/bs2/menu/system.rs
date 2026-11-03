@@ -91,7 +91,7 @@ impl System {
         } else if p.a && self.row == ROW_LOGO {
             return Some(Action::SetCoobLogo(!crate::bs2::wordmark::coob()));
         } else if p.a && self.row == ROW_DELAY {
-            return Some(Action::SetIntroDelay(crate::display::next(crate::display::setting())));
+            return Some(Action::SetIntroDelay(crate::bs2::intro_delay::next(crate::bs2::intro_delay::setting())));
         } else if p.a && (self.row != 0 || self.fw_ui) {
             self.confirm = Some(false);
         }
@@ -109,9 +109,9 @@ impl System {
         let min_row = cp1252(&alloc::format!("{}: {}", ITEMS[ROW_MINIMAL], if super::minimal() { "On" } else { "Off" }));
         let logo = if crate::bs2::wordmark::coob() { "GameCoob" } else { "GameCube" };
         let logo_row = cp1252(&alloc::format!("{}: {}", ITEMS[ROW_LOGO], logo));
-        let delay = match crate::display::setting() {
+        let delay = match crate::bs2::intro_delay::setting() {
             Some(s) => alloc::format!("{s} s"),
-            None => alloc::format!("Auto ({} s)", crate::display::auto()),
+            None => alloc::format!("Auto ({} s)", crate::bs2::intro_delay::auto()),
         };
         let delay_row = cp1252(&alloc::format!("{}: {}", ITEMS[ROW_DELAY], delay));
         let (q, items): (&str, [Option<&[u8]>; 7]) = match self.confirm {

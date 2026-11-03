@@ -62,8 +62,8 @@ fn main() -> Status {
     let outputs = display::outputs();
     let auto = display::auto_delay(&outputs);
     let setting = vars::intro_delay();
-    display::set_auto(auto);
-    display::set_setting(setting);
+    bs2::intro_delay::set_auto(auto);
+    bs2::intro_delay::set_setting(setting);
     log::info!("Display: {outputs:?}, intro delay {:?} (auto {auto} s)", setting);
     display::hold(&mut gop, display::delay(setting, &outputs), 0.0, &|| clock.now());
 

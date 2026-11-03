@@ -28,6 +28,7 @@ pub mod scene;
 pub mod shader;
 pub mod sound;
 pub mod ui;
+pub mod intro_delay;
 pub mod wordmark;
 
 use crate::ipl::{bti, j3d::Model, Ipl};

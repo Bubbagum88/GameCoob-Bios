@@ -988,7 +988,7 @@ impl Menu {
             // Shown from the next intro (the reset switch or the next boot).
             Some(Action::SetCoobLogo(on)) => crate::bs2::wordmark::set_coob(on),
             // Used from the next boot.
-            Some(Action::SetIntroDelay(s)) => crate::display::set_setting(s),
+            Some(Action::SetIntroDelay(s)) => crate::bs2::intro_delay::set_setting(s),
             _ => {}
         }
         let busy = self.sys.visible() || self.explorer.visible();

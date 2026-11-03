@@ -15,11 +15,11 @@
 //! external digital or internal panel. The hold is counted from the app's
 //! start, so the time spent loading the dump counts toward it.
 //!
-//! The hold is the `GameCoobIntroDelay` variable ([`crate::vars`]): Auto
+//! The hold is the `GameCoobIntroDelay` variable ([`crate::vars`]; its
+//! dialog state is [`crate::bs2::intro_delay`]): Auto
 //! (unset) picks it from what is attached, or a fixed number of seconds.
 //! Keys pressed while black are kept for the intro (the easter-egg Z).
 
-use core::sync::atomic::{AtomicU8, Ordering};
 use core::time::Duration;
 use uefi::boot::{self, OpenProtocolAttributes, OpenProtocolParams};
 use uefi::proto::console::gop::{EdidDiscovered, GraphicsOutput};
@@ -169,33 +169,3 @@ pub fn hold(gop: &mut GraphicsOutput, secs: f32, started: f32, now: &dyn Fn() ->
     }
 }
 
-/// The setting (0xFF = Auto) and Auto's pick in tenths of a second, for
-/// the system dialog's row.
-static SETTING: AtomicU8 = AtomicU8::new(0xFF);
-static AUTO_TENTHS: AtomicU8 = AtomicU8::new(0);
-
-pub fn set_setting(s: Option<u8>) {
-    SETTING.store(s.unwrap_or(0xFF), Ordering::Relaxed);
-}
-
-pub fn setting() -> Option<u8> {
-    Some(SETTING.load(Ordering::Relaxed)).filter(|&s| s != 0xFF)
-}
-
-pub fn set_auto(secs: f32) {
-    AUTO_TENTHS.store((secs * 10.0) as u8, Ordering::Relaxed);
-}
-
-/// Auto's pick on this PC, in seconds.
-pub fn auto() -> f32 {
-    AUTO_TENTHS.load(Ordering::Relaxed) as f32 / 10.0
-}
-
-/// The choices the dialog row steps through.
-pub const CHOICES: [Option<u8>; 6] = [None, Some(0), Some(1), Some(2), Some(3), Some(5)];
-
-/// The choice after `s`.
-pub fn next(s: Option<u8>) -> Option<u8> {
-    let i = CHOICES.iter().position(|&c| c == s).unwrap_or(0);
-    CHOICES[(i + 1) % CHOICES.len()]
-}
