@@ -55,7 +55,8 @@ Its parts:
    folder for its OS, reads the title and game code from the disc header
    where the format allows, and writes `library.toml` to the ESP, keeping
    the other OS's games in it.
-2. In the boot menu, the Game side with no disc shows the game list.
+2. In the boot menu, START on Game Play with no disc ready shows the game
+   list.
 3. Picking a game writes `GameCoobLaunch` (the counter one higher than
    the last one), sets BootNext to the OS's boot entry, and resets.
 4. The OS boots. The helper starts at login, reads `GameCoobLaunch`, and
@@ -89,8 +90,9 @@ in the boot menu shows up in the game, and the other way round.
 2. Helper: scan folders, read disc headers, write `library.toml`, read
    `GameCoobLaunch`, start the emulator (`gamecoob-launch scan`, `run`,
    `mark`).
-3. Boot menu: game list on the Game side, the launch variable, BootNext
-   by boot entry name; `[boot]` paths replace the built-in ones.
-4. Memory card sync.
-5. Installing the helper: Windows scheduled task, Linux systemd user
+3. Boot menu: START on Game Play with no disc opens the game list; a
+   pick writes the launch variable and sets BootNext by boot entry name.
+4. `[boot]` paths replace the built-in ones.
+5. Memory card sync.
+6. Installing the helper: Windows scheduled task, Linux systemd user
    service.

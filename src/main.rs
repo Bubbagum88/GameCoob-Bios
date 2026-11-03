@@ -24,9 +24,10 @@ mod gfx;
 mod hda;
 mod input;
 mod ipl;
-// Read by the Game side's game list in a later step (docs/EMULATORS.md).
+// Shared with tools/gamecoob-launch, which uses the parts the app doesn't.
 #[allow(dead_code)]
 mod launch;
+mod launcher;
 mod sdk;
 mod vars;
 

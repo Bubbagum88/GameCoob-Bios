@@ -108,6 +108,20 @@ pub fn set_intro_delay(secs: Option<u8>) -> uefi::Result {
     runtime::set_variable(cstr16!("GameCoobIntroDelay"), GAMECOOB, attrs(), &[secs.unwrap_or(0xFF)])
 }
 
+/// Vendor of the launch request: `launch::VENDOR_GUID`, which the OS-side
+/// helper reads it under (shared with the card slot variables, `fs.rs`).
+const LAUNCH: &VariableVendor = &VariableVendor(uefi::guid!("edc5e45c-31db-47a4-8969-2fe623cc0605"));
+
+/// The launch request (`GameCoobLaunch`, UTF-8 text), if one was ever set.
+pub fn launch_request() -> Option<Vec<u8>> {
+    runtime::get_variable_boxed(cstr16!("GameCoobLaunch"), LAUNCH).ok().map(|(b, _)| b.into_vec())
+}
+
+/// Store a launch request. Runtime access, so the OS can read it.
+pub fn set_launch_request(text: &str) -> uefi::Result {
+    runtime::set_variable(cstr16!("GameCoobLaunch"), LAUNCH, attrs(), text.as_bytes())
+}
+
 pub fn firmware_ui_supported() -> bool {
     read(cstr16!("OsIndicationsSupported"))
         .filter(|b| b.len() >= 8)

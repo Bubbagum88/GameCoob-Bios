@@ -409,12 +409,26 @@ pub struct SysInfo {
     pub timeout: u16,
     pub vendor: String,
     pub fw_ui: bool,
+    /// Games an emulator on one of the PC's OSes can start
+    /// (docs/EMULATORS.md), in the helper's list order.
+    pub games: Vec<GameRow>,
+}
+
+/// One game in Game Play's game list.
+#[derive(Clone, Default)]
+pub struct GameRow {
+    pub title: String,
+    /// The emulator and OS, e.g. "Dolphin, windows".
+    pub detail: String,
 }
 
 /// Something only the firmware can do.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Action {
     Boot(u16),
+    /// Start game n of [`SysInfo::games`] in its emulator: record it for
+    /// the OS's helper, then boot that OS.
+    Launch(u16),
     SetTimeout(u16),
     /// Save minimal mode (on or off).
     SetMinimal(bool),
