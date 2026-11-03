@@ -20,6 +20,9 @@ jobs:
       - name: Test the memory card code on the host
         working-directory: tools/card-tool
         run: cargo test --target x86_64-unknown-linux-gnu
+      - name: Test the emulator launch code on the host
+        working-directory: tools/gamecoob-launch
+        run: cargo test --target x86_64-unknown-linux-gnu
       - name: Test the BS2 code on the host
         working-directory: tools/menu-render
         run: cargo test --target x86_64-unknown-linux-gnu

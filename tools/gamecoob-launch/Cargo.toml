@@ -1,0 +1,11 @@
+[package]
+name = "gamecoob-launch"
+version = "0.1.0"
+edition = "2024"
+description = "OS-side helper for launching games from the GameCoob boot menu; `cargo test` runs src/launch's tests"
+
+# Standalone: not part of the UEFI crate. Build with --target x86_64-unknown-linux-gnu
+# (or x86_64-pc-windows-msvc on Windows).
+[workspace]
+
+[dependencies]
