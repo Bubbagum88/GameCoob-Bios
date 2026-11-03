@@ -161,13 +161,14 @@ impl Audio {
 }
 
 /// What the menu shows about this PC.
-fn sys_info() -> SysInfo {
+fn sys_info(games: Vec<crate::bs2::menu::GameRow>) -> SysInfo {
     SysInfo {
         time: now_time(),
         entries: crate::vars::boot_entries().into_iter().map(|e| (e.num, e.desc)).collect(),
         timeout: crate::vars::timeout().unwrap_or(5).min(crate::firmware::MAX_TIMEOUT),
         vendor: system::firmware_vendor().to_string(),
         fw_ui: crate::vars::firmware_ui_supported(),
+        games,
     }
 }
 
@@ -179,10 +180,11 @@ fn now_time() -> [i32; 6] {
 }
 
 /// Carry out a menu action; the ones that reset only come back on failure.
-fn perform(a: Action) -> Option<String> {
+fn perform(a: Action, launcher: &crate::launcher::Launcher) -> Option<String> {
     use crate::firmware;
     match a {
         Action::Boot(n) => Some(firmware::boot_entry(n)),
+        Action::Launch(i) => Some(launcher.launch(i as usize)),
         Action::SetTimeout(s) => firmware::save_timeout(s).err(),
         Action::SetMinimal(on) => firmware::save_minimal(on).err(),
         Action::SetCoobLogo(on) => firmware::save_coob_logo(on).err(),
@@ -289,6 +291,7 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
     crate::bs2::menu::set_minimal(crate::vars::minimal());
     crate::bs2::wordmark::set_coob(crate::vars::coob_logo());
     let mut bs2 = Bs2Main::new(assets, Box::new(FakeDrive::new()), load_cards(), Box::new(UefiVolumes));
+    let launcher = crate::launcher::Launcher::load();
     let cores = Cores::open();
     // Rendered at the screen's resolution, adjusted to keep up with the logic.
     let mut res = ResScale::new(cv);
@@ -377,12 +380,12 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
                     AppAction::Stats => show_stats = !show_stats,
                 }
             }
-            if let Some(act) = bs2.update(assets, ma, &input, sys_info) {
-                let leaves = matches!(act, Action::Boot(_));
+            if let Some(act) = bs2.update(assets, ma, &input, || sys_info(launcher.rows())) {
+                let leaves = matches!(act, Action::Boot(_) | Action::Launch(_));
                 if let (true, Some(a)) = (leaves, &mut audio) {
                     a.close();
                 }
-                let failed = perform(act);
+                let failed = perform(act, &launcher);
                 if let (true, Some(a)) = (leaves, &mut audio) {
                     a.out = Hda::open();
                 }

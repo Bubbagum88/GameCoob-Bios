@@ -8,10 +8,16 @@
 //! A or START boots it and B closes it. "Press START" fades out under the
 //! list. The ambient loop stops while the list is up, as it does for
 //! the boot on the console.
+//!
+//! GameCoob: with no disc ready, START opens the game list instead when
+//! the PC has games set up for an emulator (docs/EMULATORS.md): up/down
+//! pick a game, A or START launches it (the OS boots and starts the
+//! emulator), B closes it.
 
 use super::backend::{DiscDrive, DiscState};
 use crate::bs2::sound::{self, se};
 use super::{draw_backdrop, fit, with_a, Action, Fade, Fader, MenuAssets, Pad, St, SysInfo, Work, WHITE};
+use alloc::string::String;
 use super::super::glh as bglh;
 use super::super::ui::{cp1252, Ui};
 use crate::ipl::glh::tag;
@@ -46,6 +52,8 @@ pub struct Game {
     faders: [Fader; 6],
     /// `sStarting`: START was pressed; here the boot list is up.
     starting: bool,
+    /// GameCoob: the game list is up (START with no disc ready).
+    games: bool,
     /// `sFatal`.
     fatal: bool,
     sel: usize,
@@ -58,7 +66,7 @@ pub struct Game {
 impl Game {
     /// Game_Init (0x813275F4).
     pub fn new() -> Game {
-        Game { faders: [Fader::default(); 6], starting: false, fatal: false, sel: 0, list: Fader::default(), ambient_stopped: false }
+        Game { faders: [Fader::default(); 6], starting: false, games: false, fatal: false, sel: 0, list: Fader::default(), ambient_stopped: false }
     }
 
     /// Game_Enter (0x81327A10), less FxGame_Update (the menu runs it):
@@ -69,6 +77,7 @@ impl Game {
         }
         self.faders[0].reset();
         self.starting = false;
+        self.games = false;
         self.sel = 0;
         self.list.reset();
     }
@@ -83,7 +92,7 @@ impl Game {
     }
 
     pub fn starting(&self) -> bool {
-        self.starting
+        self.starting || self.games
     }
 
     /// Game_IsFatal (0x81327AB4).
@@ -92,8 +101,8 @@ impl Game {
     }
 
     /// Game_HandleInput (0x813276AC): B leaves, START on a ready disc
-    /// starts.
-    fn handle_input(&mut self, p: &Pad, c: &Ctx, drive: &dyn DiscDrive) -> St {
+    /// starts. GameCoob: START with no disc ready opens the game list.
+    fn handle_input(&mut self, p: &Pad, c: &Ctx, drive: &dyn DiscDrive, info: &SysInfo) -> St {
         let mut next = St::Game;
         if !c.icon_settled || !c.fx_ready || self.fatal {
             return St::Game;
@@ -109,8 +118,33 @@ impl Game {
             sound::play(se::GAME_START);
             self.starting = true;
             self.sel = 0;
+        } else if p.start && !info.games.is_empty() {
+            self.ambient_stopped = true;
+            sound::stop_ambient();
+            sound::play(se::GAME_START);
+            self.games = true;
+            self.sel = 0;
         }
         next
+    }
+
+    /// GameCoob: the game list.
+    fn update_games(&mut self, p: &Pad, info: &SysInfo) -> Option<Action> {
+        let n = info.games.len();
+        if p.up && self.sel > 0 {
+            sound::play(se::CURSOR);
+            self.sel -= 1;
+        }
+        if p.down && self.sel + 1 < n {
+            sound::play(se::CURSOR);
+            self.sel += 1;
+        }
+        if p.b || n == 0 {
+            sound::play(se::CANCEL);
+            self.games = false;
+            return None;
+        }
+        ((p.a || p.start) && n > 0).then(|| Action::Launch(self.sel.min(n - 1) as u16))
     }
 
     /// GameCoob: the boot list, in Disc_StartGame's place.
@@ -144,15 +178,17 @@ impl Game {
         let mut action = None;
         if self.starting {
             action = self.update_list(p, drive, info);
+        } else if self.games {
+            action = self.update_games(p, info);
         } else {
             if self.ambient_stopped {
                 sound::start_ambient(0);
                 self.ambient_stopped = false;
             }
-            next = self.handle_input(p, c, drive);
+            next = self.handle_input(p, c, drive, info);
         }
         self.update_messages(drive);
-        self.list.step_if(self.starting);
+        self.list.step_if(self.starting || self.games);
         self.faders[0].step_if(drive.banner().is_some());
         (next, action)
     }
@@ -163,8 +199,8 @@ impl Game {
         let st = if self.fatal { DiscState::Fatal } else { drive.state() };
         let f = &mut self.faders;
         f[1].step_if(st == DiscState::Ready && !self.starting);
-        f[2].step_if(matches!(st, DiscState::NoDisc | DiscState::CoverOpen));
-        f[5].step_if(matches!(st, DiscState::Retry | DiscState::Wrong));
+        f[2].step_if(matches!(st, DiscState::NoDisc | DiscState::CoverOpen) && !self.games);
+        f[5].step_if(matches!(st, DiscState::Retry | DiscState::Wrong) && !self.games);
         f[3].step_if(st == DiscState::Fatal);
         match st {
             DiscState::Ready => f[4].step(Fade::Out),
@@ -233,31 +269,37 @@ impl Game {
         }
     }
 
-    /// The firmware boot list, in the status box once START is pressed.
+    /// The firmware boot list (or the game list), in the status box once
+    /// START is pressed.
     fn draw_list<'a>(&self, ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, info: &SysInfo, alpha: f32) {
         let a = self.list.alpha() as f32 / 255.0 * alpha;
         if a <= 0.0 {
             return;
         }
         let Some(box_) = ma.game.frame(tag(b"mes1")).next() else { return };
-        let n = info.entries.len();
+        let rows: Vec<String> = if self.games {
+            info.games.iter().map(|g| format!("{}  ({})", g.title, g.detail)).collect()
+        } else {
+            info.entries.iter().map(|(num, desc)| format!("{num:04X}  {desc}")).collect()
+        };
+        let n = rows.len();
         let line = 25.0;
         let h = LIST_ROWS as f32 * line + 8.0;
         let (bx, bw) = (box_.x - box_.inner_w / 2.0, box_.inner_w);
         let by = box_.y - h / 2.0;
         ui.frame_rect(box_, &ma.bank, with_a(WHITE, a), bx, by, bw, h);
         let first = self.sel.saturating_sub(LIST_ROWS - 1).min(n.saturating_sub(LIST_ROWS));
-        for (i, (num, desc)) in info.entries.iter().enumerate().skip(first).take(LIST_ROWS) {
+        for (i, row) in rows.iter().enumerate().skip(first).take(LIST_ROWS) {
             let y = by + 4.0 + (i - first) as f32 * line;
             let sel = i == self.sel;
             if sel {
                 ui.fill(bx - 6.0, y, bw + 12.0, line - 2.0, [1.0, 1.0, 1.0, 0.3 * a]);
             }
-            let text: Vec<u8> = fit(&ma.font, &cp1252(&format!("{num:04X}  {desc}")), bw - 20.0, 20.0);
+            let text: Vec<u8> = fit(&ma.font, &cp1252(row), bw - 20.0, 20.0);
             let c = if sel { WHITE } else { [0.85, 0.8, 0.95, 0.85] };
             ui.label(&ma.font, bx + 6.0, y + 1.0, 20.0, &text, with_a(c, a), 2);
         }
-        if n == 0 {
+        if n == 0 && !self.games {
             ui.label(&ma.font, box_.x, by + h / 2.0 - 10.0, 20.0, &cp1252("No firmware boot entries."), with_a(WHITE, a), 0);
         }
     }

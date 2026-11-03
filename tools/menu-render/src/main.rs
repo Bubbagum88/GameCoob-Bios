@@ -55,7 +55,7 @@ mod png;
 
 use bs2::menu::backend::{FakeCards, FakeDrive};
 use bs2::bs2main::{Bs2Main, FrameInput};
-use bs2::menu::{MenuAssets, SysInfo};
+use bs2::menu::{GameRow, MenuAssets, SysInfo};
 use bs2::pad;
 use std::collections::HashMap;
 use sdk::mtx as psmtx;
@@ -75,6 +75,10 @@ fn info(frame: u32) -> SysInfo {
         timeout: 5,
         vendor: "EDK II".into(),
         fw_ui: true,
+        games: vec![
+            GameRow { title: "Made-Up Racer".into(), detail: "Dolphin, windows".into() },
+            GameRow { title: "Pretend Quest".into(), detail: "Dolphin, arch".into() },
+        ],
     }
 }
 
