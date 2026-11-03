@@ -81,6 +81,19 @@ pub fn set_minimal(on: bool) -> uefi::Result {
     runtime::set_variable(cstr16!("GameCoobMinimal"), GAMECOOB, attrs(), &[on as u8])
 }
 
+/// GameCoob's intro logo option ("GAMECOOB" instead of the console's
+/// "GAMECUBE"), saved as `GameCoobLogo` (one byte, 0 = the console's).
+/// GameCoob's when unset.
+pub fn coob_logo() -> bool {
+    runtime::get_variable_boxed(cstr16!("GameCoobLogo"), GAMECOOB)
+        .ok()
+        .is_none_or(|(b, _)| b.first() != Some(&0))
+}
+
+pub fn set_coob_logo(on: bool) -> uefi::Result {
+    runtime::set_variable(cstr16!("GameCoobLogo"), GAMECOOB, attrs(), &[on as u8])
+}
+
 pub fn firmware_ui_supported() -> bool {
     read(cstr16!("OsIndicationsSupported"))
         .filter(|b| b.len() >= 8)

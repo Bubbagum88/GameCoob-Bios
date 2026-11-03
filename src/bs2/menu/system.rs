@@ -1,15 +1,18 @@
 //! The system dialog (GameCoob's own, opened with F10 from anywhere in the
 //! menu): Firmware Setup, Restart and Power Off, each confirmed with
-//! Yes / No, and the Minimal Mode switch (no confirmation). It is drawn with BS2's dialog layout (res 108, the one the
-//! console uses for its language and "settings lost" prompts).
+//! Yes / No, and the Minimal Mode and Intro Logo switches (no
+//! confirmation). It is drawn with BS2's dialog layout (res 108, the one
+//! the console uses for its language and "settings lost" prompts).
 
 use super::{Action, Fader, MenuAssets, Pad, WHITE, with_a};
 use super::super::ui::{cp1252, Ui};
 use crate::ipl::glh::tag;
 
-const ITEMS: [&str; 5] = ["Firmware Setup", "Restart", "Power Off", "Minimal Mode", "Cancel"];
+const ITEMS: [&str; 6] = ["Firmware Setup", "Restart", "Power Off", "Minimal Mode", "Intro Logo", "Cancel"];
 /// The Minimal Mode row: A flips it at once.
 const ROW_MINIMAL: usize = 3;
+/// The Intro Logo row: A swaps the intro's wordmark, GameCube or GameCoob.
+const ROW_LOGO: usize = 4;
 const QUESTIONS: [&str; 3] = [
     "Restart this PC into its\nfirmware setup screen?",
     "Restart this PC now?",
@@ -82,6 +85,8 @@ impl System {
             self.open = false;
         } else if p.a && self.row == ROW_MINIMAL {
             return Some(Action::SetMinimal(!minimal));
+        } else if p.a && self.row == ROW_LOGO {
+            return Some(Action::SetCoobLogo(!crate::bs2::wordmark::coob()));
         } else if p.a && (self.row != 0 || self.fw_ui) {
             self.confirm = Some(false);
         }
@@ -97,24 +102,30 @@ impl System {
         ui.fill(-40.0, -40.0, 664.0, 528.0, [0.0, 0.0, 0.0, 0.55 * a]);
         let d = &ma.dialog;
         let min_row = cp1252(&alloc::format!("{}: {}", ITEMS[ROW_MINIMAL], if super::minimal() { "On" } else { "Off" }));
-        let (q, items): (&str, [Option<&[u8]>; 5]) = match self.confirm {
+        let logo = if crate::bs2::wordmark::coob() { "GameCoob" } else { "GameCube" };
+        let logo_row = cp1252(&alloc::format!("{}: {}", ITEMS[ROW_LOGO], logo));
+        let (q, items): (&str, [Option<&[u8]>; 6]) = match self.confirm {
             Some(_) => {
                 let s = &ma.dialog_str[lang];
                 let yes = s.get(1).map(|s| &s.text[..]).unwrap_or(b"Yes");
                 let no = s.get(2).map(|s| &s.text[..]).unwrap_or(b"No");
-                (QUESTIONS[self.row.min(2)], [Some(yes), Some(no), None, None, None])
+                (QUESTIONS[self.row.min(2)], [Some(yes), Some(no), None, None, None, None])
             }
             None => (
                 "What should this PC do?",
-                [ITEMS[0].as_bytes(), ITEMS[1].as_bytes(), ITEMS[2].as_bytes(), &min_row[..], ITEMS[4].as_bytes()].map(Some),
+                [ITEMS[0].as_bytes(), ITEMS[1].as_bytes(), ITEMS[2].as_bytes(), &min_row[..], &logo_row[..], ITEMS[5].as_bytes()]
+                    .map(Some),
             ),
         };
-        // The dialog's big frame as the panel, the question on top.
+        // The dialog's big frame as the panel, grown by `GROW` to fit six
+        // rows, the question on top.
+        const GROW: f32 = 26.0;
         if let Some(f) = d.frame(tag(b"mes0")).next() {
-            ui.frame(f, &ma.bank, with_a(WHITE, a));
+            let (w, h) = (f.inner_w, f.inner_h + GROW);
+            ui.frame_rect(f, &ma.bank, with_a(WHITE, a), f.x - w / 2.0, f.y - h / 2.0, w, h);
         }
         if let Some(p) = d.text(tag(b"txt0")) {
-            ui.text(&ma.font, p, &cp1252(q), with_a(WHITE, a), 0.0, -64.0);
+            ui.text(&ma.font, p, &cp1252(q), with_a(WHITE, a), 0.0, -64.0 - GROW / 2.0);
         }
         let sel = match self.confirm {
             Some(yes) => usize::from(!yes),
@@ -124,7 +135,7 @@ impl System {
         let size = 21.0;
         let n = items.iter().flatten().count();
         let wmax = items.iter().flatten().map(|t| ma.font.width(t, size, 0.0)).fold(0.0f32, f32::max);
-        let top = 186.0;
+        let top = 186.0 - GROW / 2.0;
         let pitch = 25.0;
         if let Some(f) = d.frame(tag(b"mes1")).next() {
             let w = wmax + 24.0;

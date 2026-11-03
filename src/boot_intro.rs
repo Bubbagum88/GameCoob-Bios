@@ -185,6 +185,7 @@ fn perform(a: Action) -> Option<String> {
         Action::Boot(n) => Some(firmware::boot_entry(n)),
         Action::SetTimeout(s) => firmware::save_timeout(s).err(),
         Action::SetMinimal(on) => firmware::save_minimal(on).err(),
+        Action::SetCoobLogo(on) => firmware::save_coob_logo(on).err(),
         Action::SetTime(t) => firmware::set_time(t).err(),
         Action::FirmwareSetup => Some(firmware::firmware_setup()),
         Action::Restart => firmware::restart(),
@@ -283,6 +284,7 @@ impl Cores {
 pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &Assets, ma: &MenuAssets, snd: Option<SoundArchive>) -> ! {
     let mut audio = Audio::open(snd);
     crate::bs2::menu::set_minimal(crate::vars::minimal());
+    crate::bs2::wordmark::set_coob(crate::vars::coob_logo());
     let mut bs2 = Bs2Main::new(assets, Box::new(FakeDrive::new()), load_cards(), Box::new(UefiVolumes));
     let cores = Cores::open();
     // Rendered at the screen's resolution, adjusted to keep up with the logic.
