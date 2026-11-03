@@ -4,7 +4,7 @@
 //! boots the game's OS.
 
 use crate::bs2::menu::GameRow;
-use crate::launch::{Game, Library, Paths, Request, LIBRARY_FILE, PATHS_FILE};
+use crate::launch::{Boot, Game, Library, Paths, Request, LIBRARY_FILE, PATHS_FILE};
 use crate::{firmware, vars};
 use alloc::format;
 use alloc::string::String;
@@ -23,6 +23,15 @@ fn read_text(fs: &mut FileSystem, path: &str) -> Option<String> {
     let p = CString16::try_from(path).ok()?;
     let bytes = fs.read(p.as_ref()).ok()?;
     Some(String::from_utf8_lossy(&bytes).into_owned())
+}
+
+/// The `[boot]` part of the paths file: where the app's own files are on
+/// the boot partition. The built-in paths when the file is missing or
+/// broken.
+pub fn boot_paths() -> Boot {
+    let Ok(sfs) = boot::get_image_file_system(boot::image_handle()) else { return Boot::default() };
+    let mut fs = FileSystem::new(sfs);
+    read_text(&mut fs, PATHS_FILE).and_then(|t| Paths::parse(&t).ok()).map(|p| p.boot).unwrap_or_default()
 }
 
 impl Launcher {

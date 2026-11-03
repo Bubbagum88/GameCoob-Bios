@@ -29,34 +29,34 @@ use uefi::Event;
 use uefi::fs::FileSystem;
 use uefi::proto::console::gop::GraphicsOutput;
 use uefi::proto::console::text::{Key, ScanCode};
-use uefi::{cstr16, system};
+use uefi::system;
 
-/// Where the dump is looked for on the partition GameCoob booted from.
-const PATHS: [&uefi::CStr16; 2] = [cstr16!("\\EFI\\GameCoob\\ipl.bin"), cstr16!("\\ipl.bin")];
-
-fn read_dump() -> Option<Vec<u8>> {
+/// Reads the dump from the partition GameCoob booted from: `[boot] ipl`
+/// in the paths file (default `\\EFI\\GameCoob\\ipl.bin`), else `\\ipl.bin`.
+fn read_dump(boot_paths: &crate::launch::Boot) -> Option<Vec<u8>> {
     let sfs = boot::get_image_file_system(boot::image_handle()).ok()?;
     let mut fs = FileSystem::new(sfs);
-    PATHS.iter().find_map(|p| fs.read(*p).ok())
+    [boot_paths.ipl.as_str(), "\\ipl.bin"]
+        .iter()
+        .filter_map(|p| uefi::CString16::try_from(*p).ok())
+        .find_map(|p| fs.read(p.as_ref()).ok())
 }
 
-/// Default card images for slots A and B, on the partition GameCoob booted
-/// from. The first name found per slot is used.
-const CARD_PATHS: [[&uefi::CStr16; 3]; 2] = [
-    [cstr16!("\\EFI\\GameCoob\\cards\\slot-a.raw"), cstr16!("\\EFI\\GameCoob\\cards\\slot-a.mcp"), cstr16!("\\EFI\\GameCoob\\cards\\slot-a.gcp")],
-    [cstr16!("\\EFI\\GameCoob\\cards\\slot-b.raw"), cstr16!("\\EFI\\GameCoob\\cards\\slot-b.mcp"), cstr16!("\\EFI\\GameCoob\\cards\\slot-b.gcp")],
-];
+/// Default card image names for slots A and B, in `[boot] cards` (default
+/// `\\EFI\\GameCoob\\cards`) on the partition GameCoob booted from. The
+/// first name found per slot is used.
+const CARD_NAMES: [[&str; 3]; 2] = [["slot-a.raw", "slot-a.mcp", "slot-a.gcp"], ["slot-b.raw", "slot-b.mcp", "slot-b.gcp"]];
 
 /// Each slot gets the image it held at the end of the last boot (Card
 /// Files remembers it), else the default image on the boot partition.
 /// A slot left empty stays empty. Real cards if any slot was set this way,
 /// else the made-up stand-ins. Changed cards are written back by the menu.
-fn load_cards() -> Box<dyn MemCards> {
+fn load_cards(boot_paths: &crate::launch::Boot) -> Box<dyn MemCards> {
     let mut real = false;
     let mut cards = ImageCards::new();
     let id = UefiVolumes::boot_id().unwrap_or_default();
     let mut vols = UefiVolumes;
-    for (slot, paths) in CARD_PATHS.iter().enumerate() {
+    for (slot, names) in CARD_NAMES.iter().enumerate() {
         let name = ["A", "B"][slot];
         match vols.slot_memory(slot) {
             Some(h) if h.is_empty() => {
@@ -75,8 +75,8 @@ fn load_cards() -> Box<dyn MemCards> {
             }
             None => {}
         }
-        for p in paths {
-            let p = p.to_string();
+        for n in names {
+            let p = volumes::join(&boot_paths.cards, n);
             if let Ok(b) = vols.read(&id, &p) {
                 log::info!("memory card in slot {name}: {p}");
                 cards.insert(slot, volumes::handle(&id, &p), b);
@@ -91,7 +91,7 @@ fn load_cards() -> Box<dyn MemCards> {
 /// Load the dump and its intro and menu assets, if present and valid, and
 /// its sound archive if found.
 pub fn load() -> Option<(Assets, MenuAssets, Option<SoundArchive>)> {
-    let rom = read_dump()?;
+    let rom = read_dump(&crate::launcher::boot_paths())?;
     let ipl = match Ipl::parse(&rom) {
         Ok(i) => i,
         Err(e) => {
@@ -290,7 +290,9 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
     let mut audio = Audio::open(snd);
     crate::bs2::menu::set_minimal(crate::vars::minimal());
     crate::bs2::wordmark::set_coob(crate::vars::coob_logo());
-    let mut bs2 = Bs2Main::new(assets, Box::new(FakeDrive::new()), load_cards(), Box::new(UefiVolumes));
+    let boot_paths = crate::launcher::boot_paths();
+    crate::bs2::menu::explorer::set_export_dir(boot_paths.saves.clone());
+    let mut bs2 = Bs2Main::new(assets, Box::new(FakeDrive::new()), load_cards(&boot_paths), Box::new(UefiVolumes));
     let launcher = crate::launcher::Launcher::load();
     let cores = Cores::open();
     // Rendered at the screen's resolution, adjusted to keep up with the logic.

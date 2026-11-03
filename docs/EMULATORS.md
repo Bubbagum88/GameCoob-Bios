@@ -113,6 +113,8 @@ in the boot menu shows up in the game, and the other way round.
    pick writes the launch variable and sets BootNext by boot entry name
    (#148).
 4. Installing the helper: Windows scheduled task; Linux boot-time scan
-   service and login autostart.
-5. `[boot]` paths replace the built-in ones.
+   service and login autostart (#149).
+5. `[boot]` paths replace the built-in ones: the dump (still falling back
+   to `\ipl.bin`), the default card images and the explorer's export
+   folder.
 6. Memory card sync.
