@@ -56,6 +56,13 @@ The matching decompilation of the IPL's BS2 program lives in [decomp/](decomp/RE
   Memory Card and Options open their own screens again, and the cube keeps
   the console's labels. Toggle it in the system menu (F10, or Settings
   ▲ Firmware); it is saved in a UEFI variable (`GameCoobMinimal`).
+- **Slow monitors and TVs.** A screen on an external port (HDMI,
+  DisplayPort, DVI, VGA, a dock) can take a second or more to show a
+  picture, so the intro waits on black first, from the app's start: Auto
+  picks 3 s for a TV, 2 s for a monitor, none for a laptop's own panel or a
+  virtual machine (read from the outputs' ACPI display types), 1.5 s when
+  the graphics driver does not say. Set it in the system menu (F10, Intro
+  Delay: Auto, 0, 1, 2, 3 or 5 s); it is saved as `GameCoobIntroDelay`.
 - **Your own memory cards.** Put card images (`.raw`, `.mcp` or `.gcp` from
   Dolphin, Nintendont, a MemCard PRO GC and the like, any size from 59 to
   2043 blocks) at `\EFI\GameCoob\cards\slot-a.raw` and `slot-b.raw` and the
