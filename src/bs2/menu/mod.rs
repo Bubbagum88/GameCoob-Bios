@@ -14,10 +14,11 @@
 //!
 //! Firmware Setup, Restart and Power Off are in a system dialog (F10).
 //!
-//! GameCoob: Memory Card and Options don't open their screens straight
-//! away; they dive into a second cube ([`subcube`]) whose sides hold
-//! those screens and new ones (Files, Drives, Boot, Firmware, Controls).
-//! The main cube's Memory Card side is labelled "Memory".
+//! GameCoob: Game Play, Memory Card and Options don't open their screens
+//! straight away. Turning to one rolls the same cube on: that side becomes
+//! the front of a sub-menu ([`subcube`]) whose sides hold those screens
+//! and new ones (Files, Drives, Boot, Firmware, Controls). The main cube's
+//! Memory Card side is labelled "Memory".
 
 pub mod backend;
 pub mod card_image;
@@ -369,8 +370,6 @@ pub enum St {
     Option,
     ClockFace,
     Clock,
-    /// GameCoob: zooming into a face to swap to another cube.
-    Dive,
     /// GameCoob: a sub-cube page ([`Menu::page`]).
     Page,
 }
@@ -476,13 +475,9 @@ pub struct Menu {
     card_icon: icons::CardIcon,
     clock_icon: icons::ClockIcon,
     option_icon: icons::OptionIcon,
-    /// GameCoob: which cube is up, the one a dive leads to, the open page
-    /// and its fader.
+    /// GameCoob: which menu level the cube shows, the open page and its
+    /// fader.
     pub level: Level,
-    dive_to: Level,
-    /// GameCoob: the turn (rot_x, rot_y) the cube leans into while it
-    /// dives, toward the side that was picked.
-    dive_tilt: (i16, i16),
     page: Page,
     /// The Files page has opened Card Files (closing it leaves the page).
     files_open: bool,
@@ -550,8 +545,6 @@ impl Menu {
             clock_icon: icons::ClockIcon::new(&ma.icons),
             option_icon: icons::OptionIcon::new(&ma.icons),
             level: Level::Main,
-            dive_to: Level::Main,
-            dive_tilt: (0, 0),
             page: Page::Files,
             files_open: false,
             page_fade: [Fader::default(), Fader::with_delay(8)],
@@ -570,38 +563,18 @@ impl Menu {
     /// submenus.
     fn handle_input(&mut self, p: &Pad) {
         use St::*;
-        // GameCoob: the Memory cube has no up side and the Game cube no
-        // down side; B on a sub-cube's front goes back to the main cube.
-        let empty = match self.level {
+        // GameCoob: B on a sub-menu's front, or pressing toward the side
+        // it rolled in from (up on Memory, down on Game, right on
+        // Settings), rolls the cube back to the main menu's front.
+        let toward_main = match self.level {
             Level::Memory => p.up,
             Level::Game => p.down,
             _ => false,
         };
-        if empty && self.state == Top {
-            return;
-        }
-        if self.level != Level::Main && self.state == Top && self.w.at_front() && p.b {
+        if self.level != Level::Main && self.state == Top && self.w.at_front() && (p.b || toward_main) {
             sound::play(se::FACE_BACK);
-            self.dive(Level::Main);
+            self.roll_back();
             return;
-        }
-        // GameCoob: on the main cube, a side that leads to a sub-cube is
-        // entered straight from the front, no face (and no A) in between.
-        if self.level == Level::Main && self.state == Top && self.w.at_front() {
-            let pick = [(p.up, GameFace), (p.down, CardFace), (p.left, OptionFace), (p.right, ClockFace)];
-            if let Some(&(_, face)) = pick.iter().find(|x| x.0) {
-                if let Some(Target::Cube(l)) = self.level.target(face) {
-                    self.dive_tilt = match face {
-                        GameFace => (DIVE_TILT, 0),
-                        CardFace => (-DIVE_TILT, 0),
-                        OptionFace => (0, DIVE_TILT),
-                        _ => (0, -DIVE_TILT),
-                    };
-                    sound::play(se::FACE_SELECT);
-                    self.dive(l);
-                    return;
-                }
-            }
         }
         let w = &self.w;
         if p.up {
@@ -671,10 +644,8 @@ impl Menu {
             }
             match target {
                 Some(Target::Screen(st)) => self.next = st,
-                Some(Target::Cube(l)) => {
-                    self.dive(l);
-                    return;
-                }
+                // turned to on the main cube: the roll already did it
+                Some(Target::Cube(_)) => {}
                 Some(Target::Page(pg)) => {
                     self.page = pg;
                     self.next = St::Page;
@@ -697,36 +668,42 @@ impl Menu {
         }
     }
 
-    /// GameCoob: switch minimal mode. Turning it on from a sub-cube puts
-    /// the main cube back (behind the dialog), on its front.
+    /// GameCoob: switch minimal mode. Turning it on from a sub-menu puts
+    /// the main menu back (behind the dialog), on its front.
     fn set_minimal(&mut self, on: bool) {
         set_minimal(on);
         if on && self.level != Level::Main {
-            self.dive_to = Level::Main;
-            self.finish_dive();
-            self.w.zoom = 0;
+            self.level = Level::Main;
+            self.w.rot_x = 0;
+            self.w.rot_y = 0;
+            self.state = St::Top;
+            self.next = St::Top;
         }
     }
 
-    /// GameCoob: start zooming into the current face; at full zoom the
-    /// cube becomes `to` ([`Menu::finish_dive`]).
-    fn dive(&mut self, to: Level) {
-        self.dive_to = to;
-        if to == Level::Main {
-            self.dive_tilt = (0, 0);
-        }
-        self.next = St::Dive;
-    }
-
-    /// GameCoob: fully zoomed in: swap cubes and zoom back out, on the
-    /// new cube's front (the main cube's too: its sub-cube sides have no
-    /// face of their own to land on).
-    fn finish_dive(&mut self) {
-        self.level = self.dive_to;
-        self.dive_tilt = (0, 0);
+    /// GameCoob: the cube has turned all the way to a main-menu side that
+    /// is a sub-menu: that side is the sub-menu's front now. The glass
+    /// cube looks the same from every side, so the turn is undone and the
+    /// level swapped without a visible jump.
+    fn roll_in(&mut self) {
+        let Some(Target::Cube(l)) = self.level.target(self.state) else { return };
+        self.level = l;
         self.w.rot_x = 0;
         self.w.rot_y = 0;
         self.state = St::Top;
+        self.next = St::Top;
+    }
+
+    /// GameCoob: back from a sub-menu's front: the main menu's side it
+    /// rolled in from is put in front again, and the cube turns back to
+    /// the main front.
+    fn roll_back(&mut self) {
+        let face = self.level.home_face();
+        let (rx, ry) = face_rot(face);
+        self.level = Level::Main;
+        self.w.rot_x = rx;
+        self.w.rot_y = ry;
+        self.state = face;
         self.next = St::Top;
     }
 
@@ -805,8 +782,8 @@ impl Menu {
                 toward_zero(&mut w.rot_x, step);
                 toward_zero(&mut w.rot_y, step);
             }
-            // GameCoob: a dive or a page holds the face it left from.
-            St::Dive | St::Page => {}
+            // GameCoob: a page holds the face it left from.
+            St::Page => {}
         }
     }
 
@@ -879,8 +856,12 @@ impl Menu {
         // Text faders: 0 Menu Selection, 1 Cancel, 2 Confirm, 3 Select,
         // 4 Change, 5 Cancel, 6 Finish, 7 Confirm.
         let (o, i) = (Some(false), Some(true));
+        // GameCoob: a main-menu side that is a sub-menu is only rolled
+        // through; the guide stays as on a front.
+        let rolling = self.level == Level::Main && matches!(self.level.target(self.state), Some(Target::Cube(_)));
         let text: [Option<bool>; 8] = match self.state {
             St::Top => [i, o, o, o, o, o, o, o],
+            _ if rolling => [i, o, o, o, o, o, o, o],
             St::GameFace | St::CardFace | St::OptionFace | St::ClockFace => [o, i, i, o, o, o, o, o],
             // While the boot list is up (GameCoob's addition) it reads
             // like a list: Select, Cancel, Confirm.
@@ -895,7 +876,6 @@ impl Menu {
                 let browsing = self.card.browsing();
                 [o, o, o, i, None, Some(!browsing), Some(browsing), i]
             }
-            St::Dive => [o; 8],
             // Card Files draws its own help line.
             St::Page if self.page == Page::Files => [o; 8],
             St::Page if self.page == Page::Firmware => [o, o, o, o, o, i, o, i],
@@ -906,11 +886,11 @@ impl Menu {
         // face, 4..5 B and A on a selected face.
         let icons: [bool; 6] = match self.state {
             St::Top => [false, false, false, true, false, false],
+            _ if rolling => [false, false, false, true, false, false],
             St::Game if self.game.starting() => [true, true, true, false, false, false],
             St::Game => [false, !self.game.fatal(), false, false, false, false],
             St::GameFace | St::CardFace | St::OptionFace | St::ClockFace => [false, false, false, false, true, true],
             St::Card | St::Option | St::Clock => [true, true, true, false, false, false],
-            St::Dive => [false; 6],
             St::Page if self.page == Page::Files => [false; 6],
             St::Page if self.page == Page::Firmware => [false, true, true, false, false, false],
             St::Page if self.page == Page::BootNow => [true, true, true, false, false, false],
@@ -1014,6 +994,16 @@ impl Menu {
         // sErrorMsg) don't happen with the dummy backends. disp->menuFlag
         // is cleared by the scene (Intro::update).
         self.update_rotation();
+        // GameCoob: a main-menu side that is a sub-menu becomes that
+        // sub-menu's front once the cube has turned all the way to it.
+        if self.level == Level::Main
+            && self.state != St::Top
+            && self.next == self.state
+            && (self.w.rot_x, self.w.rot_y) == face_rot(self.state)
+            && matches!(self.level.target(self.state), Some(Target::Cube(_)))
+        {
+            self.roll_in();
+        }
         self.update_icons(&ma.icons, view);
         self.update_slot_glow();
         self.update_guide();
@@ -1057,19 +1047,9 @@ impl Menu {
             // the next state.
             self.zoom_in();
             self.anim_cube();
-            if self.state == St::Dive {
-                // lean toward the picked side as the cube zooms away
-                let k = self.w.zoom as f32 / 0x7FFF as f32;
-                self.w.rot_x = (self.dive_tilt.0 as f32 * k) as i16;
-                self.w.rot_y = (self.dive_tilt.1 as f32 * k) as i16;
-                if self.w.zoomed_in() {
-                    self.finish_dive();
-                }
-            } else {
-                let (next, act) = self.update_sub(p);
-                self.next = next;
-                action = act;
-            }
+            let (next, act) = self.update_sub(p);
+            self.next = next;
+            action = act;
         }
 
         // GameCoob: the highlight pulse 50..120 at 2 per frame.
@@ -1282,8 +1262,17 @@ impl Menu {
         let face_a = |r: i16| ((alpha as i32) * (255 - (0x4000 - (r as i32).abs()) * 255 / FACE_FADE) / 255).clamp(0, 255) as f32 / 255.0;
         let l = self.lang;
         let bank = &ma.bank[..];
-        // GameCoob: a sub-cube's new sides.
+        // GameCoob: a sub-menu's new sides, and on the main menu the sides
+        // that are sub-menus, drawn as that sub-menu's front (what the
+        // cube shows once it has rolled there).
         let plain = |ui: &mut Ui<'a, '_>, face: St, a: f32| -> bool {
+            if self.level == Level::Main {
+                if let Some(Target::Cube(sub)) = self.level.target(face) {
+                    let mv = ui.mv;
+                    subcube::draw_front(ui, ma, sub, &mv, (a * 255.0) as u8);
+                    return true;
+                }
+            }
             match self.level.plain_face(face) {
                 Some((t, lines)) => {
                     subcube::draw_plain_face(ui, ma, l, t, lines, a);
@@ -1674,8 +1663,16 @@ fn draw_front<'a>(ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, lang: usize, view: &V
     }
 }
 
-/// How far the cube leans toward the side it dives into.
-const DIVE_TILT: i16 = 0x1800;
+/// The cube's turn (rot_x, rot_y) that shows a side.
+fn face_rot(face: St) -> (i16, i16) {
+    match face {
+        St::CardFace => (-0x4000, 0),
+        St::GameFace => (0x4000, 0),
+        St::OptionFace => (0, 0x4000),
+        St::ClockFace => (0, -0x4000),
+        _ => (0, 0),
+    }
+}
 
 /// The main cube's Memory Card side, now the way into the Memory cube.
 pub(crate) const MEMORY_LABEL: &str = "Memory";

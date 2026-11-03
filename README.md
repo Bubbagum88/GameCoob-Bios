@@ -40,14 +40,15 @@ The matching decompilation of the IPL's BS2 program lives in [decomp/](decomp/RE
   the firmware boot menu timeout (the `Timeout` variable). F10 opens the
   system dialog: Firmware Setup (reboots into your vendor's BIOS setup via
   `OsIndications`), Restart and Power Off.
-- **Sub-cubes.** Pressing up (Game Play), down (Memory) or left (Options)
-  on the main cube dives straight into a second cube, whose sides are
-  turned to and entered with A as on the console. Game: Game Play (up, the
+- **Sub-menus.** Turning the cube up (Game Play), down (Memory) or left
+  (Options) keeps the same cube rolling: that side becomes a new front
+  with its own sides, turned to and entered with A as on the console.
+  Game: Game Play (up, the
   console's screen), Boot (left, start an OS now), Apps (right).
   Memory: Memory Card (down, the console's screen), Files (left), Drives
   (right). Settings: Console
   (left, the Options screen), Boot (up), Firmware (right), Controls (down).
-  B on a sub-cube's front goes back. Their labels use the console's own
+  B, or turning back the way it came, rolls back to the main front. Their labels use the console's own
   lettering, cut letter by letter from your dump's label pictures; the few
   letters the IPL never drew come from M PLUS 1p (SIL Open Font License). Files, Drives and Controls are
   placeholders for now.
