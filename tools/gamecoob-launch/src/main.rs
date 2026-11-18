@@ -5,7 +5,10 @@
 //! ```text
 //! gamecoob-launch check [paths.toml]   check a paths file and list what it sets up
 //! gamecoob-launch scan                 list this OS's games into library.toml on the ESP
-//! gamecoob-launch run [--dry-run]      scan, then start the game the boot menu picked, once
+//! gamecoob-launch run [--dry-run]      scan and sync cards, start the game the boot menu
+//!                                      picked (once), and sync the cards back after it
+//! gamecoob-launch sync [--prefer boot|emulator]
+//!                                      sync the boot menu's memory cards with the emulators'
 //! gamecoob-launch mark                 note the current launch request as handled
 //!
 //! options:  --esp DIR      the ESP's folder (default: found, or mounted on Windows)
@@ -14,7 +17,8 @@
 //! ```
 //!
 //! `run` is what the login task calls; `install/` sets it up (and on
-//! Linux a boot-time `scan` as root, since the ESP is root-only there).
+//! Linux a root service that scans and syncs cards at boot and syncs
+//! them again at shutdown, since the ESP is root-only there).
 //! When the ESP can't be read, the copy of paths.toml the last readable
 //! run kept is used. `cargo test` here runs `src/launch`'s tests.
 
@@ -24,6 +28,15 @@ extern crate alloc;
 #[allow(dead_code)]
 mod launch;
 
+// src/card's icon decoding uses the IPL's GX texture code.
+#[path = "../../../src/ipl/mod.rs"]
+mod ipl;
+
+#[path = "../../../src/card/mod.rs"]
+#[allow(dead_code)]
+mod card;
+
+mod cards;
 mod disc;
 mod scan;
 mod sys;
@@ -32,8 +45,8 @@ use launch::{Library, OsKind, Paths, Request, LIBRARY_FILE, PATHS_FILE};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-const USAGE: &str = "usage: gamecoob-launch check [paths.toml] | scan | run [--dry-run] | mark
-       options: --esp DIR, --os ID, --request FILE";
+const USAGE: &str = "usage: gamecoob-launch check [paths.toml] | scan | run [--dry-run] | sync | mark
+       options: --esp DIR, --os ID, --request FILE, --prefer boot|emulator";
 
 #[derive(Default)]
 struct Opts {
@@ -41,6 +54,7 @@ struct Opts {
     os: Option<String>,
     request: Option<String>,
     dry_run: bool,
+    prefer: Option<String>,
 }
 
 fn main() -> ExitCode {
@@ -53,6 +67,7 @@ fn main() -> ExitCode {
             "--os" => o.os = args.next(),
             "--request" => o.request = args.next(),
             "--dry-run" => o.dry_run = true,
+            "--prefer" => o.prefer = args.next(),
             "-h" | "--help" => {
                 println!("{}", USAGE);
                 return ExitCode::SUCCESS;
@@ -64,13 +79,20 @@ fn main() -> ExitCode {
         ["check", file] => check(Path::new(file)),
         ["check"] => sys::esp(o.esp.as_deref()).and_then(|esp| check(&on_esp(&esp.dir, PATHS_FILE))),
         ["scan"] => setup(&o).and_then(|s| scan(&s)),
-        // A failed scan (ESP not writable here) doesn't stop the launch.
+        // A failed scan or card sync (ESP not writable here) doesn't stop
+        // the launch.
         ["run"] => setup(&o).and_then(|s| {
             if let Err(e) = scan(&s) {
                 eprintln!("gamecoob-launch: {}", e);
             }
             run(&s, &o)
         }),
+        ["sync"] => match o.prefer.as_deref() {
+            None | Some("boot") => Ok(cards::Prefer::Boot),
+            Some("emulator") => Ok(cards::Prefer::Emulator),
+            Some(p) => Err(format!("--prefer takes boot or emulator, not {}", p)),
+        }
+        .and_then(|p| setup(&o).and_then(|s| sync_cards(&s, p))),
         ["mark"] => setup(&o).and_then(|s| mark(&s, &o)),
         _ => {
             eprintln!("{}", USAGE);
@@ -107,6 +129,9 @@ fn check(file: &Path) -> Result<(), String> {
     for e in &paths.emulator {
         let (exe, args) = e.command("<game>");
         println!("emulator {} \"{}\" on {}: {} {}", e.id, e.name, e.os, exe, args.join(" "));
+        if let Some(c) = &e.cards {
+            println!("  memory cards synced with {} ({:?})", c, e.cards_format);
+        }
     }
     for r in &paths.roms {
         let deep = if r.recursive { " and subfolders" } else { "" };
@@ -216,12 +241,20 @@ fn save_count(n: u32) -> Result<(), String> {
 }
 
 fn run(s: &Setup, o: &Opts) -> Result<(), String> {
+    // With no game to start, a logon still syncs the cards (saves from
+    // playing in the emulator on its own last time).
     let Some(req) = pending(s, o)? else {
         println!("no launch request for {}", s.os);
+        if !o.dry_run {
+            try_sync(s, cards::Prefer::Boot);
+        }
         return Ok(());
     };
     if req.count <= last_count() {
         println!("launch request {} was already handled", req.count);
+        if !o.dry_run {
+            try_sync(s, cards::Prefer::Boot);
+        }
         return Ok(());
     }
     let emu = s.paths.emulator_by_id(&req.emulator).ok_or_else(|| format!("no [[emulator]] has id \"{}\"", req.emulator))?;
@@ -233,8 +266,65 @@ fn run(s: &Setup, o: &Opts) -> Result<(), String> {
     // Mark first: a game that crashes the session must not start again
     // at every login.
     save_count(req.count)?;
-    std::process::Command::new(&exe).args(&args).spawn().map_err(|e| format!("{}: {}", exe, e))?;
+    // Cards in, game, cards out; only where this run can write the ESP
+    // (Windows). On Linux the root service does both, at boot and at
+    // shutdown.
+    let synced = emu.cards.is_some() && try_sync(s, cards::Prefer::Boot);
+    let mut child = std::process::Command::new(&exe).args(&args).spawn().map_err(|e| format!("{}: {}", exe, e))?;
+    if synced {
+        let _ = child.wait();
+        sync_cards(s, cards::Prefer::Emulator)?;
+    }
     Ok(())
+}
+
+/// Card sync where this run can do it (Windows; root on Linux). A user's
+/// run on Linux can't read the ESP and leaves it to the root service.
+fn try_sync(s: &Setup, prefer: cards::Prefer) -> bool {
+    if s.esp.is_none() || !s.paths.emulator.iter().any(|e| e.os == s.os && e.cards.is_some()) {
+        return false;
+    }
+    match sync_cards(s, prefer) {
+        Ok(()) => true,
+        Err(e) => {
+            eprintln!("gamecoob-launch: cards not synced: {}", e);
+            false
+        }
+    }
+}
+
+/// Syncs the boot menu's cards with every emulator on this OS that has a
+/// `cards` folder. Needs the ESP and the record folder writable (root or
+/// administrator).
+fn sync_cards(s: &Setup, prefer: cards::Prefer) -> Result<(), String> {
+    let Some(esp) = &s.esp else {
+        return Err("can't read the ESP as this user: cards are synced by the root service".into());
+    };
+    let state = sys::paths_cache().parent().map(Path::to_path_buf).unwrap_or_default();
+    std::fs::create_dir_all(&state).map_err(|e| format!("{}: {}", state.display(), e))?;
+    let esp_cards = on_esp(&esp.dir, &s.paths.boot.cards);
+    let mut failed = None;
+    for emu in s.paths.emulator.iter().filter(|e| e.os == s.os && e.cards.is_some()) {
+        let record = state.join(format!("cards-{}.txt", emu.id));
+        // Check before touching any card that the record can be kept.
+        if let Err(e) = std::fs::OpenOptions::new().append(true).create(true).open(&record) {
+            return Err(format!("{}: {} (card sync runs as root or administrator)", record.display(), e));
+        }
+        match cards::sync(&esp_cards, emu, &record, prefer) {
+            Ok(c) => println!(
+                "cards with {}: {} saves to the emulator, {} to the boot menu{}",
+                emu.id,
+                c.to_emulator,
+                c.to_boot,
+                if c.failed > 0 { format!(", {} failed", c.failed) } else { String::new() }
+            ),
+            Err(e) => {
+                eprintln!("gamecoob-launch: cards with {}: {}", emu.id, e);
+                failed = Some(e);
+            }
+        }
+    }
+    failed.map_or(Ok(()), Err)
 }
 
 fn mark(s: &Setup, o: &Opts) -> Result<(), String> {

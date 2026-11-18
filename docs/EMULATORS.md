@@ -68,13 +68,15 @@ Its parts:
 How the helper runs:
 
 - **Windows**: a scheduled task at logon with highest privileges, running
-  `gamecoob-launch run` (reading firmware variables needs the
+  `gamecoob-launch run`, which also syncs the memory cards around the game
+  (reading firmware variables needs the
   SE_SYSTEM_ENVIRONMENT privilege, which only an elevated process has).
   It mounts the ESP with `mountvol` to update the game list.
 - **Linux (Arch first)**: Arch mounts the ESP so only root can read it,
   so the work is split. `gamecoob-scan.service` runs `gamecoob-launch
-  scan` as root at boot: it updates the game list and keeps a readable
-  copy of `paths.toml` in `/var/lib/gamecoob`. An XDG autostart entry
+  scan` and `sync` as root at boot: it updates the game list, keeps a
+  readable copy of `paths.toml` in `/var/lib/gamecoob` and syncs the
+  memory cards (again at shutdown, see below). An XDG autostart entry
   runs `gamecoob-launch run` at desktop login, as you, so the emulator
   opens on your desktop; it reads the variable from
   `/sys/firmware/efi/efivars` (readable by every user) and the paths
@@ -97,11 +99,51 @@ file and `paths.example.toml`.
 
 ## Memory cards
 
-Card images edited in the boot menu live in `[boot] cards` on the ESP.
-Before starting the emulator the helper copies them into the emulator's
-`cards` folder (converting to its format with `src/card`), and copies them
-back when the emulator exits, keeping a `.bak` each way. So a save copied
-in the boot menu shows up in the game, and the other way round.
+The boot menu's card images (`slot-a.raw`, `slot-b.raw`, or `.mcp`/`.gcp`,
+in `[boot] cards` on the ESP) and an emulator's cards stay in step when
+the `[[emulator]]` has a `cards` folder (Dolphin's `GC` folder). So a save
+copied in the boot menu shows up in the game, and a game's new save shows
+up in the boot menu's Memory Card screen.
+
+`cards_format` says how the emulator keeps them (Dolphin: Config >
+GameCube > Slot A/B):
+
+- `"gci"` (default, Dolphin's "GCI Folder"): one `.gci` file per save in
+  `GC/USA/Card A`, `GC/EUR/Card A`, `GC/JAP/Card A` (and `Card B`).
+- `"raw"` (Dolphin's "Memory Card"): one card image per region,
+  `GC/MemoryCardA.USA.raw` and so on. A region with no image yet gets a
+  freshly formatted 2043-block one, the size Dolphin makes.
+
+The sync works save by save, since one boot-menu card holds every
+region's saves and Dolphin keeps one card per region: each save goes to
+the region its game code names. The helper records each save's content at
+the last sync (`/var/lib/gamecoob/cards-<emulator>.txt` on Linux,
+`%ProgramData%\gamecoob\cards-<emulator>.txt` on Windows), so it knows
+which side changed a save since then:
+
+- changed, added or erased on one side only: copied (or erased) on the
+  other;
+- changed on both: the boot menu's copy wins before a game and at boot,
+  the emulator's after a game and at shutdown; a change always beats an
+  erase;
+- the first sync merges both sides.
+
+Every file replaced is kept as `<name>.bak` first, and a `.gci` erased in
+the boot menu is renamed to `.gci.bak` rather than deleted. A save that
+doesn't fit (card full) is reported and tried again next time. A slot with
+no card image on the ESP is left alone.
+
+When it runs:
+
+- **Linux**: `gamecoob-scan.service` (root) syncs at boot, before logins
+  are allowed, and again at shutdown, after every session has ended. Files
+  it writes into your Dolphin folder get that folder's owner.
+- **Windows**: the logon task syncs, starts the picked game, waits for
+  the emulator to close and syncs again (`gamecoob-launch sync` does it by
+  hand).
+
+Sync needs to write both the ESP and the record, so it runs as root or
+administrator; a plain user's `run` skips it.
 
 ## Steps
 
@@ -116,5 +158,6 @@ in the boot menu shows up in the game, and the other way round.
    service and login autostart (#149).
 5. `[boot]` paths replace the built-in ones: the dump (still falling back
    to `\ipl.bin`), the default card images and the explorer's export
-   folder.
-6. Memory card sync.
+   folder (#150).
+6. Memory card sync with the emulator, both ways, save by save
+   (`gamecoob-launch sync`, `cards_format`).
