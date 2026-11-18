@@ -20,7 +20,15 @@ static void *sGuideSth[6];          /* 0x814B60C0 button guide strings per langu
 static void *sDigitTex[10];         /* 0x814B60D8 digits 0..9 (res 91..100) */
 static void *sWeekdayTex[7];        /* 0x814B6100 weekday names (current language) */
 static Fader sGuideIcon[6];         /* 0x814B611C button glyph groups (see Menu_UpdateGuide) */
-static Fader sGuideText[8];         /* 0x814B617C button guide labels */
+/* Button guide labels. Only the first three are an array: Menu_DrawGuideText
+   hoists &sGuideText[1] and [2] out of its loop but addresses the five
+   singles from the section base, which needs separate objects. */
+static Fader sGuideText[3];         /* 0x814B617C Menu Selection, Cancel, Confirm */
+static Fader sGuideSelect;          /* 0x814B61AC */
+static Fader sGuideChange;          /* 0x814B61BC */
+static Fader sGuideCancel2;         /* 0x814B61CC */
+static Fader sGuideFinish;          /* 0x814B61DC */
+static Fader sGuideConfirm2;        /* 0x814B61EC */
 static Fader sOptionFade[3];        /* 0x814B61FC submenu fade-ins, delays subFadeDelay[] */
 static Fader sCardFade[3];          /* 0x814B622C */
 static Fader sClockFade[3];         /* 0x814B625C */
@@ -134,11 +142,11 @@ static void Menu_InitRes(BOOL first) {
     Fader_Init(&sGuideText[0]); sGuideText[0].id = GUIDE_MENU_SELECT;
     Fader_Init(&sGuideText[1]); sGuideText[1].id = GUIDE_CANCEL;
     Fader_Init(&sGuideText[2]); sGuideText[2].id = GUIDE_CONFIRM;
-    Fader_Init(&sGuideText[7]); sGuideText[7].id = GUIDE_CONFIRM2;
-    Fader_Init(&sGuideText[3]); sGuideText[3].id = GUIDE_SELECT;
-    Fader_Init(&sGuideText[4]); sGuideText[4].id = GUIDE_CHANGE;
-    Fader_Init(&sGuideText[6]); sGuideText[6].id = GUIDE_FINISH;
-    Fader_Init(&sGuideText[5]); sGuideText[5].id = GUIDE_CANCEL2;
+    Fader_Init(&sGuideConfirm2); sGuideConfirm2.id = GUIDE_CONFIRM2;
+    Fader_Init(&sGuideSelect); sGuideSelect.id = GUIDE_SELECT;
+    Fader_Init(&sGuideChange); sGuideChange.id = GUIDE_CHANGE;
+    Fader_Init(&sGuideFinish); sGuideFinish.id = GUIDE_FINISH;
+    Fader_Init(&sGuideCancel2); sGuideCancel2.id = GUIDE_CANCEL2;
 
     /* Each submenu fades in with three staggered faders (delays 0, 20, 70). */
     for (i = 0; i < 3; i++) {
@@ -692,11 +700,11 @@ static void Menu_UpdateGuide(void) {
         Fader_Step(&sGuideText[0], FADE_IN);     /* Menu Selection */
         Fader_Step(&sGuideText[1], FADE_OUT);
         Fader_Step(&sGuideText[2], FADE_OUT);
-        Fader_Step(&sGuideText[3], FADE_OUT);
-        Fader_Step(&sGuideText[4], FADE_OUT);
-        Fader_Step(&sGuideText[5], FADE_OUT);
-        Fader_Step(&sGuideText[7], FADE_OUT);
-        Fader_Step(&sGuideText[6], FADE_OUT);
+        Fader_Step(&sGuideSelect, FADE_OUT);
+        Fader_Step(&sGuideChange, FADE_OUT);
+        Fader_Step(&sGuideCancel2, FADE_OUT);
+        Fader_Step(&sGuideConfirm2, FADE_OUT);
+        Fader_Step(&sGuideFinish, FADE_OUT);
         break;
     case MENU_GAME_FACE:
     case MENU_CARD_FACE:
@@ -705,73 +713,73 @@ static void Menu_UpdateGuide(void) {
         Fader_Step(&sGuideText[0], FADE_OUT);
         Fader_Step(&sGuideText[1], FADE_IN);     /* Cancel */
         Fader_Step(&sGuideText[2], FADE_IN);     /* Confirm */
-        Fader_Step(&sGuideText[3], FADE_OUT);
-        Fader_Step(&sGuideText[4], FADE_OUT);
-        Fader_Step(&sGuideText[5], FADE_OUT);
-        Fader_Step(&sGuideText[6], FADE_OUT);
-        Fader_Step(&sGuideText[7], FADE_OUT);
+        Fader_Step(&sGuideSelect, FADE_OUT);
+        Fader_Step(&sGuideChange, FADE_OUT);
+        Fader_Step(&sGuideCancel2, FADE_OUT);
+        Fader_Step(&sGuideFinish, FADE_OUT);
+        Fader_Step(&sGuideConfirm2, FADE_OUT);
         break;
     case MENU_GAME:
         Fader_Step(&sGuideText[0], FADE_OUT);
         Fader_Step(&sGuideText[1], FADE_OUT);
         Fader_Step(&sGuideText[2], FADE_OUT);
-        Fader_Step(&sGuideText[3], FADE_OUT);
-        Fader_Step(&sGuideText[4], FADE_OUT);
+        Fader_Step(&sGuideSelect, FADE_OUT);
+        Fader_Step(&sGuideChange, FADE_OUT);
         if (!Game_IsFatal()) {
-            Fader_Step(&sGuideText[5], FADE_IN); /* Cancel */
+            Fader_Step(&sGuideCancel2, FADE_IN); /* Cancel */
         } else {
-            Fader_Step(&sGuideText[5], FADE_OUT);
+            Fader_Step(&sGuideCancel2, FADE_OUT);
         }
-        Fader_Step(&sGuideText[6], FADE_OUT);
-        Fader_Step(&sGuideText[7], FADE_OUT);
+        Fader_Step(&sGuideFinish, FADE_OUT);
+        Fader_Step(&sGuideConfirm2, FADE_OUT);
         break;
     case MENU_OPTION:
         if (Option_IsTop()) {
-            Fader_Step(&sGuideText[3], FADE_IN); /* Select */
-            Fader_Step(&sGuideText[4], FADE_OUT);
-            Fader_Step(&sGuideText[6], FADE_IN); /* Finish */
-            Fader_Step(&sGuideText[5], FADE_OUT);
+            Fader_Step(&sGuideSelect, FADE_IN); /* Select */
+            Fader_Step(&sGuideChange, FADE_OUT);
+            Fader_Step(&sGuideFinish, FADE_IN); /* Finish */
+            Fader_Step(&sGuideCancel2, FADE_OUT);
         } else {
-            Fader_Step(&sGuideText[3], FADE_OUT);
-            Fader_Step(&sGuideText[4], FADE_IN); /* Change */
-            Fader_Step(&sGuideText[6], FADE_OUT);
-            Fader_Step(&sGuideText[5], FADE_IN); /* Cancel */
+            Fader_Step(&sGuideSelect, FADE_OUT);
+            Fader_Step(&sGuideChange, FADE_IN); /* Change */
+            Fader_Step(&sGuideFinish, FADE_OUT);
+            Fader_Step(&sGuideCancel2, FADE_IN); /* Cancel */
         }
         Fader_Step(&sGuideText[0], FADE_OUT);
         Fader_Step(&sGuideText[1], FADE_OUT);
         Fader_Step(&sGuideText[2], FADE_OUT);
-        Fader_Step(&sGuideText[7], FADE_IN);     /* Confirm */
+        Fader_Step(&sGuideConfirm2, FADE_IN);     /* Confirm */
         break;
     case MENU_CLOCK:
         if (Clock_IsTop()) {
-            Fader_Step(&sGuideText[3], FADE_IN);
-            Fader_Step(&sGuideText[4], FADE_OUT);
-            Fader_Step(&sGuideText[6], FADE_IN);
-            Fader_Step(&sGuideText[5], FADE_OUT);
+            Fader_Step(&sGuideSelect, FADE_IN);
+            Fader_Step(&sGuideChange, FADE_OUT);
+            Fader_Step(&sGuideFinish, FADE_IN);
+            Fader_Step(&sGuideCancel2, FADE_OUT);
         } else {
-            Fader_Step(&sGuideText[3], FADE_OUT);
-            Fader_Step(&sGuideText[4], FADE_IN);
-            Fader_Step(&sGuideText[6], FADE_OUT);
-            Fader_Step(&sGuideText[5], FADE_IN);
+            Fader_Step(&sGuideSelect, FADE_OUT);
+            Fader_Step(&sGuideChange, FADE_IN);
+            Fader_Step(&sGuideFinish, FADE_OUT);
+            Fader_Step(&sGuideCancel2, FADE_IN);
         }
-        Fader_Step(&sGuideText[7], FADE_IN);
+        Fader_Step(&sGuideConfirm2, FADE_IN);
         Fader_Step(&sGuideText[0], FADE_OUT);
         Fader_Step(&sGuideText[1], FADE_OUT);
         Fader_Step(&sGuideText[2], FADE_OUT);
         break;
     case MENU_CARD:
         if (Card_IsBrowsing()) {
-            Fader_Step(&sGuideText[5], FADE_OUT);
-            Fader_Step(&sGuideText[6], FADE_IN); /* Finish */
+            Fader_Step(&sGuideCancel2, FADE_OUT);
+            Fader_Step(&sGuideFinish, FADE_IN); /* Finish */
         } else {
-            Fader_Step(&sGuideText[5], FADE_IN); /* Cancel */
-            Fader_Step(&sGuideText[6], FADE_OUT);
+            Fader_Step(&sGuideCancel2, FADE_IN); /* Cancel */
+            Fader_Step(&sGuideFinish, FADE_OUT);
         }
-        Fader_Step(&sGuideText[7], FADE_IN);
+        Fader_Step(&sGuideConfirm2, FADE_IN);
         Fader_Step(&sGuideText[0], FADE_OUT);
         Fader_Step(&sGuideText[1], FADE_OUT);
         Fader_Step(&sGuideText[2], FADE_OUT);
-        Fader_Step(&sGuideText[3], FADE_IN);
+        Fader_Step(&sGuideSelect, FADE_IN);
         break;
     }
 
@@ -1424,7 +1432,6 @@ static void Menu_DrawGuideText(u8 alpha) {
     GXColor c = { 255, 255, 255, 255 };
     s32 lang;
     s16 a;
-    Fader *t = sGuideText;  /* labels 3..7 go through t: the IPL hoists only 1 and 2 */
 
     for (lang = 0; lang < 6; lang++) {
         Fader_GetAlpha(&sLangGuide[lang], &a, NULL);
@@ -1432,11 +1439,11 @@ static void Menu_DrawGuideText(u8 alpha) {
         Fader_DrawString(&sGuideText[0], sGuideSth[lang], gGuideGlh, &c);
         Fader_DrawString(&sGuideText[1], sGuideSth[lang], gGuideGlh, &c);
         Fader_DrawString(&sGuideText[2], sGuideSth[lang], gGuideGlh, &c);
-        Fader_DrawString(&t[3], sGuideSth[lang], gGuideGlh, &c);
-        Fader_DrawString(&t[4], sGuideSth[lang], gGuideGlh, &c);
-        Fader_DrawString(&t[5], sGuideSth[lang], gGuideGlh, &c);
-        Fader_DrawString(&t[6], sGuideSth[lang], gGuideGlh, &c);
-        Fader_DrawString(&t[7], sGuideSth[lang], gGuideGlh, &c);
+        Fader_DrawString(&sGuideSelect, sGuideSth[lang], gGuideGlh, &c);
+        Fader_DrawString(&sGuideChange, sGuideSth[lang], gGuideGlh, &c);
+        Fader_DrawString(&sGuideCancel2, sGuideSth[lang], gGuideGlh, &c);
+        Fader_DrawString(&sGuideFinish, sGuideSth[lang], gGuideGlh, &c);
+        Fader_DrawString(&sGuideConfirm2, sGuideSth[lang], gGuideGlh, &c);
     }
 }
 
