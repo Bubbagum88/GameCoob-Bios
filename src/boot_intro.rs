@@ -189,6 +189,7 @@ fn perform(a: Action, launcher: &crate::launcher::Launcher) -> Option<String> {
         Action::SetMinimal(on) => firmware::save_minimal(on).err(),
         Action::SetCoobLogo(on) => firmware::save_coob_logo(on).err(),
         Action::SetIntroDelay(s) => firmware::save_intro_delay(s).err(),
+        Action::SetJingle(j) => firmware::save_jingle(j).err(),
         Action::SetTime(t) => firmware::set_time(t).err(),
         Action::FirmwareSetup => Some(firmware::firmware_setup()),
         Action::Restart => firmware::restart(),
@@ -290,6 +291,7 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
     let mut audio = Audio::open(snd);
     crate::bs2::menu::set_minimal(crate::vars::minimal());
     crate::bs2::wordmark::set_coob(crate::vars::coob_logo());
+    crate::bs2::cube::Jingle::set_setting(crate::bs2::cube::Jingle::from_u8(crate::vars::jingle()));
     let boot_paths = crate::launcher::boot_paths();
     crate::bs2::menu::explorer::set_export_dir(boot_paths.saves.clone());
     let mut bs2 = Bs2Main::new(assets, Box::new(FakeDrive::new()), load_cards(&boot_paths), Box::new(UefiVolumes));

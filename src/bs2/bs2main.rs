@@ -189,11 +189,12 @@ impl Bs2Main {
                 m.update_fx(ma);
             }
             None => {
-                // The intro reads A held and, for the jingle, the Z eggs.
+                // The intro reads A held and, for the jingle, the Z eggs;
+                // with no Z held, GameCoob's Boot Jingle setting.
                 let egg = match self.pads.easter_egg() {
                     2 => Some(Jingle::AllPadsZ),
                     1 => Some(Jingle::Pad1Z),
-                    _ => None,
+                    _ => Some(Jingle::setting()).filter(|&j| j != Jingle::Normal),
                 };
                 if let Some(j) = self.intro.update(Input { a: mp.pst.button & pad::PAD_BUTTON_A != 0, egg }) {
                     sound::play(j as u32);

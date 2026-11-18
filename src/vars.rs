@@ -94,6 +94,21 @@ pub fn set_coob_logo(on: bool) -> uefi::Result {
     runtime::set_variable(cstr16!("GameCoobLogo"), GAMECOOB, attrs(), &[on as u8])
 }
 
+/// The Boot Jingle option, saved as `GameCoobJingle` (one byte: the
+/// `Sound_Play` id, 0 the normal jingle, 1 the four-player Z egg, 2 the
+/// one-player one). Normal when unset.
+pub fn jingle() -> u8 {
+    runtime::get_variable_boxed(cstr16!("GameCoobJingle"), GAMECOOB)
+        .ok()
+        .and_then(|(b, _)| b.first().copied())
+        .filter(|&j| j < 3)
+        .unwrap_or(0)
+}
+
+pub fn set_jingle(j: u8) -> uefi::Result {
+    runtime::set_variable(cstr16!("GameCoobJingle"), GAMECOOB, attrs(), &[j])
+}
+
 /// The black hold before the intro ([`crate::display`]), saved as
 /// `GameCoobIntroDelay` (one byte: seconds, 0xFF = Auto). Auto (`None`)
 /// when unset.
