@@ -22,6 +22,8 @@ mod fs;
 mod gamepad;
 mod gfx;
 mod hda;
+#[allow(dead_code)]
+mod hii;
 mod input;
 mod ipl;
 // Shared with tools/gamecoob-launch, which uses the parts the app doesn't.
@@ -29,6 +31,7 @@ mod ipl;
 mod launch;
 mod launcher;
 mod sdk;
+mod setup;
 mod vars;
 
 use core::time::Duration;
