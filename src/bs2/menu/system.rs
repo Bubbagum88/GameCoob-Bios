@@ -88,7 +88,7 @@ impl System {
             self.open = false;
         } else if p.a && self.row == ROW_MINIMAL {
             return Some(Action::SetMinimal(!minimal));
-        } else if p.a && self.row == ROW_LOGO {
+        } else if p.a && self.row == ROW_LOGO && !minimal {
             return Some(Action::SetCoobLogo(!crate::bs2::wordmark::coob()));
         } else if p.a && self.row == ROW_DELAY {
             return Some(Action::SetIntroDelay(crate::bs2::intro_delay::next(crate::bs2::intro_delay::setting())));
@@ -107,7 +107,14 @@ impl System {
         ui.fill(-40.0, -40.0, 664.0, 528.0, [0.0, 0.0, 0.0, 0.55 * a]);
         let d = &ma.dialog;
         let min_row = cp1252(&alloc::format!("{}: {}", ITEMS[ROW_MINIMAL], if super::minimal() { "On" } else { "Off" }));
-        let logo = if crate::bs2::wordmark::coob() { "GameCoob" } else { "GameCube" };
+        // Minimal mode always shows the console's logo; the row is dimmed.
+        let logo = if super::minimal() {
+            "GameCube (Minimal)"
+        } else if crate::bs2::wordmark::coob() {
+            "GameCoob"
+        } else {
+            "GameCube"
+        };
         let logo_row = cp1252(&alloc::format!("{}: {}", ITEMS[ROW_LOGO], logo));
         let delay = match crate::bs2::intro_delay::setting() {
             Some(s) => alloc::format!("{s} s"),
@@ -154,7 +161,7 @@ impl System {
         }
         for (i, item) in items.iter().enumerate() {
             let Some(text) = item else { continue };
-            let dim = i == 0 && self.confirm.is_none() && !self.fw_ui;
+            let dim = self.confirm.is_none() && ((i == 0 && !self.fw_ui) || (i == ROW_LOGO && super::minimal()));
             let c = if dim { [0.55, 0.55, 0.6, 1.0] } else { WHITE };
             let k = if i == sel { 1.0 } else { 0.75 };
             ui.label(&ma.font, 292.0, top + i as f32 * pitch, size, text, with_a(c, a * k), 0);
