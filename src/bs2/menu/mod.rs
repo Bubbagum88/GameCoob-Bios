@@ -436,6 +436,8 @@ pub enum Action {
     SetCoobLogo(bool),
     /// Save the black hold before the intro: seconds, or None for Auto.
     SetIntroDelay(Option<u8>),
+    /// Save the Boot Jingle option (a `Sound_Play` jingle id, 0..2).
+    SetJingle(u8),
     /// Set the firmware clock: year, month 1..12, day, hour, minute, second.
     SetTime([i32; 6]),
     FirmwareSetup,
@@ -1003,6 +1005,8 @@ impl Menu {
             Some(Action::SetCoobLogo(on)) => crate::bs2::wordmark::set_coob(on),
             // Used from the next boot.
             Some(Action::SetIntroDelay(s)) => crate::bs2::intro_delay::set_setting(s),
+            // Played from the next intro.
+            Some(Action::SetJingle(j)) => crate::bs2::cube::Jingle::set_setting(crate::bs2::cube::Jingle::from_u8(j)),
             _ => {}
         }
         let busy = self.sys.visible() || self.explorer.visible();

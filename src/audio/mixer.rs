@@ -3,9 +3,10 @@
 //! microcode).
 //!
 //! The DSP mixes every voice into buses at 32028.5 Hz, once per 80-sample
-//! subframe: front left (bus 1), front right (2), and the inputs of two
-//! echo lines (3, 4) that feed back into themselves through an 8-tap FIR
-//! and play into left and right. Here every voice is resampled once,
+//! subframe: front left (bus 1), front right (2), the inputs of two echo
+//! lines (3, 4) that feed back into themselves through an 8-tap FIR and
+//! play into left and right, and a buffer (bus 9) the microcode adds into
+//! the right channel inverted, just before it sends that channel out. Here every voice is resampled once,
 //! straight from its wave's own rate to the output rate (48 kHz by
 //! default) with 4-point cubic interpolation, and the buses are f32, so
 //! nothing is lost twice and nothing clips until the final soft limiter.
@@ -30,17 +31,22 @@ const LEVEL_GAIN: f32 = 4.0 / 65536.0;
 pub enum Bus {
     Left,
     Right,
+    /// Added into the right channel with its sign flipped.
+    RightInv,
     Fx(usize),
     None,
 }
 
-/// Where bus number `n` (a routing's upper byte) goes. 0x0FA0 (bus 9) is a
-/// mixing destination only the ambient's lead voice uses, paired with the
-/// left bus: it plays on the right here.
+/// Where bus number `n` (a routing's upper byte) goes. Bus 9 (DSP buffer
+/// 0x0FA0) is used only by the ambient's voices, panned against the left
+/// bus. The microcode clears it every frame and, after the left channel is
+/// out, mixes it into the right one at volume 0x8000 (-1.0 in its signed
+/// 1.15 multiply): the right channel gets it inverted.
 pub fn bus(n: u16) -> Bus {
     match n {
         1 => Bus::Left,
-        2 | 9 => Bus::Right,
+        2 => Bus::Right,
+        9 => Bus::RightInv,
         3 => Bus::Fx(0),
         4 => Bus::Fx(1),
         _ => Bus::None,
@@ -90,8 +96,9 @@ impl FxLine {
     }
 }
 
-/// The IPL's two echo lines (the third mixes into a buffer that is never
-/// played, the fourth is off).
+/// The IPL's two echo lines. The third reads bus 5, which no routing in
+/// the IPL sends to, so it stays silent (its output buffer, 0x09A0, goes
+/// to both sides at 0x5A82); the fourth is off.
 pub fn fx_lines(rate: u32) -> [FxLine; 2] {
     const FIR: [i16; 8] = [0, 0, 0, 500, 1000, 4000, 7000, 8000];
     let v = 0x6000 as f32 / 32768.0;
@@ -137,6 +144,7 @@ pub fn mix_voice(v: &mut Voice, w: &Wave, out_rate: u32, from: usize, len: usize
                 match routes[b] {
                     Bus::Left => d[0] += y,
                     Bus::Right => d[1] += y,
+                    Bus::RightInv => d[1] -= y,
                     Bus::Fx(n) => s[n] += y,
                     Bus::None => {}
                 }
