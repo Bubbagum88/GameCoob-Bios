@@ -497,22 +497,34 @@ static s32 Menu_HandleInput(void) {
 /* Passing the scale through VecRef gives the IPL's by-value copy + dead slot. */
 static inline Vec *VecRef(Vec *v) { (void)v; return v; }
 
-/* 0x81311D50: cube matrix = rotation * idle wobble * zoom, then the model. */
-static void Menu_CalcCubeMtx(void) {
-    Mtx m;
-    Vec s;
-    Mtx rot;
-    Mtx wob;
-    Scene *scene;
-    s16 t;
-    MenuWork *w;
-    f32 tx, ty;
-    s16 rz, ry;
+/* Menu_CalcCubeMtx's helpers. The IPL's frame puts the scale Vec and its
+   by-value copy above the rot/wob matrices: the scale is a depth-1 inline
+   local, rot/wob are depth-2 (Menu_CubeBase -> Rot/Wobble), and depth-2
+   locals go below. inline_depth(2) lets Wobble expand at depth 2. */
+#pragma push
+#pragma inline_depth(2)
+static inline void Menu_SetCubeModel(Scene *scene) {
+    Vec s = sZeroVec;
 
-    scene = Scene_Get();
-    PSMTXIdentity(m);
+    s.z = s.y = s.x = 1.1f * scene->modelScale;
+    J3D_SetModelMtx(Scene_GetBigCube(), sCubeMtx, *VecRef(&s));
+}
+
+static inline void Menu_CubeRot(Mtx m) {
+    Mtx rot;
+
     MtxRotTrans(gMenu->rotX, gMenu->rotY, 0, rot, 0.0f, 0.0f, 0.0f);
     PSMTXConcat(rot, m, m);
+}
+
+static inline void Menu_CubeWobble(Mtx m) {
+    f32 ty;
+    MenuWork *w;
+    s16 ry;
+    s16 t;
+    s16 rz;
+    f32 tx;
+    Mtx wob;
 
     t = gMenu->wobbleFrame;
     PSMTXIdentity(wob);
@@ -524,6 +536,21 @@ static void Menu_CalcCubeMtx(void) {
     ry = w->wobbleAmp[1] * CosS(w->wobblePhaseRY + w->wobbleSpeed[1] * t);
     MtxRotTrans(gMenu->wobbleAmp[0] * CosS(w->wobbleSpeed[0] * t), ry, rz, wob, tx, ty, 0.0f);
     PSMTXConcat(wob, m, m);
+}
+
+static inline void Menu_CubeBase(Mtx m) {
+    Menu_CubeRot(m);
+    Menu_CubeWobble(m);
+}
+
+/* 0x81311D50: cube matrix = rotation * idle wobble * zoom, then the model. */
+static void Menu_CalcCubeMtx(void) {
+    Mtx m;
+    Scene *scene;
+
+    scene = Scene_Get();
+    PSMTXIdentity(m);
+    Menu_CubeBase(m);
 
     PSMTXIdentity(sCubeMtx);
     PSMTXConcat(m, sCubeMtx, sCubeMtx);
@@ -535,11 +562,10 @@ static void Menu_CalcCubeMtx(void) {
         PSMTXConcat(m, sCubeMtx, sCubeMtx);
     }
 
-    s = sZeroVec;
-    s.z = s.y = s.x = 1.1f * scene->modelScale;
-    J3D_SetModelMtx(Scene_GetBigCube(), sCubeMtx, *VecRef(&s));
+    Menu_SetCubeModel(scene);
     J3D_SetViewMtx(Scene_GetBigCube(), Camera_GetView());
 }
+#pragma pop
 
 /* 0x81312044: Game Play face shows the banner, "no disc" or an unknown disc. */
 static void Menu_UpdateDiscFaders(void) {
@@ -1131,7 +1157,8 @@ static void Menu_DrawSlot(u8 slot, void *glh, u8 alpha) {
 
     c.a = alpha;
     GX_Setup2DTex();
-    Glh_DrawPane('texa' + slot, glh, &c);
+    tag = 'texa' + slot;
+    Glh_DrawPane(tag, glh, &c);
 
     c.a = (u8)(alpha * glow[slot] / 255);
     tag = slot << 8;                                /* 'mca?' / 'mcb?' */
