@@ -54,8 +54,13 @@ The matching decompilation of the IPL's BS2 program lives in [decomp/](decomp/RE
   placeholders for now.
 - **Minimal mode.** For the menu exactly as on the console: no sub-cubes,
   Memory Card and Options open their own screens again, and the cube keeps
-  the console's labels. Toggle it in the system menu (F10, or Settings
-  ▲ Firmware); it is saved in a UEFI variable (`GameCoobMinimal`).
+  the console's labels. The intro always shows the console's GAMECUBE
+  logo (the Intro Logo row is locked), it spins to the menu without
+  GameCoob's one-second pause, and Options and Calendar keep the console's
+  own titles. Toggle it in the system menu (F10, PS/Home on a pad, or
+  Settings ▲ Firmware); it is saved in a UEFI variable (`GameCoobMinimal`).
+  What stays: Options' second row still sets the firmware boot timeout,
+  START with no disc still opens the game list, and F10 still works.
 - **Slow monitors and TVs.** A screen on an external port (HDMI,
   DisplayPort, DVI, VGA, a dock) can take a second or more to show a
   picture, so the intro waits on black first, from the app's start: Auto
