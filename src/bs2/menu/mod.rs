@@ -28,6 +28,7 @@ mod card;
 mod card_blocks;
 mod game;
 mod calendar;
+mod controls;
 mod options;
 pub mod icons;
 mod system;
@@ -397,6 +398,11 @@ pub struct Pad {
     pub system: bool,
     pub eject: bool,
     pub slot: [bool; 2],
+    /// GameCoob: the raw key pressed this frame and the gamepad buttons
+    /// ([`crate::gamepad::report::btn`] bits) newly pressed, for the
+    /// Controls page to bind.
+    pub key: Option<crate::input::KeyCode>,
+    pub pad_press: u32,
 }
 
 /// What the menu shows about this PC; the driver refreshes it.
@@ -412,6 +418,8 @@ pub struct SysInfo {
     /// Games an emulator on one of the PC's OSes can start
     /// (docs/EMULATORS.md), in the helper's list order.
     pub games: Vec<GameRow>,
+    /// The key and gamepad bindings (the Controls page edits them).
+    pub controls: crate::input::Bindings,
 }
 
 /// One game in Game Play's game list.
@@ -436,6 +444,8 @@ pub enum Action {
     SetCoobLogo(bool),
     /// Save the black hold before the intro: seconds, or None for Auto.
     SetIntroDelay(Option<u8>),
+    /// Save and use [`SysInfo::controls`] (changed on the Controls page).
+    SetControls,
     /// Set the firmware clock: year, month 1..12, day, hour, minute, second.
     SetTime([i32; 6]),
     FirmwareSetup,
@@ -481,6 +491,7 @@ pub struct Menu {
     slot_glow: [i16; 2],
     // Submenus.
     boot_sel: usize,
+    controls: controls::Controls,
     options: options::Options,
     calendar: calendar::Calendar,
     highlight: i16,
@@ -550,6 +561,7 @@ impl Menu {
             lang: 0,
             slot_glow: [0; 2],
             boot_sel: 0,
+            controls: controls::Controls::new(),
             options: options::Options::new(&ma.option, 0, timeout),
             calendar: calendar::Calendar::new(),
             highlight: 50,
@@ -570,6 +582,12 @@ impl Menu {
         };
         m.calc_cube_mtx();
         m
+    }
+
+    /// GameCoob: the Controls page is waiting for a key or button to
+    /// bind; the app's own keys (reset, ...) stay out of it until then.
+    pub fn capturing(&self) -> bool {
+        self.state == St::Page && self.page == Page::Controls && self.controls.capturing()
     }
 
     /// Show a short note in the current submenu (e.g. a firmware error).
@@ -667,6 +685,9 @@ impl Menu {
                 Some(Target::Cube(_)) => {}
                 Some(Target::Page(pg)) => {
                     self.page = pg;
+                    if pg == subcube::Page::Controls {
+                        self.controls.enter();
+                    }
                     self.next = St::Page;
                 }
                 None => {}
@@ -898,7 +919,7 @@ impl Menu {
             // Card Files draws its own help line.
             St::Page if self.page == Page::Files => [o; 8],
             St::Page if self.page == Page::Firmware => [o, o, o, o, o, i, o, i],
-            St::Page if self.page == Page::BootNow => [o, o, o, i, o, i, o, i],
+            St::Page if matches!(self.page, Page::BootNow | Page::Controls) => [o, o, o, i, o, i, o, i],
             St::Page => [o, o, o, o, o, i, o, o],
         };
         // Glyph groups: 0..2 inside submenus, 3 the stick on the front
@@ -912,7 +933,7 @@ impl Menu {
             St::Card | St::Option | St::Clock => [true, true, true, false, false, false],
             St::Page if self.page == Page::Files => [false; 6],
             St::Page if self.page == Page::Firmware => [false, true, true, false, false, false],
-            St::Page if self.page == Page::BootNow => [true, true, true, false, false, false],
+            St::Page if matches!(self.page, Page::BootNow | Page::Controls) => [true, true, true, false, false, false],
             St::Page => [false, true, false, false, false, false],
         };
         for (f, on) in self.guide_text.iter_mut().zip(text) {
@@ -1144,6 +1165,18 @@ impl Menu {
                     self.files_open = true;
                 }
                 return (St::Page, None);
+            }
+            if self.page == Page::Controls {
+                let mut note = None;
+                let r = self.controls.update(p, &mut self.info.controls, &mut note);
+                if let Some(n) = note {
+                    self.notify(n);
+                }
+                return match r {
+                    controls::Upd::Stay => (St::Page, None),
+                    controls::Upd::Back => (self.page.face(), None),
+                    controls::Upd::Changed => (St::Page, Some(Action::SetControls)),
+                };
             }
             if p.b {
                 return (self.page.face(), None);
@@ -1531,6 +1564,11 @@ impl Menu {
         draw_backdrop(ui, ma, &self.w, b);
         if self.page == Page::Files {
             // Card Files draws itself over everything.
+            return;
+        }
+        if self.page == Page::Controls {
+            self.controls.draw(ui, ma, &self.info.controls, t);
+            self.draw_message(ui, ma, t);
             return;
         }
         let lines = self.page.lines(&self.info.entries, self.info.fw_ui);
