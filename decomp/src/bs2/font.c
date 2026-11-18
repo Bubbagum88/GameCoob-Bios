@@ -581,24 +581,29 @@ void Font_DrawChar(u16 x, u16 y, s32 size, s32 index) {
     s32 s1;
     s32 t1;
     s32 n;
+    s32 col;
+    s32 row;
     s32 tx;
     s32 ty;
 
+    left = x;
     sheet = index / sCharsInSheet;
-    n = index % sCharsInSheet;
-    tx = n % sFont.sheetColumn * sFont.cellWidth;
-    ty = n / sFont.sheetColumn * sFont.cellHeight;
+    right = x + size * 16;
+    n = index - sheet * sCharsInSheet;
+    row = n / sFont.sheetColumn;
+    col = n - row * sFont.sheetColumn;
+    tx = col * sFont.cellWidth;
+    ty = row * sFont.cellHeight;
     top = y - sFont.ascent * size * 16 / sFont.cellHeight;
+    bottom = y + sFont.descent * size * 16 / sFont.cellHeight;
     s0 = (tx << 14) / sFont.sheetWidth;
     t0 = (ty << 14) / sFont.sheetHeight;
     s1 = ((tx + sFont.cellWidth) << 14) / sFont.sheetWidth;
     t1 = ((ty + sFont.cellHeight) << 14) / sFont.sheetHeight;
-    bottom = y + sFont.descent * size * 16 / sFont.cellHeight;
-    left = x;
-    right = left + size * 16;
 
     if (sheet != sLoadedSheet) {
-        GXInitTexObj(&sFontTex, sSheet + sFont.sheetSize * sheet, sFont.sheetWidth, sFont.sheetHeight,
+        u8 *img = sSheet + sFont.sheetSize * sheet;
+        GXInitTexObj(&sFontTex, img, sFont.sheetWidth, sFont.sheetHeight,
                      sFont.sheetFormat, GX_CLAMP, GX_CLAMP, GX_FALSE);
         GXInitTexObjLOD(&sFontTex, GX_LINEAR, GX_LINEAR, 0.0f, 0.0f, 0.0f, GX_FALSE, GX_FALSE, GX_ANISO_1);
         sLoadedSheet = sheet;
