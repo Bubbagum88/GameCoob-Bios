@@ -1595,6 +1595,7 @@ void CardDraw_SetupTev(void) {
 /* 0x81319414: one digit cell of the 11-cell number strip. */
 void CardDraw_LoadIconTex(s32 x, s32 y, s32 digit) {
     f32 u = digit / 11.0f;
+    f32 du = 1.0f / 11.0f; /* one cell of the strip */
     s16 w = sCardBarTexture->width * 16 / 11;
     s16 h = sCardBarTexture->height * 16;
     s16 unused[4];
@@ -1607,9 +1608,9 @@ void CardDraw_LoadIconTex(s32 x, s32 y, s32 digit) {
     GXPosition3s16(x, y, 0);
     GXTexCoord2f32(u, 0.0f);
     GXPosition3s16(x + w, y, 0);
-    GXTexCoord2f32(u + 1.0f / 11.0f, 0.0f);
+    GXTexCoord2f32(u + du, 0.0f);
     GXPosition3s16(x + w, y + h, 0);
-    GXTexCoord2f32(u + 1.0f / 11.0f, 1.0f);
+    GXTexCoord2f32(u + du, 1.0f);
     GXPosition3s16(x, y + h, 0);
     GXTexCoord2f32(u, 1.0f);
     GXEnd();
