@@ -204,6 +204,10 @@ QEMU over usbredir, with scripted button presses, for testing without hardware.
 3. To make it your everyday boot screen, add it as the first boot entry, and
    turn on your firmware's quiet/fast boot to hide the vendor logo.
 
+PCs with only a legacy BIOS (no UEFI) can still run it: in QEMU with the PC's real
+USB pads passed through, or from a Clover USB stick that brings its own UEFI layer.
+See [docs/REAL-HARDWARE.md](docs/REAL-HARDWARE.md).
+
 ## Layout
 
 ```
