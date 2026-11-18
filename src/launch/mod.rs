@@ -17,6 +17,7 @@
 //!
 //! Nothing here touches a disk or a variable: text in, values out.
 
+pub mod disc;
 pub mod toml;
 
 #[cfg(test)]

@@ -1,7 +1,7 @@
 //! What the Game Play and Memory Card screens show, behind two small traits
-//! so a real backend (an optical drive, a folder of saves...) can replace
-//! the stand-ins later. For now both are fakes that live in RAM: nothing
-//! here touches the PC's disks.
+//! so real backends can replace the stand-ins. The stand-ins here live in
+//! RAM and touch none of the PC's disks; the PC's optical drive is
+//! `src/drive.rs`, and [`FakeDrive`] stands in when there is none.
 //!
 //! Every name, picture and save below is made up for GameCoob.
 
@@ -48,6 +48,25 @@ pub trait DiscDrive {
     fn banner(&self) -> Option<&Banner>;
     /// Open or close the tray (a stand-in for a real eject button).
     fn toggle_tray(&mut self) {}
+    /// Whether START on the ready disc starts the disc itself
+    /// ([`DiscDrive::start`]) rather than opening the firmware boot list.
+    fn starts_disc(&self) -> bool {
+        false
+    }
+    /// Start the ready disc. A PC disc boots and this doesn't return;
+    /// otherwise what is left for the caller to do, or why it failed.
+    fn start(&mut self) -> DiscStart {
+        DiscStart::Failed("This drive can't start discs.".into())
+    }
+}
+
+/// What [`DiscDrive::start`] leaves to the caller.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum DiscStart {
+    /// A GameCube disc: launch the game with this code from the
+    /// emulator game list.
+    Game(String),
+    Failed(String),
 }
 
 /// A drive that starts empty; toggling the tray inserts or removes one

@@ -3,8 +3,10 @@
 //! a status line that follows the drive, behind the [`DiscDrive`] trait.
 //!
 //! GameCoob: on the console START boots the disc (`sStarting`, then
-//! Disc_StartGame). Here START on a ready disc opens the PC's firmware
-//! boot list instead (BootNext): while it is up, up/down pick an entry,
+//! Disc_StartGame). Here START on a disc in the PC's optical drive starts
+//! it ([`DiscDrive::start`]: a PC disc boots, a GameCube disc's game
+//! launches in its emulator). START on the stand-in disc (no optical
+//! drive) opens the PC's firmware boot list instead (BootNext): while it is up, up/down pick an entry,
 //! A or START boots it and B closes it. "Press START" fades out under the
 //! list. The ambient loop stops while the list is up, as it does for
 //! the boot on the console.
@@ -102,17 +104,24 @@ impl Game {
 
     /// Game_HandleInput (0x813276AC): B leaves, START on a ready disc
     /// starts. GameCoob: START with no disc ready opens the game list.
-    fn handle_input(&mut self, p: &Pad, c: &Ctx, drive: &dyn DiscDrive, info: &SysInfo) -> St {
+    fn handle_input(&mut self, p: &Pad, c: &Ctx, drive: &dyn DiscDrive, info: &SysInfo) -> (St, Option<Action>) {
         let mut next = St::Game;
         if !c.icon_settled || !c.fx_ready || self.fatal {
-            return St::Game;
+            return (St::Game, None);
         }
         // Disc_GetFadeAlpha is 0 here: Disc_FadeOutStart keeps it parked.
         if p.b && c.zoomed_in {
             sound::play(se::EXIT);
             next = St::GameFace;
         }
-        if p.start && drive.state() == DiscState::Ready {
+        if p.start && drive.state() == DiscState::Ready && drive.starts_disc() {
+            // A real disc starts itself (a PC disc boots, a GameCube one
+            // launches in its emulator), as Disc_StartGame does.
+            self.ambient_stopped = true;
+            sound::stop_ambient();
+            sound::play(se::GAME_START);
+            return (next, Some(Action::StartDisc));
+        } else if p.start && drive.state() == DiscState::Ready {
             self.ambient_stopped = true;
             sound::stop_ambient();
             sound::play(se::GAME_START);
@@ -125,7 +134,7 @@ impl Game {
             self.games = true;
             self.sel = 0;
         }
-        next
+        (next, None)
     }
 
     /// GameCoob: the game list.
@@ -174,19 +183,17 @@ impl Game {
     /// Game_Update (0x81327920), less FxGame_Update (the menu's
     /// `update_fx` runs it after). Returns the next menu state.
     pub fn update(&mut self, p: &Pad, c: &Ctx, drive: &dyn DiscDrive, info: &SysInfo) -> (St, Option<Action>) {
-        let mut next = St::Game;
-        let mut action = None;
-        if self.starting {
-            action = self.update_list(p, drive, info);
+        let (next, action) = if self.starting {
+            (St::Game, self.update_list(p, drive, info))
         } else if self.games {
-            action = self.update_games(p, info);
+            (St::Game, self.update_games(p, info))
         } else {
             if self.ambient_stopped {
                 sound::start_ambient(0);
                 self.ambient_stopped = false;
             }
-            next = self.handle_input(p, c, drive, info);
-        }
+            self.handle_input(p, c, drive, info)
+        };
         self.update_messages(drive);
         self.list.step_if(self.starting || self.games);
         self.faders[0].step_if(drive.banner().is_some());
