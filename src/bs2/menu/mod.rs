@@ -7,7 +7,7 @@
 //!
 //! | face        | console                 | here                                   |
 //! |-------------|-------------------------|----------------------------------------|
-//! | Game Play   | disc status, START boots | the same over a [`DiscDrive`]; START on a ready disc opens the firmware boot list (BootNext) |
+//! | Game Play   | disc status, START boots | the same over a [`DiscDrive`]; START boots a PC disc, launches a GameCube disc's game in its emulator, or (stand-in disc) opens the firmware boot list |
 //! | Memory Card | browse, copy, move, erase, format | the same over [`MemCards`] (fake cards in RAM for now) |
 //! | Options     | sound, screen, language | boot timeout, menu language            |
 //! | Calendar    | set the clock           | set the firmware clock (SetTime)       |
@@ -429,6 +429,9 @@ pub enum Action {
     /// Start game n of [`SysInfo::games`] in its emulator: record it for
     /// the OS's helper, then boot that OS.
     Launch(u16),
+    /// Start the disc in the drive ([`backend::DiscDrive::start`]): boot
+    /// a PC disc, or launch a GameCube disc's game in its emulator.
+    StartDisc,
     SetTimeout(u16),
     /// Save minimal mode (on or off).
     SetMinimal(bool),

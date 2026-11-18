@@ -17,6 +17,7 @@ mod bs2;
 mod card;
 mod clock;
 mod display;
+mod drive;
 mod firmware;
 mod fs;
 mod gamepad;
