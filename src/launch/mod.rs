@@ -72,8 +72,24 @@ pub struct Emulator {
     pub exe: String,
     /// Arguments; `{rom}` becomes the game's path (see [`Emulator::command`]).
     pub args: Vec<String>,
-    /// The emulator's memory card folder, for card syncing (later step).
+    /// The emulator's memory card folder (Dolphin's `GC` folder), for
+    /// syncing the boot menu's cards with it.
     pub cards: Option<String>,
+    /// How the emulator keeps its cards in that folder.
+    pub cards_format: CardsFormat,
+}
+
+/// How an emulator stores memory cards in its `cards` folder (Dolphin's
+/// two kinds of card device).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum CardsFormat {
+    /// A folder of `.gci` saves per region and slot, `USA/Card A/...`
+    /// (Dolphin's default, "GCI Folder").
+    #[default]
+    Gci,
+    /// One card image per region and slot, `MemoryCardA.USA.raw`
+    /// (Dolphin's "Memory Card").
+    Raw,
 }
 
 impl Emulator {
@@ -178,8 +194,16 @@ impl Paths {
                     let exe = r.str("exe");
                     let args = r.opt_strs("args").unwrap_or_else(|| Vec::from(["{rom}".to_string()]));
                     let cards = r.opt_str("cards");
+                    let cards_format = match r.opt_str("cards_format").as_deref() {
+                        None | Some("gci") => CardsFormat::Gci,
+                        Some("raw") => CardsFormat::Raw,
+                        Some(other) => {
+                            r.fail("cards_format", format!("cards_format must be \"gci\" or \"raw\", not \"{}\"", other));
+                            CardsFormat::Gci
+                        }
+                    };
                     r.done();
-                    paths.emulator.push(Emulator { id, name, os, exe, args, cards });
+                    paths.emulator.push(Emulator { id, name, os, exe, args, cards, cards_format });
                 }
                 ("roms", true) => {
                     let mut r = Reader::new(t, &mut errs);

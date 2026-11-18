@@ -9,3 +9,4 @@ description = "OS-side helper for launching games from the GameCoob boot menu; `
 [workspace]
 
 [dependencies]
+libm = "0.2.16"

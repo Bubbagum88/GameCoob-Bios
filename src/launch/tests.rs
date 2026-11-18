@@ -16,6 +16,20 @@ fn example_paths_file_parses() {
     assert_eq!(p.roms[0].ext.len(), DEFAULT_EXTS.len());
     assert!(p.roms[0].recursive);
     assert_eq!(p.roms[1].ext, ["iso", "rvz"]);
+    assert_eq!(dolphin.cards_format, CardsFormat::Gci);
+    assert_eq!(p.emulator_by_id("dolphin-arch").unwrap().cards_format, CardsFormat::Raw);
+}
+
+#[test]
+fn cards_format_is_checked() {
+    let emu = |f: &str| format!("[[os]]\nid = \"arch\"\nboot = \"L\"\n[[emulator]]\nid = \"d\"\nos = \"arch\"\nexe = \"/d\"\n{}", f);
+    let p = Paths::parse(&emu("cards = \"/gc\"\n")).unwrap();
+    assert_eq!(p.emulator[0].cards.as_deref(), Some("/gc"));
+    assert_eq!(p.emulator[0].cards_format, CardsFormat::Gci);
+    assert_eq!(Paths::parse(&emu("cards_format = \"raw\"\n")).unwrap().emulator[0].cards_format, CardsFormat::Raw);
+    let errs = Paths::parse(&emu("cards_format = \"mcd\"\n")).unwrap_err();
+    assert_eq!(errs.len(), 1);
+    assert_eq!(errs[0].line, 8);
 }
 
 #[test]

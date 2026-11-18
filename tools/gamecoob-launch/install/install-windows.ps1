@@ -6,9 +6,11 @@
 #
 # What it sets up (docs/EMULATORS.md): the program in
 # %ProgramFiles%\GameCoob, and a scheduled task that runs
-# "gamecoob-launch run" elevated when you log on. Elevation is needed to
-# mount the ESP (mountvol) and to read the launch request (a firmware
-# variable). The task runs for the user who installs it.
+# "gamecoob-launch run" elevated when you log on: it lists your games,
+# syncs the boot menu's memory cards with Dolphin's, starts the game picked
+# in the boot menu and syncs the cards back when Dolphin closes. Elevation
+# is needed to mount the ESP (mountvol) and to read the launch request (a
+# firmware variable). The task runs for the user who installs it.
 param([switch]$Uninstall)
 $ErrorActionPreference = 'Stop'
 
@@ -35,11 +37,13 @@ $user = [Security.Principal.WindowsIdentity]::GetCurrent().Name
 $action = New-ScheduledTaskAction -Execute $exe -Argument 'run'
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $user
 $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Highest
-$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 5)
+# No time limit: the task waits for the game to end to sync the cards back.
+$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero)
 Register-ScheduledTask -TaskName $task -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null
 
 & $exe check
 & $exe scan
+& $exe sync
 # A launch request left from before the install must not start a game at
 # the next logon.
 & $exe mark

@@ -31,7 +31,13 @@ name = "Dolphin"
 os = "windows"
 exe = 'C:\Program Files\Dolphin\Dolphin.exe'
 args = ["-b", "-e", "{rom}"]
-cards = 'C:\Users\you\Documents\Dolphin Emulator\GC'   # for card syncing (later)
+# Dolphin's GC folder: the boot menu's cards ([boot] cards) are synced
+# with it, save by save, before and after each game. Leave it out for no
+# syncing. cards_format says how Dolphin keeps its cards (Config >
+# GameCube > Slot A/B): "gci" for "GCI Folder" (Dolphin's default) or
+# "raw" for "Memory Card".
+cards = 'C:\Users\you\Documents\Dolphin Emulator\GC'
+cards_format = "gci"
 
 [[emulator]]
 id = "dolphin-arch"
@@ -40,6 +46,7 @@ os = "arch"
 exe = "/usr/bin/dolphin-emu"
 args = ["-b", "-e", "{rom}"]
 cards = "/home/you/.local/share/dolphin-emu/GC"
+cards_format = "raw"
 
 # Folders of your own game dumps. GameCoob never ships games.
 # ext defaults to iso, gcm, rvz, ciso, gcz, wbfs and dol.
