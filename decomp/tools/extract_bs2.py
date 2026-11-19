@@ -21,8 +21,9 @@ SCRAMBLE_END = 0x1AFF00  # the fonts after this are stored in the clear
 BS2_ROM = 0x820
 BS2_ADDR = 0x81300000
 
-# Known dumps. The section table lives at a different address in each one;
-# it is the operand of the `lis/addi r3, ...` pair in __init_data.
+# Known dumps: md5 -> (version id, section table address). The table is the
+# operand of the `lis/addi` pair in __init_data; find_table() finds it in any
+# dump, so a new revision only needs its id added here.
 KNOWN = {
     "0cdda509e2da83c85bfe423dd87346cc": ("PAL10", 0x8130030C),
 }
@@ -69,15 +70,53 @@ def descramble(rom):
     return rom[:SCRAMBLE_START] + (region ^ ks).to_bytes(size, "big") + rom[SCRAMBLE_END:]
 
 
+def table_ok(image, a):
+    """True if a holds a plausible __rom_copy_info table: unrelocated BS2 sections."""
+    def word(addr):
+        return struct.unpack_from(">I", image, addr - BS2_ADDR)[0]
+    n = 0
+    while a - BS2_ADDR + 12 <= len(image):
+        rom_addr, addr, size = word(a), word(a + 4), word(a + 8)
+        if size == 0:
+            return n >= 3
+        if rom_addr != addr or not BS2_ADDR <= addr < 0x81800000 or size > 0x400000:
+            return False
+        a += 12
+        n += 1
+    return False
+
+
+def find_table(image):
+    """Find the section table from the lis/addi pair in the startup code."""
+    words = struct.unpack_from(">%dI" % (0x400 // 4), image, 0)
+    for i, w in enumerate(words):
+        if w >> 26 != 15 or (w >> 16) & 0x1F != 0:  # lis rD
+            continue
+        rd, hi = (w >> 21) & 0x1F, w & 0xFFFF
+        for w2 in words[i + 1:i + 5]:
+            if w2 >> 26 == 14 and (w2 >> 16) & 0x1F == rd:  # addi rX, rD, lo
+                lo = w2 & 0xFFFF
+                a = ((hi << 16) + (lo - 0x10000 if lo & 0x8000 else lo)) & 0xFFFFFFFF
+                if BS2_ADDR <= a < BS2_ADDR + 0x400 and table_ok(image, a):
+                    return a
+    sys.exit("could not find the BS2 section table")
+
+
 def main():
     src, dst = sys.argv[1], sys.argv[2]
     rom = open(src, "rb").read()
     md5 = hashlib.md5(rom).hexdigest()
-    if md5 not in KNOWN:
-        sys.exit(f"{src}: unknown IPL dump (md5 {md5}); see README for supported versions")
-    version, table = KNOWN[md5]
     rom = descramble(rom)
     image = rom[BS2_ROM:SCRAMBLE_END]
+    table = find_table(image)
+    if md5 in KNOWN:
+        version, known = KNOWN[md5]
+        assert table == known, f"section table at {table:#x}, expected {known:#x}"
+    else:
+        # Still extract, so a new revision can be looked at before it has a config.
+        version = "UNKNOWN"
+        print(f"{src}: unknown IPL dump (md5 {md5}); add it to KNOWN in {__file__} "
+              f"(section table {table:#x})")
 
     def word(addr):
         return struct.unpack_from(">I", image, addr - BS2_ADDR)[0]
