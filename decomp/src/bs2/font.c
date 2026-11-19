@@ -208,7 +208,7 @@ static void Font_ExpandSheet(u8 *src, u8 *dst) {
 
 s32 Font_Index(s32 code);
 
-static inline void Font_PutChar(u16 x, u16 y, s32 size, s32 code) {
+static inline void Font_PutChar(u16 x, s32 y, s32 size, s32 code) {
     Font_DrawChar(x, y, size, Font_Index((u16)code));
 }
 
@@ -234,11 +234,11 @@ u16 Font_DrawLines(FontBox *box, u8 *str, u16 *lineW, s32 height, s32 maxChars, 
                    BOOL stopAtWrap) {
     s32 lines = 0;
     s32 chars = 0;
-    u16 x = 0;
+    s32 x = 0;
     s32 w = box->w & 0xFFFF;
     u16 code;
     u16 x0;
-    s32 y;
+    u16 y;
     u16 nx;
     BOOL over;
     s16 space;
@@ -309,8 +309,12 @@ u16 Font_DrawLines(FontBox *box, u8 *str, u16 *lineW, s32 height, s32 maxChars, 
                 }
             }
             Font_PutChar(x0 + x, y, box->size, code);
-            x += box->charSpace * 16 + box->size * (sWidth[Font_Index(code)] * 16) / sFont.cellWidth;
-            chars++;
+            {
+                u8 *wt = sWidth;
+                s32 k = Font_Index(code);
+                chars++;
+                x += box->charSpace * 16 + box->size * (wt[k] * 16) / sFont.cellWidth;
+            }
         }
         if (maxChars != 0 && chars >= maxChars) {
             break;
