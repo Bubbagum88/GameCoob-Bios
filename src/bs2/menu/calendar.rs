@@ -251,8 +251,13 @@ impl Calendar {
     pub fn draw_text<'a>(&self, ui: &mut Ui<'a, '_>, ma: &'a MenuAssets, lang: usize, alpha: i32) {
         let g = &ma.clock;
         let a = alpha as f32 / 255.0;
-        // GameCoob: its own title in place of string 0.
-        if let Some(p) = g.text(tag(b"mesg")) {
+        // GameCoob: its own title in place of string 0, except in minimal
+        // mode, which keeps the console's.
+        if super::minimal() {
+            if let Some(st) = ma.clock_str[lang].get(0) {
+                ui.string(&ma.font, g, &ma.bank, st, [1.0, 1.0, 1.0, a], 0.0, 0.0);
+            }
+        } else if let Some(p) = g.text(tag(b"mesg")) {
             ui.text(&ma.font, p, &cp1252("The firmware clock."), [1.0, 1.0, 1.0, a], 0.0, 0.0);
         }
         let tc = TEXT_COLOR.map(|x| x as f32 / 255.0);

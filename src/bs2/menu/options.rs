@@ -273,9 +273,11 @@ impl Options {
         let tc = P.text_color;
         let rgb = |a: f32| [tc[0] as f32 / 255.0, tc[1] as f32 / 255.0, tc[2] as f32 / 255.0, a];
         // GameCoob: its own prompt and the boot timeout's title, in English
-        // only, so they are not cross-faded.
+        // only, so they are not cross-faded. Minimal mode keeps the
+        // console's prompt ("Choose settings", string 0, below).
         let full = alpha as f32 / 255.0;
-        if let Some(p) = g.text(tag(b"mesg")) {
+        let minimal = super::minimal();
+        if let Some(p) = g.text(tag(b"mesg")).filter(|_| !minimal) {
             ui.text(&ma.font, p, &cp1252("Choose GameCoob boot settings."), [1.0, 1.0, 1.0, full], 0.0, 0.0);
         }
         if let Some(p) = ma.option_str[0].get(2).and_then(|st| g.texts.get(st.pane as usize)) {
@@ -285,6 +287,11 @@ impl Options {
             let a = (alpha * self.lang_text[i].alpha() / 255) as f32 / 255.0;
             if a <= 0.0 {
                 continue;
+            }
+            if minimal {
+                if let Some(st) = ma.option_str[i].get(0) {
+                    ui.string(&ma.font, g, &ma.bank, st, [1.0, 1.0, 1.0, a], 0.0, 0.0);
+                }
             }
             for k in [1usize, 3] {
                 if let Some(st) = ma.option_str[i].get(k) {

@@ -1,14 +1,16 @@
 //! The system dialog (GameCoob's own, opened with F10 from anywhere in the
 //! menu): Firmware Setup, Restart and Power Off, each confirmed with
-//! Yes / No, and the Minimal Mode, Intro Logo and Intro Delay switches
+//! Yes / No, and the Minimal Mode, Intro Logo, Intro Delay and Boot Jingle
+//! switches
 //! (no confirmation). It is drawn with BS2's dialog layout (res 108, the one
 //! the console uses for its language and "settings lost" prompts).
 
 use super::{Action, Fader, MenuAssets, Pad, WHITE, with_a};
 use super::super::ui::{cp1252, Ui};
+use crate::bs2::cube::Jingle;
 use crate::ipl::glh::tag;
 
-const ITEMS: [&str; 7] = ["Firmware Setup", "Restart", "Power Off", "Minimal Mode", "Intro Logo", "Intro Delay", "Cancel"];
+const ITEMS: [&str; 8] = ["Firmware Setup", "Restart", "Power Off", "Minimal Mode", "Intro Logo", "Intro Delay", "Boot Jingle", "Cancel"];
 /// The Minimal Mode row: A flips it at once.
 const ROW_MINIMAL: usize = 3;
 /// The Intro Logo row: A swaps the intro's wordmark, GameCube or GameCoob.
@@ -16,6 +18,9 @@ const ROW_LOGO: usize = 4;
 /// The Intro Delay row: A steps the black hold before the intro (for
 /// monitors and TVs slow to show a picture): Auto, then 0 to 5 seconds.
 const ROW_DELAY: usize = 5;
+/// The Boot Jingle row: A steps the jingle the intro plays when no Z egg
+/// is held: the normal one, or either Z easter egg.
+const ROW_JINGLE: usize = 6;
 const QUESTIONS: [&str; 3] = [
     "Restart this PC into its\nfirmware setup screen?",
     "Restart this PC now?",
@@ -88,10 +93,12 @@ impl System {
             self.open = false;
         } else if p.a && self.row == ROW_MINIMAL {
             return Some(Action::SetMinimal(!minimal));
-        } else if p.a && self.row == ROW_LOGO {
+        } else if p.a && self.row == ROW_LOGO && !minimal {
             return Some(Action::SetCoobLogo(!crate::bs2::wordmark::coob()));
         } else if p.a && self.row == ROW_DELAY {
             return Some(Action::SetIntroDelay(crate::bs2::intro_delay::next(crate::bs2::intro_delay::setting())));
+        } else if p.a && self.row == ROW_JINGLE {
+            return Some(Action::SetJingle(Jingle::setting().next() as u8));
         } else if p.a && (self.row != 0 || self.fw_ui) {
             self.confirm = Some(false);
         }
@@ -107,29 +114,46 @@ impl System {
         ui.fill(-40.0, -40.0, 664.0, 528.0, [0.0, 0.0, 0.0, 0.55 * a]);
         let d = &ma.dialog;
         let min_row = cp1252(&alloc::format!("{}: {}", ITEMS[ROW_MINIMAL], if super::minimal() { "On" } else { "Off" }));
-        let logo = if crate::bs2::wordmark::coob() { "GameCoob" } else { "GameCube" };
+        // Minimal mode always shows the console's logo; the row is dimmed.
+        let logo = if super::minimal() {
+            "GameCube (Minimal)"
+        } else if crate::bs2::wordmark::coob() {
+            "GameCoob"
+        } else {
+            "GameCube"
+        };
         let logo_row = cp1252(&alloc::format!("{}: {}", ITEMS[ROW_LOGO], logo));
         let delay = match crate::bs2::intro_delay::setting() {
             Some(s) => alloc::format!("{s} s"),
             None => alloc::format!("Auto ({} s)", crate::bs2::intro_delay::auto()),
         };
         let delay_row = cp1252(&alloc::format!("{}: {}", ITEMS[ROW_DELAY], delay));
-        let (q, items): (&str, [Option<&[u8]>; 7]) = match self.confirm {
+        let jingle_row = cp1252(&alloc::format!("{}: {}", ITEMS[ROW_JINGLE], Jingle::setting().name()));
+        let (q, items): (&str, [Option<&[u8]>; 8]) = match self.confirm {
             Some(_) => {
                 let s = &ma.dialog_str[lang];
                 let yes = s.get(1).map(|s| &s.text[..]).unwrap_or(b"Yes");
                 let no = s.get(2).map(|s| &s.text[..]).unwrap_or(b"No");
-                (QUESTIONS[self.row.min(2)], [Some(yes), Some(no), None, None, None, None, None])
+                (QUESTIONS[self.row.min(2)], [Some(yes), Some(no), None, None, None, None, None, None])
             }
             None => (
                 "What should this PC do?",
-                [ITEMS[0].as_bytes(), ITEMS[1].as_bytes(), ITEMS[2].as_bytes(), &min_row[..], &logo_row[..], &delay_row[..], ITEMS[6].as_bytes()]
+                [
+                    ITEMS[0].as_bytes(),
+                    ITEMS[1].as_bytes(),
+                    ITEMS[2].as_bytes(),
+                    &min_row[..],
+                    &logo_row[..],
+                    &delay_row[..],
+                    &jingle_row[..],
+                    ITEMS[7].as_bytes(),
+                ]
                     .map(Some),
             ),
         };
-        // The dialog's big frame as the panel, grown by `GROW` to fit seven
+        // The dialog's big frame as the panel, grown by `GROW` to fit eight
         // rows, the question on top.
-        const GROW: f32 = 51.0;
+        const GROW: f32 = 76.0;
         if let Some(f) = d.frame(tag(b"mes0")).next() {
             let (w, h) = (f.inner_w, f.inner_h + GROW);
             ui.frame_rect(f, &ma.bank, with_a(WHITE, a), f.x - w / 2.0, f.y - h / 2.0, w, h);
@@ -154,7 +178,7 @@ impl System {
         }
         for (i, item) in items.iter().enumerate() {
             let Some(text) = item else { continue };
-            let dim = i == 0 && self.confirm.is_none() && !self.fw_ui;
+            let dim = self.confirm.is_none() && ((i == 0 && !self.fw_ui) || (i == ROW_LOGO && super::minimal()));
             let c = if dim { [0.55, 0.55, 0.6, 1.0] } else { WHITE };
             let k = if i == sel { 1.0 } else { 0.75 };
             ui.label(&ma.font, 292.0, top + i as f32 * pitch, size, text, with_a(c, a * k), 0);

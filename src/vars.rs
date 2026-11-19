@@ -53,6 +53,61 @@ fn boot_entry(num: u16) -> Option<BootEntry> {
     Some(BootEntry { num, desc: String::from_utf16_lossy(&desc) })
 }
 
+/// Description of the boot entry GameCoob makes for a disc when the
+/// firmware has none for the drive.
+const DISC_ENTRY: &str = "GameCoob disc";
+/// Where GameCoob looks for a free Boot#### for that entry.
+const DISC_ENTRY_FIRST: u16 = 0xC0B0;
+
+/// Boot#### whose device path is exactly `dp` (a whole drive, which the
+/// firmware's boot manager expands to the disc's `\EFI\BOOT` loader).
+/// The firmware's own entry for the drive if it has one (in BootOrder,
+/// hidden or not), else one GameCoob writes and keeps out of BootOrder
+/// so it only ever runs through BootNext.
+pub fn boot_entry_for_device(dp: &[u8]) -> uefi::Result<u16> {
+    let order = read(cstr16!("BootOrder")).map(|b| le_u16s(&b)).unwrap_or_default();
+    let option = |num: u16| {
+        let name = CString16::try_from(format!("Boot{num:04X}").as_str()).ok()?;
+        read(&name)
+    };
+    // EFI_LOAD_OPTION: Attributes, FilePathListLength, Description, FilePathList.
+    let parts = |data: &[u8]| -> Option<(String, Vec<u8>)> {
+        let len = u16::from_le_bytes([*data.get(4)?, *data.get(5)?]) as usize;
+        let desc: Vec<u16> = le_u16s(&data[6..]).into_iter().take_while(|&c| c != 0).collect();
+        let at = 6 + (desc.len() + 1) * 2;
+        Some((String::from_utf16_lossy(&desc), data.get(at..at + len)?.to_vec()))
+    };
+    for &num in &order {
+        if let Some((_, path)) = option(num).as_deref().and_then(parts) {
+            if path == dp {
+                return Ok(num);
+            }
+        }
+    }
+    let mut free = None;
+    for num in DISC_ENTRY_FIRST..DISC_ENTRY_FIRST + 16 {
+        match option(num).as_deref().map(parts) {
+            Some(Some((desc, _))) if desc == DISC_ENTRY => {
+                free = Some(num);
+                break;
+            }
+            None if free.is_none() => free = Some(num),
+            _ => {}
+        }
+    }
+    let num = free.ok_or(uefi::Status::OUT_OF_RESOURCES)?;
+    let mut data = Vec::new();
+    data.extend_from_slice(&LOAD_OPTION_ACTIVE.to_le_bytes());
+    data.extend_from_slice(&(dp.len() as u16).to_le_bytes());
+    for c in DISC_ENTRY.encode_utf16().chain([0]) {
+        data.extend_from_slice(&c.to_le_bytes());
+    }
+    data.extend_from_slice(dp);
+    let name = CString16::try_from(format!("Boot{num:04X}").as_str()).map_err(|_| uefi::Status::INVALID_PARAMETER)?;
+    runtime::set_variable(&name, GLOBAL, attrs(), &data)?;
+    Ok(num)
+}
+
 pub fn timeout() -> Option<u16> {
     read(cstr16!("Timeout")).filter(|b| b.len() >= 2).map(|b| u16::from_le_bytes([b[0], b[1]]))
 }
@@ -92,6 +147,21 @@ pub fn coob_logo() -> bool {
 
 pub fn set_coob_logo(on: bool) -> uefi::Result {
     runtime::set_variable(cstr16!("GameCoobLogo"), GAMECOOB, attrs(), &[on as u8])
+}
+
+/// The Boot Jingle option, saved as `GameCoobJingle` (one byte: the
+/// `Sound_Play` id, 0 the normal jingle, 1 the four-player Z egg, 2 the
+/// one-player one). Normal when unset.
+pub fn jingle() -> u8 {
+    runtime::get_variable_boxed(cstr16!("GameCoobJingle"), GAMECOOB)
+        .ok()
+        .and_then(|(b, _)| b.first().copied())
+        .filter(|&j| j < 3)
+        .unwrap_or(0)
+}
+
+pub fn set_jingle(j: u8) -> uefi::Result {
+    runtime::set_variable(cstr16!("GameCoobJingle"), GAMECOOB, attrs(), &[j])
 }
 
 /// The black hold before the intro ([`crate::display`]), saved as

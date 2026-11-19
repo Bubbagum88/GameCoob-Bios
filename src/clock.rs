@@ -5,6 +5,7 @@ use core::arch::x86_64::_rdtsc;
 use core::time::Duration;
 use uefi::boot;
 
+#[derive(Clone, Copy)]
 pub struct Clock {
     start: u64,
     ticks_per_sec: f64,

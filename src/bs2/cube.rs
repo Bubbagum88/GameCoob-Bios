@@ -53,6 +53,47 @@ pub enum Jingle {
     Pad1Z = 2,
 }
 
+/// GameCoob's Boot Jingle setting (`GameCoobJingle`): the jingle played
+/// when no Z egg is held.
+static BOOT_JINGLE: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(0);
+
+impl Jingle {
+    pub fn from_u8(v: u8) -> Jingle {
+        match v {
+            1 => Jingle::AllPadsZ,
+            2 => Jingle::Pad1Z,
+            _ => Jingle::Normal,
+        }
+    }
+
+    /// The Boot Jingle setting.
+    pub fn setting() -> Jingle {
+        Jingle::from_u8(BOOT_JINGLE.load(core::sync::atomic::Ordering::Relaxed))
+    }
+
+    pub fn set_setting(j: Jingle) {
+        BOOT_JINGLE.store(j as u8, core::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// The choice after this one in the system dialog.
+    pub fn next(self) -> Jingle {
+        match self {
+            Jingle::Normal => Jingle::Pad1Z,
+            Jingle::Pad1Z => Jingle::AllPadsZ,
+            Jingle::AllPadsZ => Jingle::Normal,
+        }
+    }
+
+    /// Its name in the system dialog.
+    pub fn name(self) -> &'static str {
+        match self {
+            Jingle::Normal => "Normal",
+            Jingle::Pad1Z => "Z (1 player)",
+            Jingle::AllPadsZ => "Z (4 players)",
+        }
+    }
+}
+
 pub struct Cube {
     // CubeState (0x814B5D58)
     pub x: i32,

@@ -63,8 +63,13 @@ The matching decompilation of the IPL's BS2 program lives in [decomp/](decomp/RE
   `config.txt` there for `tools/hii-tool`, which prints them on a PC.
 - **Minimal mode.** For the menu exactly as on the console: no sub-cubes,
   Memory Card and Options open their own screens again, and the cube keeps
-  the console's labels. Toggle it in the system menu (F10, or Settings
-  ▲ Firmware); it is saved in a UEFI variable (`GameCoobMinimal`).
+  the console's labels. The intro always shows the console's GAMECUBE
+  logo (the Intro Logo row is locked), it spins to the menu without
+  GameCoob's one-second pause, and Options and Calendar keep the console's
+  own titles. Toggle it in the system menu (F10, PS/Home on a pad, or
+  Settings ▲ Firmware); it is saved in a UEFI variable (`GameCoobMinimal`).
+  What stays: Options' second row still sets the firmware boot timeout,
+  START with no disc still opens the game list, and F10 still works.
 - **Slow monitors and TVs.** A screen on an external port (HDMI,
   DisplayPort, DVI, VGA, a dock) can take a second or more to show a
   picture, so the intro waits on black first, from the app's start: Auto
@@ -212,6 +217,10 @@ QEMU over usbredir, with scripted button presses, for testing without hardware.
 2. Boot from the stick (Secure Boot must be off for now; the app is unsigned).
 3. To make it your everyday boot screen, add it as the first boot entry, and
    turn on your firmware's quiet/fast boot to hide the vendor logo.
+
+PCs with only a legacy BIOS (no UEFI) can still run it: in QEMU with the PC's real
+USB pads passed through, or from a Clover USB stick that brings its own UEFI layer.
+See [docs/REAL-HARDWARE.md](docs/REAL-HARDWARE.md).
 
 ## Layout
 

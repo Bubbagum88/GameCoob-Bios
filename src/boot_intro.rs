@@ -3,7 +3,7 @@
 //! menu. Without a usable dump, `main` explains where to put it.
 
 use crate::bs2::bs2main::{Bs2Main, FrameInput, LOGIC_HZ};
-use crate::bs2::menu::backend::{FakeCards, FakeDrive, MemCards};
+use crate::bs2::menu::backend::{DiscStart, FakeCards, FakeDrive, MemCards};
 use crate::bs2::menu::card_image::ImageCards;
 use crate::bs2::menu::volumes::{self, Volumes};
 use crate::fs::UefiVolumes;
@@ -185,10 +185,13 @@ fn perform(a: Action, launcher: &crate::launcher::Launcher) -> Option<String> {
     match a {
         Action::Boot(n) => Some(firmware::boot_entry(n)),
         Action::Launch(i) => Some(launcher.launch(i as usize)),
+        // Needs the drive: carried out by the menu loop.
+        Action::StartDisc => None,
         Action::SetTimeout(s) => firmware::save_timeout(s).err(),
         Action::SetMinimal(on) => firmware::save_minimal(on).err(),
         Action::SetCoobLogo(on) => firmware::save_coob_logo(on).err(),
         Action::SetIntroDelay(s) => firmware::save_intro_delay(s).err(),
+        Action::SetJingle(j) => firmware::save_jingle(j).err(),
         Action::SetTime(t) => firmware::set_time(t).err(),
         Action::FirmwareSetup => Some(firmware::firmware_setup()),
         Action::Restart => firmware::restart(),
@@ -290,9 +293,15 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
     let mut audio = Audio::open(snd);
     crate::bs2::menu::set_minimal(crate::vars::minimal());
     crate::bs2::wordmark::set_coob(crate::vars::coob_logo());
+    crate::bs2::cube::Jingle::set_setting(crate::bs2::cube::Jingle::from_u8(crate::vars::jingle()));
     let boot_paths = crate::launcher::boot_paths();
     crate::bs2::menu::explorer::set_export_dir(boot_paths.saves.clone());
-    let mut bs2 = Bs2Main::new(assets, Box::new(FakeDrive::new()), load_cards(&boot_paths), Box::new(UefiVolumes), Box::new(crate::setup::UefiSetup));
+    // The PC's optical drive; without one, the stand-in disc (F-key tray).
+    let drive: Box<dyn crate::bs2::menu::backend::DiscDrive> = match crate::drive::OpticalDrive::find(*clock) {
+        Some(d) => Box::new(d),
+        None => Box::new(FakeDrive::new()),
+    };
+    let mut bs2 = Bs2Main::new(assets, drive, load_cards(&boot_paths), Box::new(UefiVolumes), Box::new(crate::setup::UefiSetup));
     let launcher = crate::launcher::Launcher::load();
     let cores = Cores::open();
     // Rendered at the screen's resolution, adjusted to keep up with the logic.
@@ -383,11 +392,17 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
                 }
             }
             if let Some(act) = bs2.update(assets, ma, &input, || sys_info(launcher.rows())) {
-                let leaves = matches!(act, Action::Boot(_) | Action::Launch(_));
+                let leaves = matches!(act, Action::Boot(_) | Action::Launch(_) | Action::StartDisc);
                 if let (true, Some(a)) = (leaves, &mut audio) {
                     a.close();
                 }
-                let failed = perform(act, &launcher);
+                let failed = match act {
+                    Action::StartDisc => bs2.menu.as_mut().map(|m| match m.drive.start() {
+                        DiscStart::Game(code) => launcher.launch_code(&code),
+                        DiscStart::Failed(why) => why,
+                    }),
+                    act => perform(act, &launcher),
+                };
                 if let (true, Some(a)) = (leaves, &mut audio) {
                     a.out = Hda::open();
                 }

@@ -81,6 +81,15 @@ impl Launcher {
             .collect()
     }
 
+    /// Launches the game with this game code (a GameCube disc in the
+    /// drive), the first one in the list; returns only on failure.
+    pub fn launch_code(&self, code: &str) -> String {
+        match self.games.iter().position(|g| g.code.as_deref().is_some_and(|c| c.eq_ignore_ascii_case(code))) {
+            Some(i) => self.launch(i),
+            None => format!("No game {code} in the emulator game list."),
+        }
+    }
+
     /// Records game `i` for its OS's helper and boots that OS; returns
     /// only on failure, with the reason.
     pub fn launch(&self, i: usize) -> String {

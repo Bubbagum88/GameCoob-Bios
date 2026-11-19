@@ -8,8 +8,10 @@
 # What it sets up (docs/EMULATORS.md):
 # - /usr/local/bin/gamecoob-launch
 # - gamecoob-scan.service: at boot, as root, lists your games into
-#   \EFI\GameCoob\library.toml on the ESP (Arch mounts the ESP root-only)
-#   and keeps a readable copy of paths.toml in /var/lib/gamecoob.
+#   \EFI\GameCoob\library.toml on the ESP (Arch mounts the ESP root-only),
+#   keeps a readable copy of paths.toml in /var/lib/gamecoob and syncs the
+#   boot menu's memory cards with Dolphin's; at shutdown it syncs the
+#   cards back, so saves made in a game show up in the boot menu.
 # - /etc/xdg/autostart/gamecoob-launch.desktop: at desktop login, starts
 #   the game picked in the boot menu.
 set -eu
@@ -39,12 +41,18 @@ install -Dm755 "$src" "$BIN"
 
 cat > "$UNIT" <<UNIT
 [Unit]
-Description=List games for the GameCoob boot menu
+Description=List games and sync memory cards for the GameCoob boot menu
+# Stopped (cards synced back) after every login session has ended and
+# before the disks are unmounted.
 After=local-fs.target
+Before=systemd-user-sessions.service
 
 [Service]
 Type=oneshot
-ExecStart=$BIN scan
+RemainAfterExit=yes
+ExecStart=-$BIN scan
+ExecStart=-$BIN sync --prefer boot
+ExecStop=-$BIN sync --prefer emulator
 
 [Install]
 WantedBy=multi-user.target
@@ -64,7 +72,8 @@ DESKTOP
 systemctl daemon-reload
 systemctl enable gamecoob-scan.service
 "$BIN" check
-"$BIN" scan
+# Starts it now too: scans and syncs the cards once.
+systemctl restart gamecoob-scan.service
 # A launch request left from before the install must not start a game at
 # the next login.
 if [ -n "${SUDO_USER:-}" ]; then
