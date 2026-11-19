@@ -297,10 +297,12 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
     let boot_paths = crate::launcher::boot_paths();
     crate::bs2::menu::explorer::set_export_dir(boot_paths.saves.clone());
     // The PC's optical drive; without one, the stand-in disc (F-key tray).
+    // Disc images from Card Files go in on top of either.
     let drive: Box<dyn crate::bs2::menu::backend::DiscDrive> = match crate::drive::OpticalDrive::find(*clock) {
         Some(d) => Box::new(d),
         None => Box::new(FakeDrive::new()),
     };
+    let drive = Box::new(crate::bs2::menu::backend::ImageDrive::new(drive));
     let mut bs2 = Bs2Main::new(assets, drive, load_cards(&boot_paths), Box::new(UefiVolumes));
     let launcher = crate::launcher::Launcher::load();
     let cores = Cores::open();
@@ -399,6 +401,10 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
                 let failed = match act {
                     Action::StartDisc => bs2.menu.as_mut().map(|m| match m.drive.start() {
                         DiscStart::Game(code) => launcher.launch_code(&code),
+                        DiscStart::BootImage { handle, size } => {
+                            let (vol, path) = crate::bs2::menu::volumes::split_handle(&handle);
+                            crate::ramdisk::boot_iso(vol, path, size)
+                        }
                         DiscStart::Failed(why) => why,
                     }),
                     act => perform(act, &launcher),

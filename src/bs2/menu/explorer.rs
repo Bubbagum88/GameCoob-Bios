@@ -13,10 +13,15 @@
 //! * exports a save from the card in a slot as any of the three formats,
 //!   into the folder last browsed.
 //!
+//! * puts a disc image (`.iso`, `.gcm`) in the disc drive: Game Play then
+//!   shows it as the disc (a GameCube image launches in its emulator, a
+//!   PC image boots through the firmware's RAM disk).
+//!
 //! It is drawn as a dialog over the menu, in the same layout as the
 //! system dialog.
 
-use super::backend::MemCards;
+use super::backend::{DiscImage, MemCards};
+use crate::launch::disc::{self, Disc, ReadAt};
 use super::card_image::{card_text, ImageCards};
 use super::volumes::{self, Entry, Volume, Volumes};
 use super::{Fader, MenuAssets, Pad, WHITE, with_a};
@@ -35,6 +40,8 @@ const MSG_FRAMES: u32 = 240;
 /// Card sizes offered for a new image, in blocks.
 const NEW_SIZES: [u16; 6] = [59, 123, 251, 507, 1019, 2043];
 const CARD_EXTS: [&str; 3] = ["raw", "mcp", "gcp"];
+/// Plain disc images, which can be read in place.
+const DISC_EXTS: [&str; 2] = ["iso", "gcm"];
 /// Where exports go before any folder was browsed (boot volume), unless
 /// the paths file's `[boot] saves` says otherwise ([`set_export_dir`]).
 const DEFAULT_EXPORT: &str = "\\EFI\\GameCoob\\saves";
@@ -60,6 +67,7 @@ enum Kind {
     Dir,
     CardImage,
     Save,
+    DiscImage,
 }
 
 /// What a list row is.
@@ -91,6 +99,8 @@ enum Act {
     Export(SaveFormat),
     Erase,
     Eject(usize),
+    InsertDisc,
+    EjectDisc,
     Cancel,
 }
 
@@ -122,6 +132,11 @@ pub struct Explorer {
     export_to: Option<(String, String)>,
     /// Rows to restore when going back up: (where, sel).
     back: Vec<(Where, usize)>,
+    /// A disc image to put in the drive (`Some(None)`: take it out), for
+    /// the menu to pass on.
+    pub insert: Option<Option<DiscImage>>,
+    /// The handle of the disc image in the drive, kept up by the menu.
+    pub drive_image: Option<String>,
 }
 
 impl Default for Explorer {
@@ -139,6 +154,8 @@ fn kind_of(e: &Entry) -> Option<Kind> {
         Some(Kind::CardImage)
     } else if SaveFormat::from_ext(&x).is_some() {
         Some(Kind::Save)
+    } else if DISC_EXTS.contains(&x.as_str()) {
+        Some(Kind::DiscImage)
     } else {
         None
     }
@@ -176,6 +193,8 @@ impl Explorer {
             info: None,
             export_to: None,
             back: Vec::new(),
+            insert: None,
+            drive_image: None,
         }
     }
 
@@ -230,6 +249,10 @@ impl Explorer {
                         self.rows.push(Row { kind: Kind::CardImage, name: format!("Slot {}: {file}", slot_name(s)), size: s as u64 });
                     }
                 }
+                if let Some(h) = &self.drive_image {
+                    let file = volumes::file_name(volumes::split_handle(h).1).to_string();
+                    self.rows.push(Row { kind: Kind::DiscImage, name: format!("Disc drive: {file}"), size: 0 });
+                }
             }
             Where::Folder { vol, path } => {
                 self.export_to = Some((vol.clone(), path.clone()));
@@ -282,6 +305,9 @@ impl Explorer {
                 items.push((String::from("Show saves"), Act::Open));
                 items.push((format!("Take out of slot {}", slot_name(s)), Act::Eject(s)));
             }
+            (Where::Volumes, Kind::DiscImage) => {
+                items.push((String::from("Take out of disc drive"), Act::EjectDisc));
+            }
             (_, Kind::Up) | (Where::Volumes, _) => return None,
             (Where::Folder { .. }, Kind::Dir) => {
                 items.push((String::from("Open"), Act::Open));
@@ -296,6 +322,9 @@ impl Explorer {
                 items.push((String::from("Put in slot A"), Act::LoadSlot(0)));
                 items.push((String::from("Put in slot B"), Act::LoadSlot(1)));
                 items.push((String::from("Unpack to a GCI folder"), Act::Unpack));
+            }
+            (Where::Folder { .. }, Kind::DiscImage) => {
+                items.push((String::from("Put in disc drive"), Act::InsertDisc));
             }
             (Where::Folder { .. }, Kind::Save) => {
                 for s in 0..2 {
@@ -433,6 +462,12 @@ impl Explorer {
                 r.map(|_| Some(format!("Took the card out of slot {}.", slot_name(s))))
             }
             Act::LoadSlot(s) => self.load_slot(&row, s, vols, cards),
+            Act::InsertDisc => self.insert_disc(&row, vols),
+            Act::EjectDisc => {
+                self.insert = Some(None);
+                self.drive_image = None;
+                Ok(Some(String::from("Took the disc out of the drive.")))
+            }
             Act::Unpack => self.unpack(&row, vols),
             Act::Pack => self.pack(&row, vols),
             Act::NewCard(blocks) => self.new_card(blocks, vols),
@@ -473,6 +508,21 @@ impl Explorer {
             None => format!("{} is in slot {}.", row.name, slot_name(s)),
             Some(e) => format!("In slot {}, but {e}.", slot_name(s)),
         }))
+    }
+
+    /// What a disc image holds, read in place.
+    fn read_disc(&self, row: &Row, vols: &mut dyn Volumes) -> Result<Disc, String> {
+        let (vol, path) = self.path_of(row).ok_or("")?;
+        disc::identify(&mut VolReader { vols, vol: &vol, path: &path }).ok_or_else(|| String::from("Could not read it"))
+    }
+
+    fn insert_disc(&mut self, row: &Row, vols: &mut dyn Volumes) -> Result<Option<String>, String> {
+        let (vol, path) = self.path_of(row).ok_or("")?;
+        let disc = self.read_disc(row, vols)?;
+        let msg = format!("{} is in the disc drive.", row.name);
+        self.drive_image = Some(volumes::handle(&vol, &path));
+        self.insert = Some(Some(DiscImage { handle: volumes::handle(&vol, &path), size: row.size, disc }));
+        Ok(Some(msg))
     }
 
     fn read_card(&self, row: &Row, vols: &mut dyn Volumes) -> Result<Card, String> {
@@ -614,6 +664,10 @@ impl Explorer {
                 let c = cards.images().and_then(|c| c.card(*s));
                 c.and_then(|c| c.read(row.size as usize).ok().map(|f| save_info(&f, c.encoding()))).unwrap_or_default()
             }
+            (Where::Folder { .. }, Kind::DiscImage) => match self.read_disc(&row, vols) {
+                Ok(d) => d.summary(),
+                Err(e) => format!("Not a readable disc image: {e}"),
+            },
             (_, Kind::NewCard) => String::from("Make a blank, formatted card image here"),
             _ => String::new(),
         };
@@ -715,6 +769,19 @@ pub fn flush(vols: &mut dyn Volumes, changed: Option<(String, Vec<u8>)>) -> Resu
             vols.write(id, path, &b)
         }
         None => Ok(()),
+    }
+}
+
+/// Byte reads from a file on a volume.
+struct VolReader<'a> {
+    vols: &'a mut dyn Volumes,
+    vol: &'a str,
+    path: &'a str,
+}
+
+impl ReadAt for VolReader<'_> {
+    fn read_at(&mut self, offset: u64, buf: &mut [u8]) -> bool {
+        self.vols.read_at(self.vol, self.path, offset, buf).is_ok()
     }
 }
 
@@ -828,6 +895,35 @@ mod tests {
         let p = e.popup.as_mut().expect("popup");
         p.sel = p.items.iter().position(|(t, _)| t == item).unwrap_or_else(|| panic!("{item} in {:?}", p.items.iter().map(|i| &i.0).collect::<Vec<_>>()));
         press(e, v, c, Pad { a: true, ..Pad::default() });
+    }
+
+    #[test]
+    fn disc_image_in_and_out() {
+        let mut iso = vec![0u8; 0x440];
+        iso[..6].copy_from_slice(b"GTST01");
+        iso[0x1C..0x20].copy_from_slice(&crate::launch::disc::GC_MAGIC.to_be_bytes());
+        iso[0x20..0x24].copy_from_slice(b"Test");
+        let mut v = RamVols { files: BTreeMap::new(), dirs: vec![] };
+        v.files.insert("\\game.iso".into(), iso);
+        let mut c: Box<dyn MemCards> = Box::new(super::super::backend::FakeCards::new());
+        let mut e = Explorer::new();
+        e.show(&mut v, &mut c);
+        pick(&mut e, &mut v, &mut c, "STICK (GameCoob)");
+        pick(&mut e, &mut v, &mut c, "game.iso");
+        choose(&mut e, &mut v, &mut c, "Put in disc drive");
+        match e.insert.take() {
+            Some(Some(img)) => {
+                assert_eq!(img.disc.summary(), "GameCube disc GTST01: Test");
+                assert_eq!(img.size, 0x440);
+            }
+            _ => panic!("nothing to insert"),
+        }
+        // The drive shows up beside the volumes; take the disc out there.
+        press(&mut e, &mut v, &mut c, Pad { b: true, ..Pad::default() });
+        pick(&mut e, &mut v, &mut c, "Disc drive: game.iso");
+        choose(&mut e, &mut v, &mut c, "Take out of disc drive");
+        assert!(matches!(e.insert, Some(None)));
+        assert!(e.rows.iter().all(|r| !r.name.starts_with("Disc drive")));
     }
 
     #[test]

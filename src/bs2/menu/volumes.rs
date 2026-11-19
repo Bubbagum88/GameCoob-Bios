@@ -39,6 +39,15 @@ pub trait Volumes {
     /// The entries of folder `path` on volume `id`, without `.` and `..`.
     fn list(&mut self, id: &str, path: &str) -> Result<Vec<Entry>, String>;
     fn read(&mut self, id: &str, path: &str) -> Result<Vec<u8>, String>;
+    /// Fill `buf` from `offset` in a file (disc images are too big to
+    /// read whole). The default reads the whole file.
+    fn read_at(&mut self, id: &str, path: &str, offset: u64, buf: &mut [u8]) -> Result<(), String> {
+        let all = self.read(id, path)?;
+        let o = usize::try_from(offset).map_err(|_| String::from("past the end"))?;
+        let s = all.get(o..o + buf.len()).ok_or("past the end")?;
+        buf.copy_from_slice(s);
+        Ok(())
+    }
     /// Create or replace a file.
     fn write(&mut self, id: &str, path: &str, bytes: &[u8]) -> Result<(), String>;
     /// Create a folder (its parent must exist); fine if it exists.

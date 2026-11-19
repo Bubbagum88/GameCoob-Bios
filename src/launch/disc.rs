@@ -6,6 +6,7 @@
 //! Shared by the boot app's optical drive backend and, later, the helper.
 //! Nothing here touches a device: the caller gives a [`ReadAt`].
 
+use alloc::format;
 use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -89,6 +90,23 @@ pub enum Disc {
         bios_boot: bool,
     },
     Unknown,
+}
+
+impl Disc {
+    /// One line on what the disc is, for logs and the file list.
+    pub fn summary(&self) -> String {
+        match self {
+            Disc::GameCube { code, title, banner } => {
+                let name = banner.as_ref().and_then(|b| b.text(0)).map(|t| t.long_name.as_str()).filter(|n| !n.is_empty()).unwrap_or(title);
+                format!("GameCube disc {code}: {name}")
+            }
+            Disc::Wii { code, title } => format!("Wii disc {code}: {title}"),
+            Disc::Pc { label, efi_boot: true, .. } => format!("PC disc {label}, boots with UEFI"),
+            Disc::Pc { label, bios_boot: true, .. } => format!("PC disc {label}, BIOS boot only"),
+            Disc::Pc { label, .. } => format!("PC disc {label}, not bootable"),
+            Disc::Unknown => String::from("Not a disc image GameCoob knows"),
+        }
+    }
 }
 
 fn be32(b: &[u8], o: usize) -> u32 {

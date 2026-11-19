@@ -46,10 +46,33 @@ bootable test ISO: `xorriso -as mkisofs -V LABEL -e efi.img -no-emul-boot
 -o pc.iso dir/` with `efi.img` a FAT image holding
 `EFI/BOOT/BOOTX64.EFI`.
 
+## Disc images
+
+Card Files (Memory ▸ Files) lists plain disc images (`.iso`, `.gcm`) on
+any FAT volume the firmware can read, with what each one is on the info
+line. "Put in disc drive" puts one in: Game Play shows it in place of
+the drive's disc, the same way as a real disc. It comes out with "Take
+out of disc drive" on the "Disc drive:" row of the volume list, or the
+tray key (D). Compressed formats (`.rvz`, `.ciso`, `.gcz`) can't be read
+in place and aren't listed.
+
+- A GameCube image shows its banner; START launches the game with the
+  same game code from the emulator game list, as for a disc.
+- A PC image with a UEFI boot image is read whole into memory when
+  START is pressed and handed to the firmware's RAM disk driver as a
+  virtual CD (EFI_RAM_DISK_PROTOCOL, as HTTP boot does), then its
+  `\EFI\BOOT\BOOTX64.EFI` starts at once: a reset would lose the RAM
+  disk. The menu waits while the file is read. The PC needs RAM for the
+  whole image, and firmware without a RAM disk driver says so. Whether
+  the OS finds its files after its boot loader depends on the OS: the
+  kernel has to find the RAM disk itself (the firmware lists it in
+  ACPI's NFIT table).
+
+Code: `src/bs2/menu/explorer.rs` (the rows and popups),
+`backend::ImageDrive` (an image on top of the real drive) and
+`src/ramdisk.rs`.
+
 ## Next
 
-- Disc images: "Insert in drive" for `.iso`/`.gcm` files in the Card
-  Files explorer, like card images in the slots. A GameCube image would
-  show its banner and launch; a PC ISO would boot through the firmware's
-  RAM disk.
 - The banner's language from the menu language (BNR2 has six).
+- Compressed images (`.rvz`, `.ciso`) for the banner.

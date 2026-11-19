@@ -1014,7 +1014,13 @@ impl Menu {
         }
         let busy = self.sys.visible() || self.explorer.visible();
         let ep = if self.sys.visible() { &none } else { pad };
+        self.explorer.drive_image = self.drive.image().map(String::from);
         self.explorer.update(ep, &mut *self.vols, &mut self.cards);
+        if let Some(img) = self.explorer.insert.take() {
+            if !self.drive.insert_image(img) {
+                self.explorer.note(String::from("This disc drive takes no disc images."));
+            }
+        }
         let p = if busy { &none } else { pad };
         self.drive.update();
         self.cards.update();

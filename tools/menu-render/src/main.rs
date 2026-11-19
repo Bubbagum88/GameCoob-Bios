@@ -35,6 +35,11 @@ mod sdk;
 #[allow(dead_code)]
 mod card;
 
+// The disc identification the disc drive and Card Files use.
+#[path = "../../../src/launch/mod.rs"]
+#[allow(dead_code)]
+mod launch;
+
 #[path = "../../../src/bs2/mod.rs"]
 #[allow(dead_code)]
 mod bs2;

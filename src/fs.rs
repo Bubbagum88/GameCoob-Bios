@@ -65,6 +65,28 @@ fn err(e: uefi::fs::Error) -> String {
     }
 }
 
+/// Fill `buf` from `offset` in a file, without reading the rest.
+pub fn read_file_at(id: &str, path: &str, offset: u64, buf: &mut [u8]) -> Result<(), String> {
+    use uefi::proto::media::file::{FileAttribute, FileMode};
+    let h = handles().into_iter().find(|&h| device_id(h).as_deref() == Some(id)).ok_or("drive is gone")?;
+    let mut sfs = boot::open_protocol_exclusive::<SimpleFileSystem>(h).map_err(|e| format!("{:?}", e.status()))?;
+    let mut root = sfs.open_volume().map_err(|e| format!("{:?}", e.status()))?;
+    let f = root.open(&path16(path)?, FileMode::Read, FileAttribute::empty()).map_err(|e| format!("{:?}", e.status()))?;
+    let mut f = f.into_regular_file().ok_or("not a file")?;
+    f.set_position(offset).map_err(|e| format!("{:?}", e.status()))?;
+    let mut done = 0;
+    while done < buf.len() {
+        // Some firmware reads at most a few MiB per call.
+        let end = (done + (4 << 20)).min(buf.len());
+        match f.read(&mut buf[done..end]) {
+            Ok(0) => return Err(String::from("past the end")),
+            Ok(n) => done += n,
+            Err(e) => return Err(format!("{:?}", e.status())),
+        }
+    }
+    Ok(())
+}
+
 impl UefiVolumes {
     /// The boot volume's id, for the card images loaded at boot.
     pub fn boot_id() -> Option<String> {
@@ -106,6 +128,10 @@ impl Volumes for UefiVolumes {
 
     fn read(&mut self, id: &str, path: &str) -> Result<Vec<u8>, String> {
         open(id)?.read(path16(path)?.as_ref()).map_err(err)
+    }
+
+    fn read_at(&mut self, id: &str, path: &str, offset: u64, buf: &mut [u8]) -> Result<(), String> {
+        read_file_at(id, path, offset, buf)
     }
 
     fn write(&mut self, id: &str, path: &str, bytes: &[u8]) -> Result<(), String> {
