@@ -35,13 +35,17 @@ same as PAL 1.0.
 ## Steps per version
 
 1. **Extract.** Add the md5 to `KNOWN` in `tools/extract_bs2.py` with the
-   section table address (the `lis/addi r3` operand in `__init_data`; add a
-   scanner so it is found, not hand-typed). Check the descramble range
+   section table address. `extract_bs2.py` finds the table itself (the
+   `lis/addi` pair in `__init_data`) and still extracts an unknown dump,
+   printing its md5 and table address to paste in. Check the descramble range
    (`SCRAMBLE_END`) still fits; font layout differs on NTSC-J (Shift-JIS font).
-2. **Port symbols.** Write `tools/port_symbols.py`: hash every PAL 1.0
+2. **Port symbols.** `tools/port_symbols.py PAL10 <VER>`: fingerprint every PAL 1.0
    function with relocation operands masked, find the same bytes in the new
    `bs2.dol`, and write `config/<VER>/symbols.txt` and `splits.txt` from the
-   hits. Unmatched functions are the real differences; list them.
+   hits, plus `port_report.txt` listing the functions not found (the real
+   differences), code ranges that did not port, and the data symbols left for
+   dtk or hand work. Tested on PAL 1.0 against itself (2039/2039 functions)
+   and against a copy with code inserted (every symbol lands at its shift).
 3. **Configure.** Add the id to `VERSIONS`, write `config/<VER>/config.yml`
    (dtk hash of the new `bs2.dol`, its `block_relocations` ranges), and
    `build.sha1` / `bs1.sha1`.
