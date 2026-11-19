@@ -136,6 +136,17 @@ pub fn set_minimal(on: bool) -> uefi::Result {
     runtime::set_variable(cstr16!("GameCoobMinimal"), GAMECOOB, attrs(), &[on as u8])
 }
 
+/// The Controls page's key and gamepad bindings, saved as
+/// `GameCoobControls` ([`crate::input::Bindings::encode`]). The defaults
+/// when unset.
+pub fn controls() -> Option<Vec<u8>> {
+    runtime::get_variable_boxed(cstr16!("GameCoobControls"), GAMECOOB).ok().map(|(b, _)| b.into_vec())
+}
+
+pub fn set_controls(bytes: &[u8]) -> uefi::Result {
+    runtime::set_variable(cstr16!("GameCoobControls"), GAMECOOB, attrs(), bytes)
+}
+
 /// GameCoob's intro logo option ("GAMECOOB" instead of the console's
 /// "GAMECUBE"), saved as `GameCoobLogo` (one byte, 0 = the console's).
 /// GameCoob's when unset.

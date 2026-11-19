@@ -9,7 +9,8 @@
 //! start, x, y, z, system (F10), eject (D), slot1, slot2, reset (R). Pad
 //! buttons are held on controller 1 for that one frame and go through BS2's
 //! pad code, so the same button on back-to-back frames is one long press.
-//! Lines starting with `#` are ignored. Without frames, every 10th
+//! `key:NAME` and `pad:NAME` are raw key / gamepad button presses for the
+//! Controls page (see the script loop). Lines starting with `#` are ignored. Without frames, every 10th
 //! frame up to the last scripted frame + 200 is written.
 //! Env: THREADS=n rasterizes on n threads; SKIP=1 skips the intro;
 //! CUBE=1 draws the console's intro logo ("GAMECUBE", default GAMECOOB);
@@ -79,6 +80,7 @@ fn info(frame: u32) -> SysInfo {
             GameRow { title: "Made-Up Racer".into(), detail: "Dolphin, windows".into() },
             GameRow { title: "Pretend Quest".into(), detail: "Dolphin, arch".into() },
         ],
+        controls: input::Bindings::default(),
     }
 }
 
@@ -238,6 +240,44 @@ fn main() {
         ] {
             if has(k) {
                 input.pads[0].button |= b;
+            }
+        }
+        // key:NAME is a raw key press (a letter, enter, esc, space, f1..f12,
+        // up/down/left/right), pad:NAME a gamepad button press (south,
+        // east, west, north, l1, r1, l2, r2, select, start, guide), both
+        // for the Controls page to bind.
+        for k in &keys {
+            if let Some(n) = k.strip_prefix("key:") {
+                use input::KeyCode::*;
+                input.key = Some(match n {
+                    "enter" => Char('\r'),
+                    "esc" => Esc,
+                    "space" => Char(' '),
+                    "backspace" => Char('\u{8}'),
+                    "up" => Up,
+                    "down" => Down,
+                    "left" => Left,
+                    "right" => Right,
+                    f if f.len() > 1 && f.starts_with('f') => F(f[1..].parse().expect("f-key")),
+                    c => Char(c.chars().next().expect("key")),
+                });
+            }
+            if let Some(n) = k.strip_prefix("pad:") {
+                use gamepad::report::btn;
+                input.pad_press |= match n {
+                    "south" => btn::SOUTH,
+                    "east" => btn::EAST,
+                    "west" => btn::WEST,
+                    "north" => btn::NORTH,
+                    "l1" => btn::L1,
+                    "r1" => btn::R1,
+                    "l2" => btn::L2,
+                    "r2" => btn::R2,
+                    "select" => btn::SELECT,
+                    "start" => btn::START,
+                    "guide" => btn::GUIDE,
+                    _ => panic!("pad button {n}"),
+                };
             }
         }
         let in_menu = bs.menu.is_some();
