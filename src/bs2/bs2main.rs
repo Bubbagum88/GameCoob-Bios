@@ -137,16 +137,16 @@ pub struct Bs2Main {
     pub pads: Pads,
     /// The disc drive and memory cards while no menu holds them (the C's
     /// DVD and card threads outlive a reset).
-    backends: Option<(Box<dyn DiscDrive>, Box<dyn MemCards>, Box<dyn Volumes>)>,
+    backends: Option<(Box<dyn DiscDrive>, Box<dyn MemCards>, Box<dyn Volumes>, Box<dyn crate::hii::Firmware>)>,
 }
 
 impl Bs2Main {
     /// `BS2Main` up to the loop: the scene with `Scene_Init(TRUE)`.
-    pub fn new(a: &Assets, drive: Box<dyn DiscDrive>, cards: Box<dyn MemCards>, vols: Box<dyn Volumes>) -> Bs2Main {
+    pub fn new(a: &Assets, drive: Box<dyn DiscDrive>, cards: Box<dyn MemCards>, vols: Box<dyn Volumes>, fw: Box<dyn crate::hii::Firmware>) -> Bs2Main {
         // bs2main.c: Sound_SetOutputMode(OSGetSoundMode()); the sound mode
         // is kept in RAM and starts out stereo.
         sound::set_output_mode(1);
-        Bs2Main { intro: Intro::new(a), menu: None, pads: Pads::new(), backends: Some((drive, cards, vols)) }
+        Bs2Main { intro: Intro::new(a), menu: None, pads: Pads::new(), backends: Some((drive, cards, vols, fw)) }
     }
 
     /// The Controls page is waiting for a key or button to bind.
@@ -211,8 +211,8 @@ impl Bs2Main {
                     sound::play(j as u32);
                 }
                 if self.intro.finished() {
-                    if let Some((drive, cards, vols)) = self.backends.take() {
-                        self.menu = Some(Menu::new(info(), ma, drive, cards, vols, self.intro.menu.clone()));
+                    if let Some((drive, cards, vols, fw)) = self.backends.take() {
+                        self.menu = Some(Menu::new(info(), ma, drive, cards, vols, fw, self.intro.menu.clone()));
                     }
                 }
             }
@@ -220,7 +220,7 @@ impl Bs2Main {
         let fatal = self.intro.scene.fatal;
         if self.intro.disc.reset_switch(input.reset, fatal) {
             if let Some(m) = self.menu.take() {
-                self.backends = Some((m.drive, m.cards, m.vols));
+                self.backends = Some((m.drive, m.cards, m.vols, m.fw));
             }
             self.intro.restart(a);
             sound::push(SoundCmd::Reset);

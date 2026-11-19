@@ -308,7 +308,7 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
         Some(d) => Box::new(d),
         None => Box::new(FakeDrive::new()),
     };
-    let mut bs2 = Bs2Main::new(assets, drive, load_cards(&boot_paths), Box::new(UefiVolumes));
+    let mut bs2 = Bs2Main::new(assets, drive, load_cards(&boot_paths), Box::new(UefiVolumes), Box::new(crate::setup::UefiSetup));
     let launcher = crate::launcher::Launcher::load();
     let cores = Cores::open();
     // Rendered at the screen's resolution, adjusted to keep up with the logic.

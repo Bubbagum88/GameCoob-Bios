@@ -52,6 +52,15 @@ The matching decompilation of the IPL's BS2 program lives in [decomp/](decomp/RE
   lettering, cut letter by letter from your dump's label pictures; the few
   letters the IPL never drew come from M PLUS 1p (SIL Open Font License). Drives is a
   placeholder for now.
+- **BIOS settings.** Settings ▲ Firmware lists the PC's own setup pages
+  (whatever the firmware publishes as HII forms) and their options with
+  their current values. Left / Right (or A) change an option; nothing is
+  written until Review and save lists every change and you pick Save. The
+  old values are first backed up to `\EFI\GameCoob\Setup\backup-*.cfg` on
+  the boot drive (no backup, no save), and Backups puts one back. Options
+  the firmware locks, greys out or handles with its own code are shown,
+  not changed. "Save forms to the boot drive" writes `hii.bin` and
+  `config.txt` there for `tools/hii-tool`, which prints them on a PC.
 - **Minimal mode.** For the menu exactly as on the console: no sub-cubes,
   Memory Card and Options open their own screens again, and the cube keeps
   the console's labels. The intro always shows the console's GAMECUBE
@@ -246,8 +255,9 @@ src/
 scripts/     build.ps1 (Windows build), QEMU runner, screenshot automation
 local/       your own dump and reference files, never committed
 tools/       host-side checks: ipl-preview (models to PNG), intro-render and menu-render (frames to PNG),
-             card-tool (memory card images and saves on the PC; `cargo test` there tests src/card)
-docs/        roadmap
+             card-tool (memory card images and saves on the PC; `cargo test` there tests src/card),
+             hii-tool (prints a firmware's setup forms from the Firmware page's export; tests src/hii)
+docs/        roadmap, DXE.md (firmware-level research)
 ```
 
 ## Roadmap

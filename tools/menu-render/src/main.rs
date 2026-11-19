@@ -19,6 +19,8 @@
 //! VOLS=dir,dir lists folders as drives for the Card Files explorer (F10);
 //! CARDS=a,b sets each slot to saves, none or a blank card of N blocks, or
 //! to a card image file (.raw/.mcp/.gcp) loaded as a real card (both slots then);
+//! HII=dir shows the hii.bin and config.txt in dir (the Firmware page's
+//! export) on Settings > Firmware; saves are printed, not applied;
 //! DUMP=layout:N, strings:N, model:N or raw:N prints that resource and exits
 //! (raw writes the decompressed bytes to stdout).
 
@@ -35,6 +37,10 @@ mod sdk;
 #[path = "../../../src/card/mod.rs"]
 #[allow(dead_code)]
 mod card;
+
+#[path = "../../../src/hii/mod.rs"]
+#[allow(dead_code)]
+mod hii;
 
 #[path = "../../../src/bs2/mod.rs"]
 #[allow(dead_code)]
@@ -204,7 +210,7 @@ fn main() {
     };
     // VOLS=dir,dir... are the drives the Card Files explorer browses.
     let roots: Vec<PathBuf> = std::env::var("VOLS").map(|v| v.split(',').map(PathBuf::from).collect()).unwrap_or_default();
-    let mut bs = Bs2Main::new(&assets, Box::new(FakeDrive::new()), cards, Box::new(HostVolumes { roots }));
+    let mut bs = Bs2Main::new(&assets, Box::new(FakeDrive::new()), cards, Box::new(HostVolumes { roots }), host_firmware());
     // MINIMAL=1: minimal mode (no sub-cubes, the console's labels).
     bs2::menu::set_minimal(std::env::var("MINIMAL").is_ok());
     // CUBE=1: the console's intro logo ("GAMECUBE") instead of GameCoob's.
@@ -326,6 +332,34 @@ fn main() {
 
 /// Folders standing in for the PC's drives (the first is the boot drive);
 /// a volume's id is its folder.
+/// HII=dir: a firmware's setup forms from the Firmware page's export.
+struct HostFirmware {
+    dir: PathBuf,
+}
+
+fn host_firmware() -> Box<dyn hii::Firmware> {
+    match std::env::var("HII") {
+        Ok(d) => Box::new(HostFirmware { dir: PathBuf::from(d) }),
+        Err(_) => Box::new(hii::NoFirmware),
+    }
+}
+
+impl hii::Firmware for HostFirmware {
+    fn hii_export(&mut self) -> Result<Vec<u8>, String> {
+        std::fs::read(self.dir.join("hii.bin")).map_err(|e| e.to_string())
+    }
+    fn config_export(&mut self) -> Result<String, String> {
+        std::fs::read_to_string(self.dir.join("config.txt")).map_err(|e| e.to_string())
+    }
+    fn variable(&mut self, _name: &str, _guid: &[u8; 16]) -> Option<Vec<u8>> {
+        None
+    }
+    fn route_config(&mut self, cfg: &str) -> Result<(), String> {
+        eprintln!("RouteConfig {cfg}");
+        Ok(())
+    }
+}
+
 struct HostVolumes {
     roots: Vec<PathBuf>,
 }
