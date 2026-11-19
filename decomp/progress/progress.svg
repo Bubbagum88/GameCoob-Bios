@@ -263,7 +263,7 @@
 <rect x="558.1" y="228.7" width="87.9" height="63.2" fill="#2ea043" stroke="#0d1117" stroke-width="1"/>
 <text x="561.1" y="240.7" font-size="10" fill="#0d1117">gMRdraw</text>
 </g>
-<g><title>bs2/font: 5736 bytes, 81.0% matched, 99.2% fuzzy, 19/20 functions</title>
+<g><title>bs2/font: 5736 bytes, 81.0% matched, 99.8% fuzzy, 19/20 functions</title>
 <rect x="646.1" y="60.0" width="68.1" height="78.5" fill="#4d9f3d" stroke="#0d1117" stroke-width="1"/>
 <text x="649.1" y="72.0" font-size="10" fill="#0d1117">font</text>
 </g>
