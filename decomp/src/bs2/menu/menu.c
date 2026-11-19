@@ -1462,9 +1462,11 @@ void Menu_DrawGuide(u8 alpha) {
     s16 ga[2];
     s16 gb[2];
     s16 gc[2];
-    s16 pulse, base, f;
+    s16 pulse;
+    s32 fa;
+    s16 f;
     s16 k;
-    u8 fa;
+    s16 base;
     u32 i;
     u32 tag;
     u8 pad[4];
