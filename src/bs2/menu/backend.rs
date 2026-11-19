@@ -6,6 +6,9 @@
 //! Every name, picture and save below is made up for GameCoob.
 
 use super::super::shader::FastTex;
+use crate::launch::disc::{Disc, BANNER_H, BANNER_W};
+use alloc::boxed::Box;
+use alloc::format;
 use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -58,6 +61,15 @@ pub trait DiscDrive {
     fn start(&mut self) -> DiscStart {
         DiscStart::Failed("This drive can't start discs.".into())
     }
+    /// Put a disc image in the drive, or take it out (`None`). False if
+    /// this drive takes no images.
+    fn insert_image(&mut self, _img: Option<DiscImage>) -> bool {
+        false
+    }
+    /// The handle of the disc image in the drive.
+    fn image(&self) -> Option<&str> {
+        None
+    }
 }
 
 /// What [`DiscDrive::start`] leaves to the caller.
@@ -66,8 +78,58 @@ pub enum DiscStart {
     /// A GameCube disc: launch the game with this code from the
     /// emulator game list.
     Game(String),
+    /// A PC disc image: load the file into a firmware RAM disk and boot it.
+    BootImage { handle: String, size: u64 },
     Failed(String),
 }
+
+/// What START does with the disc in the drive.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum DiscTarget {
+    None,
+    /// Boot it through the firmware.
+    Boot,
+    /// Launch this game code in an emulator.
+    Game(String),
+}
+
+/// How Game Play shows a disc: its state, its banner and what START does.
+pub fn shown(d: Disc) -> (DiscState, Option<Banner>, DiscTarget) {
+    match d {
+        Disc::GameCube { code, title, banner } => {
+            let b = match banner {
+                Some(bn) => {
+                    let t = bn.text(0).cloned().unwrap_or_default();
+                    Banner {
+                        image: FastTex::from_rgba(BANNER_W, BANNER_H, &bn.rgba),
+                        short_name: t.short_name,
+                        short_maker: t.short_maker,
+                        long_name: if t.long_name.is_empty() { title } else { t.long_name },
+                        long_maker: t.long_maker,
+                        description: t.description,
+                    }
+                }
+                None => pc_banner(&title, "", &format!("GameCube disc {code}")),
+            };
+            (DiscState::Ready, Some(b), DiscTarget::Game(code))
+        }
+        Disc::Pc { label, publisher, efi_boot: true, .. } => {
+            let name = if label.is_empty() { String::from("PC disc") } else { label };
+            (DiscState::Ready, Some(pc_banner(&name, &publisher, "Press START to boot this disc.")), DiscTarget::Boot)
+        }
+        Disc::Pc { .. } => {
+            (DiscState::Wrong, None, DiscTarget::None)
+        }
+        Disc::Wii { .. } => {
+            (DiscState::Wrong, None, DiscTarget::None)
+        }
+        Disc::Unknown => {
+            (DiscState::Wrong, None, DiscTarget::None)
+        }
+    }
+}
+
+
 
 /// A drive that starts empty; toggling the tray inserts or removes one
 /// made-up disc, which spins up for a moment before it is ready.
@@ -136,6 +198,91 @@ impl DiscDrive for FakeDrive {
         self.inserted = !self.inserted;
         self.state = DiscState::CoverOpen;
         self.timer = TRAY_FRAMES;
+    }
+}
+
+// ---------------------------------------------------------------------
+// Disc images
+// ---------------------------------------------------------------------
+
+/// A disc image put in the drive from Card Files.
+pub struct DiscImage {
+    /// The file's handle ([`super::volumes::handle`]).
+    pub handle: String,
+    pub size: u64,
+    pub disc: Disc,
+}
+
+/// Frames "reading" shows after an image goes in.
+const IMAGE_READ_FRAMES: u32 = 20;
+
+/// A drive that also takes disc images: while one is in, it stands in
+/// for the disc in `inner` (the PC's drive or the stand-in). The tray key
+/// takes the image out again.
+pub struct ImageDrive {
+    inner: Box<dyn DiscDrive>,
+    image: Option<(String, u64, DiscState, Option<Banner>, DiscTarget)>,
+    timer: u32,
+}
+
+impl ImageDrive {
+    pub fn new(inner: Box<dyn DiscDrive>) -> ImageDrive {
+        ImageDrive { inner, image: None, timer: 0 }
+    }
+}
+
+impl DiscDrive for ImageDrive {
+    fn update(&mut self) {
+        self.inner.update();
+        self.timer = self.timer.saturating_sub(1);
+    }
+
+    fn state(&self) -> DiscState {
+        match &self.image {
+            Some(_) if self.timer > 0 => DiscState::Reading,
+            Some((_, _, s, _, _)) => *s,
+            None => self.inner.state(),
+        }
+    }
+
+    fn banner(&self) -> Option<&Banner> {
+        match &self.image {
+            Some((_, _, DiscState::Ready, b, _)) if self.timer == 0 => b.as_ref(),
+            Some(_) => None,
+            None => self.inner.banner(),
+        }
+    }
+
+    fn toggle_tray(&mut self) {
+        if self.image.take().is_none() {
+            self.inner.toggle_tray();
+        }
+    }
+
+    fn starts_disc(&self) -> bool {
+        self.image.is_some() || self.inner.starts_disc()
+    }
+
+    fn start(&mut self) -> DiscStart {
+        match &self.image {
+            Some((_, _, _, _, DiscTarget::Game(code))) => DiscStart::Game(code.clone()),
+            Some((handle, size, _, _, DiscTarget::Boot)) => DiscStart::BootImage { handle: handle.clone(), size: *size },
+            Some(_) => DiscStart::Failed("This disc image can't be started.".into()),
+            None => self.inner.start(),
+        }
+    }
+
+    fn insert_image(&mut self, img: Option<DiscImage>) -> bool {
+        self.image = img.map(|i| {
+            let (s, b, t) = shown(i.disc);
+            (i.handle, i.size, s, b, t)
+        });
+        self.timer = if self.image.is_some() { IMAGE_READ_FRAMES } else { 0 };
+        true
+    }
+
+    fn image(&self) -> Option<&str> {
+        self.image.as_ref().map(|i| i.0.as_str())
     }
 }
 
@@ -624,4 +771,37 @@ fn disc_banner_art() -> Vec<u8> {
         }
     }
     out
+}
+
+/// A banner for a disc without one of its own: a disc on a dark blue
+/// field.
+fn pc_banner(name: &str, maker: &str, description: &str) -> Banner {
+    let mut rgba = Vec::with_capacity(BANNER_W * BANNER_H * 4);
+    for y in 0..BANNER_H {
+        for x in 0..BANNER_W {
+            let (fx, fy) = (x as f32 - 16.0, y as f32 - 15.5);
+            let r = libm::sqrtf(fx * fx + fy * fy);
+            let bg = [0.06 + 0.10 * y as f32 / 32.0, 0.08 + 0.12 * y as f32 / 32.0, 0.25 + 0.2 * x as f32 / 96.0];
+            let c = if (3.5..13.5).contains(&r) {
+                // Silver with a rainbow sheen around the hub.
+                let a = libm::atan2f(fy, fx);
+                let s = 0.75 + 0.2 * libm::sinf(a * 2.0);
+                [s + 0.1 * libm::sinf(a * 3.0), s + 0.1 * libm::sinf(a * 3.0 + 2.1), s + 0.1 * libm::sinf(a * 3.0 + 4.2)]
+            } else if (13.5..14.5).contains(&r) {
+                [0.5, 0.5, 0.55]
+            } else {
+                bg
+            };
+            rgba.extend(c.map(|v| (v.clamp(0.0, 1.0) * 255.0) as u8));
+            rgba.push(255);
+        }
+    }
+    Banner {
+        image: FastTex::from_rgba(BANNER_W, BANNER_H, &rgba),
+        short_name: name.into(),
+        short_maker: maker.into(),
+        long_name: name.into(),
+        long_maker: maker.into(),
+        description: description.into(),
+    }
 }

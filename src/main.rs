@@ -31,6 +31,7 @@ mod ipl;
 #[allow(dead_code)]
 mod launch;
 mod launcher;
+mod ramdisk;
 mod sdk;
 mod setup;
 mod vars;

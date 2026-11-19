@@ -8,12 +8,10 @@
 //! firmware) and doesn't spin it. A new disc is read once, a frame after
 //! "reading" is up, since the reads block the menu.
 
-use crate::bs2::menu::backend::{Banner, DiscDrive, DiscStart, DiscState};
-use crate::bs2::shader::FastTex;
+use crate::bs2::menu::backend::{shown, Banner, DiscDrive, DiscStart, DiscState, DiscTarget};
 use crate::clock::Clock;
-use crate::launch::disc::{self, Disc, ReadAt, BANNER_H, BANNER_W};
+use crate::launch::disc::{self, ReadAt};
 use alloc::format;
-use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 use uefi::boot::{self, OpenProtocolAttributes, OpenProtocolParams, ScopedProtocol};
@@ -31,15 +29,6 @@ const MAX_RETRIES: u32 = 3;
 /// Sectors per read.
 const CHUNK: usize = 32;
 
-/// What START does with the disc in the drive.
-enum Target {
-    None,
-    /// Boot it through the firmware.
-    Boot,
-    /// Launch this game code in an emulator.
-    Game(String),
-}
-
 pub struct OpticalDrive {
     handle: Handle,
     /// The drive's device path, for the boot entry.
@@ -52,7 +41,7 @@ pub struct OpticalDrive {
     /// When to poll next ([`Clock::now`]).
     next_poll: f32,
     banner: Option<Banner>,
-    target: Target,
+    target: DiscTarget,
 }
 
 fn open_block(h: Handle) -> Option<ScopedProtocol<BlockIO>> {
@@ -116,7 +105,7 @@ impl OpticalDrive {
                     clock,
                     next_poll: 0.0,
                     banner: None,
-                    target: Target::None,
+                    target: DiscTarget::None,
                 });
             }
         }
@@ -126,7 +115,7 @@ impl OpticalDrive {
     fn forget(&mut self) {
         self.read_id = None;
         self.banner = None;
-        self.target = Target::None;
+        self.target = DiscTarget::None;
         self.retries = 0;
     }
 
@@ -181,43 +170,8 @@ impl OpticalDrive {
         };
         self.read_id = Some(id);
         self.retries = 0;
-        let (state, banner, target) = match d {
-            Disc::GameCube { code, title, banner } => {
-                log::info!("GameCube disc {code} {title}");
-                let b = match banner {
-                    Some(bn) => {
-                        let t = bn.text(0).cloned().unwrap_or_default();
-                        Banner {
-                            image: FastTex::from_rgba(BANNER_W, BANNER_H, &bn.rgba),
-                            short_name: t.short_name,
-                            short_maker: t.short_maker,
-                            long_name: if t.long_name.is_empty() { title } else { t.long_name },
-                            long_maker: t.long_maker,
-                            description: t.description,
-                        }
-                    }
-                    None => pc_banner(&title, "", &format!("GameCube disc {code}")),
-                };
-                (DiscState::Ready, Some(b), Target::Game(code))
-            }
-            Disc::Pc { label, publisher, efi_boot: true, .. } => {
-                log::info!("bootable PC disc {label}");
-                let name = if label.is_empty() { String::from("PC disc") } else { label };
-                (DiscState::Ready, Some(pc_banner(&name, &publisher, "Press START to boot this disc.")), Target::Boot)
-            }
-            Disc::Pc { label, bios_boot, .. } => {
-                log::info!("PC disc {label}, no UEFI boot image (BIOS boot {bios_boot})");
-                (DiscState::Wrong, None, Target::None)
-            }
-            Disc::Wii { code, .. } => {
-                log::info!("Wii disc {code}");
-                (DiscState::Wrong, None, Target::None)
-            }
-            Disc::Unknown => {
-                log::info!("disc with no ISO 9660 or GameCube header");
-                (DiscState::Wrong, None, Target::None)
-            }
-        };
+        log::info!("disc: {}", d.summary());
+        let (state, banner, target) = shown(d);
         self.state = state;
         self.banner = banner;
         self.target = target;
@@ -245,15 +199,15 @@ impl DiscDrive for OpticalDrive {
 
     fn start(&mut self) -> DiscStart {
         match &self.target {
-            Target::Game(code) => DiscStart::Game(code.clone()),
-            Target::Boot => match crate::vars::boot_entry_for_device(&self.dp) {
+            DiscTarget::Game(code) => DiscStart::Game(code.clone()),
+            DiscTarget::Boot => match crate::vars::boot_entry_for_device(&self.dp) {
                 Ok(num) => {
                     log::info!("booting the disc (Boot{num:04X})");
                     DiscStart::Failed(crate::firmware::boot_entry(num))
                 }
                 Err(e) => DiscStart::Failed(format!("Could not make a boot entry for the disc: {:?}", e.status())),
             },
-            Target::None => DiscStart::Failed("This disc can't be started.".into()),
+            DiscTarget::None => DiscStart::Failed("This disc can't be started.".into()),
         }
     }
 }
@@ -284,38 +238,5 @@ impl ReadAt for Reader<'_> {
             done += n;
         }
         true
-    }
-}
-
-/// A banner for a disc without one of its own: a disc on a dark blue
-/// field.
-fn pc_banner(name: &str, maker: &str, description: &str) -> Banner {
-    let mut rgba = Vec::with_capacity(BANNER_W * BANNER_H * 4);
-    for y in 0..BANNER_H {
-        for x in 0..BANNER_W {
-            let (fx, fy) = (x as f32 - 16.0, y as f32 - 15.5);
-            let r = libm::sqrtf(fx * fx + fy * fy);
-            let bg = [0.06 + 0.10 * y as f32 / 32.0, 0.08 + 0.12 * y as f32 / 32.0, 0.25 + 0.2 * x as f32 / 96.0];
-            let c = if (3.5..13.5).contains(&r) {
-                // Silver with a rainbow sheen around the hub.
-                let a = libm::atan2f(fy, fx);
-                let s = 0.75 + 0.2 * libm::sinf(a * 2.0);
-                [s + 0.1 * libm::sinf(a * 3.0), s + 0.1 * libm::sinf(a * 3.0 + 2.1), s + 0.1 * libm::sinf(a * 3.0 + 4.2)]
-            } else if (13.5..14.5).contains(&r) {
-                [0.5, 0.5, 0.55]
-            } else {
-                bg
-            };
-            rgba.extend(c.map(|v| (v.clamp(0.0, 1.0) * 255.0) as u8));
-            rgba.push(255);
-        }
-    }
-    Banner {
-        image: FastTex::from_rgba(BANNER_W, BANNER_H, &rgba),
-        short_name: name.into(),
-        short_maker: maker.into(),
-        long_name: name.into(),
-        long_maker: maker.into(),
-        description: description.into(),
     }
 }
