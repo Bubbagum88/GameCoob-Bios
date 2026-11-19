@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="960" height="584" font-family="Verdana,DejaVu Sans,sans-serif">
 <rect width="100%" height="100%" fill="#0d1117"/>
 <rect x="0" y="0" width="960" height="44" fill="#161b22"/>
-<rect x="0" y="40" width="899.3" height="4" fill="#2ea043"/>
-<text x="12" y="27" font-size="16" fill="#e6edf3">BS2 PAL 1.0: 97.10% total, 93.68% code, 97.79% data, 2008/2039 functions</text>
+<rect x="0" y="40" width="904.1" height="4" fill="#2ea043"/>
+<text x="12" y="27" font-size="16" fill="#e6edf3">BS2 PAL 1.0: 97.18% total, 94.18% code, 97.79% data, 2013/2039 functions</text>
 <g><title>BS2 menu</title>
 <rect x="0.0" y="44.0" width="297.2" height="540.0" fill="#21262d" stroke="#0d1117"/>
 <text x="4.0" y="56.0" font-size="11" fill="#e6edf3">BS2 menu</text>
@@ -11,12 +11,12 @@
 <rect x="2.0" y="60.0" width="154.8" height="186.4" fill="#2ea043" stroke="#0d1117" stroke-width="1"/>
 <text x="5.0" y="72.0" font-size="10" fill="#0d1117">menu_fx</text>
 </g>
-<g><title>bs2/menu/memcard: 26548 bytes, 82.7% matched, 99.1% fuzzy, 49/55 functions</title>
-<rect x="156.8" y="60.0" width="138.4" height="186.4" fill="#4a9f3d" stroke="#0d1117" stroke-width="1"/>
+<g><title>bs2/menu/memcard: 26548 bytes, 84.0% matched, 99.1% fuzzy, 50/55 functions</title>
+<rect x="156.8" y="60.0" width="138.4" height="186.4" fill="#489f3e" stroke="#0d1117" stroke-width="1"/>
 <text x="159.8" y="72.0" font-size="10" fill="#0d1117">memcard</text>
 </g>
-<g><title>bs2/menu/menu: 18380 bytes, 70.2% matched, 99.3% fuzzy, 25/30 functions</title>
-<rect x="2.0" y="246.4" width="131.9" height="135.4" fill="#5f9e39" stroke="#0d1117" stroke-width="1"/>
+<g><title>bs2/menu/menu: 18380 bytes, 76.1% matched, 99.4% fuzzy, 27/30 functions</title>
+<rect x="2.0" y="246.4" width="131.9" height="135.4" fill="#559e3b" stroke="#0d1117" stroke-width="1"/>
 <text x="5.0" y="258.4" font-size="10" fill="#0d1117">menu</text>
 </g>
 <g><title>bs2/menu/memcard_card: 11856 bytes, 78.8% matched, 99.5% fuzzy, 40/42 functions</title>
@@ -87,8 +87,8 @@
 <rect x="297.2" y="44.0" width="258.9" height="540.0" fill="#21262d" stroke="#0d1117"/>
 <text x="301.2" y="56.0" font-size="11" fill="#e6edf3">jaudio</text>
 </g>
-<g><title>jaudio/system: 15184 bytes, 86.3% matched, 99.9% fuzzy, 65/68 functions</title>
-<rect x="299.2" y="60.0" width="130.8" height="112.6" fill="#449f3e" stroke="#0d1117" stroke-width="1"/>
+<g><title>jaudio/system: 15184 bytes, 90.6% matched, 99.9% fuzzy, 66/68 functions</title>
+<rect x="299.2" y="60.0" width="130.8" height="112.6" fill="#3d9f40" stroke="#0d1117" stroke-width="1"/>
 <text x="302.2" y="72.0" font-size="10" fill="#0d1117">system</text>
 </g>
 <g><title>jaudio/jammain_2: 14408 bytes, 83.6% matched, 100.0% fuzzy, 93/94 functions</title>
@@ -263,8 +263,8 @@
 <rect x="558.1" y="228.7" width="87.9" height="63.2" fill="#2ea043" stroke="#0d1117" stroke-width="1"/>
 <text x="561.1" y="240.7" font-size="10" fill="#0d1117">gMRdraw</text>
 </g>
-<g><title>bs2/font: 5736 bytes, 73.1% matched, 98.3% fuzzy, 18/20 functions</title>
-<rect x="646.1" y="60.0" width="68.1" height="78.5" fill="#5a9e3a" stroke="#0d1117" stroke-width="1"/>
+<g><title>bs2/font: 5736 bytes, 81.0% matched, 99.2% fuzzy, 19/20 functions</title>
+<rect x="646.1" y="60.0" width="68.1" height="78.5" fill="#4d9f3d" stroke="#0d1117" stroke-width="1"/>
 <text x="649.1" y="72.0" font-size="10" fill="#0d1117">font</text>
 </g>
 <g><title>bs2/gInit: 5368 bytes, 100.0% matched, 100.0% fuzzy, 28/28 functions</title>
