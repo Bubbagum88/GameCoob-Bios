@@ -10,7 +10,7 @@ use crate::fs::UefiVolumes;
 use crate::bs2::menu::{Action, MenuAssets, SysInfo};
 use alloc::boxed::Box;
 use crate::bs2::{Assets, raster::{Job, Target, Work}, render};
-use crate::bs2::pad::{PAD_ERR_NONE, PadStatus};
+use crate::bs2::pad::{PAD_ERR_NONE, PAD_TRIGGER_Z, PadStatus};
 use crate::gamepad::Gamepads;
 use crate::input::{self, AppAction, KeyCode, Keyboard};
 use crate::clock::Clock;
@@ -20,6 +20,7 @@ use crate::audio::{Engine, data::SoundArchive};
 use crate::bs2::sound::{self, SoundCmd};
 use crate::hda::Hda;
 use alloc::string::{String, ToString};
+use alloc::collections::VecDeque;
 use alloc::vec::Vec;
 use core::ffi::c_void;
 use core::sync::atomic::{AtomicPtr, AtomicU32, Ordering};
@@ -161,7 +162,7 @@ impl Audio {
 }
 
 /// What the menu shows about this PC.
-fn sys_info(games: Vec<crate::bs2::menu::GameRow>) -> SysInfo {
+fn sys_info(games: Vec<crate::bs2::menu::GameRow>, controls: &input::Bindings) -> SysInfo {
     SysInfo {
         time: now_time(),
         entries: crate::vars::boot_entries().into_iter().map(|e| (e.num, e.desc)).collect(),
@@ -169,6 +170,7 @@ fn sys_info(games: Vec<crate::bs2::menu::GameRow>) -> SysInfo {
         vendor: system::firmware_vendor().to_string(),
         fw_ui: crate::vars::firmware_ui_supported(),
         games,
+        controls: controls.clone(),
     }
 }
 
@@ -193,6 +195,8 @@ fn perform(a: Action, launcher: &crate::launcher::Launcher) -> Option<String> {
         Action::SetIntroDelay(s) => firmware::save_intro_delay(s).err(),
         Action::SetJingle(j) => firmware::save_jingle(j).err(),
         Action::SetTime(t) => firmware::set_time(t).err(),
+        // Saved by the caller, which owns the bindings.
+        Action::SetControls => None,
         Action::FirmwareSetup => Some(firmware::firmware_setup()),
         Action::Restart => firmware::restart(),
         Action::PowerOff => firmware::power_off(),
@@ -287,6 +291,9 @@ impl Cores {
 /// USB gamepads ([`crate::gamepad`]) play alongside: GameCube controllers
 /// on an adapter as themselves, other pads through
 /// [`input::DEFAULT_PAD`].
+///
+/// Those are the defaults: the Controls page (Settings, down) remaps keys
+/// and gamepad buttons, saved in `GameCoobControls`.
 pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &Assets, ma: &MenuAssets, snd: Option<SoundArchive>) -> ! {
     // Before the clocks start: connecting USB can take a moment.
     crate::gamepad::start_usb();
@@ -303,7 +310,7 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
         None => Box::new(FakeDrive::new()),
     };
     let drive = Box::new(crate::bs2::menu::backend::ImageDrive::new(drive));
-    let mut bs2 = Bs2Main::new(assets, drive, load_cards(&boot_paths), Box::new(UefiVolumes));
+    let mut bs2 = Bs2Main::new(assets, drive, load_cards(&boot_paths), Box::new(UefiVolumes), Box::new(crate::setup::UefiSetup));
     let launcher = crate::launcher::Launcher::load();
     let cores = Cores::open();
     // Rendered at the screen's resolution, adjusted to keep up with the logic.
@@ -323,7 +330,12 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
     let mut last_played = audio.as_ref().map_or(0.0, |a| a.played());
     let mut stuck = 0.0f32;
     let mut done_frames = 0u32;
-    let mut keys = Keyboard::new(input::DEFAULT_KEYS);
+    let mut binds = crate::vars::controls().and_then(|b| input::Bindings::decode(&b)).unwrap_or_default();
+    let mut keys = Keyboard::new(&binds.keys);
+    // Raw presses for the Controls page: keys in order, gamepad buttons
+    // newly pressed since the last logic frame.
+    let mut raw_keys: VecDeque<KeyCode> = VecDeque::new();
+    let mut raw_pad = 0u32;
     let mut gamepads = Gamepads::new();
     let mut clock_at = 0.0;
 
@@ -352,9 +364,12 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
         while let Ok(Some(key)) = system::with_stdin(|i| i.read_key()) {
             let Some(k) = key_code(key) else { continue };
             keys.press(k, now);
+            if raw_keys.len() < 8 {
+                raw_keys.push_back(k);
+            }
             // The easter eggs: Z pressed while the cube falls stays held
             // until the menu, so the jingle can see it.
-            if matches!(k, KeyCode::Char('z' | 'Z')) && bs2.menu.is_none() && bs2.intro.frame < 30 {
+            if keys.binds(k, PAD_TRIGGER_Z) && bs2.menu.is_none() && bs2.intro.frame < 30 {
                 keys.latch(k);
             }
         }
@@ -366,7 +381,8 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
         let mut gp_actions = Vec::new();
         if done_frames < due {
             for (port, pad, prev) in gamepads.poll(now) {
-                input::add_pad(&mut gp, &mut gp_actions, input::DEFAULT_PAD, port, &pad, prev);
+                raw_pad |= input::pad_buttons(&pad) & !prev;
+                input::add_pad(&mut gp, &mut gp_actions, &binds.pad, port, &pad, prev);
             }
         }
         let mut stepped = false;
@@ -379,9 +395,14 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
                     input::merge(p, g);
                 }
             }
-            let mut input = FrameInput { pads, ..FrameInput::default() };
+            let mut input = FrameInput { pads, key: raw_keys.pop_front(), pad_press: core::mem::take(&mut raw_pad), ..FrameInput::default() };
             let mut actions = keys.take_actions();
             actions.append(&mut gp_actions);
+            // While the Controls page waits for a key, that key is only
+            // the new binding (R must not reset, F10 not open the dialog).
+            if bs2.capturing() {
+                actions.clear();
+            }
             for a in actions {
                 match a {
                     AppAction::System => input.system = true,
@@ -393,7 +414,14 @@ pub fn play(gop: &mut GraphicsOutput, cv: &mut Canvas, clock: &Clock, assets: &A
                     AppAction::Stats => show_stats = !show_stats,
                 }
             }
-            if let Some(act) = bs2.update(assets, ma, &input, || sys_info(launcher.rows())) {
+            if let Some(act) = bs2.update(assets, ma, &input, || sys_info(launcher.rows(), &binds)) {
+                if let (Action::SetControls, Some(m)) = (act, &mut bs2.menu) {
+                    binds = m.info.controls.clone();
+                    keys = Keyboard::new(&binds.keys);
+                    if let Err(e) = crate::firmware::save_controls(&binds.encode()) {
+                        m.notify(e);
+                    }
+                }
                 let leaves = matches!(act, Action::Boot(_) | Action::Launch(_) | Action::StartDisc);
                 if let (true, Some(a)) = (leaves, &mut audio) {
                     a.close();

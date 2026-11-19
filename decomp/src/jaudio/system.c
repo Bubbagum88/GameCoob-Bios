@@ -183,18 +183,19 @@ void* Nas_WaveDmaCallBack(u32 device_addr, u32 size, s32 arg2, u8* waveload_idx,
 }
 
 void Nas_WaveDmaNew(s32 n_channels) {
-    WaveLoad* waveload;
     s32 i;
     s32 t2;
     STACK_PAD_VAR(4);
+    WaveLoad* waveload;
 
+    (void)&AG.misc_heap;
     AG.waveload_dma_cur_buf_size = AG.waveload_dma_buf0_size;
     AG.waveload_list =
         (WaveLoad*)Nas_HeapAlloc(&AG.misc_heap, 4 * AG.num_channels * sizeof(WaveLoad) * AG.audio_params.spec);
     t2 = 3 * AG.num_channels * AG.audio_params.spec;
     for (i = 0; i < t2; i++) {
-        waveload = &AG.waveload_list[AG.num_waveloads];
         // waveload->ram_addr = (u8*)Nas_2ndHeapAlloc(&AG.misc_heap, AG.waveload_dma_cur_buf_size);
+        waveload = &AG.waveload_list[AG.num_waveloads];
         if ((waveload->ram_addr = (u8*)Nas_2ndHeapAlloc(&AG.misc_heap, AG.waveload_dma_cur_buf_size)) == NULL) {
             break;
         }
@@ -221,6 +222,7 @@ void Nas_WaveDmaNew(s32 n_channels) {
     AG.waveload_dma_queue0_wpos = AG.num_waveloads;
     AG.waveload_count = AG.num_waveloads;
     AG.waveload_dma_cur_buf_size = AG.waveload_dma_buf1_size;
+    (void)waveload;
 
     for (i = 0; i < AG.num_channels; i++) {
         waveload = &AG.waveload_list[AG.num_waveloads];

@@ -152,21 +152,11 @@ impl Page {
     }
 
     /// The page's body lines.
-    pub fn lines(self, entries: &[(u16, String)], fw_ui: bool) -> Vec<String> {
+    pub fn lines(self, entries: &[(u16, String)], _fw_ui: bool) -> Vec<String> {
         let s = |t: &str| String::from(t);
         match self {
-            Page::Firmware => {
-                let mut v = Vec::new();
-                v.push(s("A opens the system menu:"));
-                v.push(s(if fw_ui { "firmware setup, restart, power off." } else { "restart or power off." }));
-                v.push(s(""));
-                v.push(s("Minimal Mode is there too: the menu as"));
-                v.push(s("close to the console's as it gets."));
-                v.push(s("Intro Logo picks GameCube or GameCoob."));
-                v.push(s(""));
-                v.push(s("F10 opens it from anywhere."));
-                v
-            }
+            // drawn by fwsetup.rs
+            Page::Firmware => Vec::new(),
             Page::BootNow => {
                 let mut v = Vec::new();
                 v.push(s("Start which system?"));
@@ -205,14 +195,8 @@ impl Page {
             ]
             .map(s)
             .to_vec(),
-            Page::Controls => [
-                "Map keys and controllers",
-                "to the GameCube buttons.",
-                "",
-                "Coming soon.",
-            ]
-            .map(s)
-            .to_vec(),
+            // Drawn by the Controls page itself.
+            Page::Controls => Vec::new(),
         }
     }
 }

@@ -57,7 +57,8 @@ Language: Rust with the [`uefi`](https://crates.io/crates/uefi) crate, `no_std`.
 - [x] USB game controller input over the firmware's USB I/O protocol:
       GameCube adapters (Wii U mode), Xbox 360 / One, generic HID gamepads;
       keyboard stays on alongside
-- [ ] Controls page: remap keys and pad buttons, saved in a UEFI variable
+- [x] Controls page: remap keys and pad buttons, saved in a UEFI variable
+      (`GameCoobControls`)
 - [ ] Mouse/pointer support through the Simple Pointer protocol
 - [x] Intro audio through Intel HDA (own driver, `src/hda.rs`); the
       original sounds play only from the user's dump, none are shipped
@@ -68,14 +69,21 @@ Language: Rust with the [`uefi`](https://crates.io/crates/uefi) crate, `no_std`.
 UEFI firmware describes its setup menus as HII forms: every option, its
 allowed values, and the variable it lives in (usually `Setup`).
 
-- [ ] Enumerate HII packages through `EFI_HII_DATABASE_PROTOCOL`
-- [ ] Parse IFR form opcodes (forms, one-of, checkbox, numeric, string, refs)
-- [ ] Read and write values through `EFI_HII_CONFIG_ROUTING_PROTOCOL`, the same
+- [x] Enumerate HII packages through `EFI_HII_DATABASE_PROTOCOL` (`src/hii`)
+- [x] Parse IFR form opcodes (forms, one-of, checkbox, numeric, string, refs,
+      suppress/grey-out/disable conditions)
+- [x] Read and write values through `EFI_HII_CONFIG_ROUTING_PROTOCOL`, the same
       path the vendor setup screen uses, never raw offsets into `Setup`
-- [ ] Render forms in our UI, grouped and searchable
-- [ ] Safety: read-only by default, show a diff before saving, keep a backup
-      of every variable we change, and a "restore all" option
-- [ ] Test on OVMF first, then on real boards (vendor forms vary a lot)
+- [x] Render forms in our UI (Settings > Firmware)
+- [ ] Search across all forms
+- [x] Safety: changes are only staged until Review lists them (old and new
+      value) and Save is picked; the old bytes are backed up to
+      `\EFI\GameCoob\Setup` first (no backup, no save); Backups puts one back;
+      questions with driver callbacks, read-only or greyed out are never changed
+- [x] Test on OVMF first
+- [ ] Real boards (vendor forms vary a lot): "Save forms to the boot drive" on
+      the Firmware page writes `hii.bin` + `config.txt`; `tools/hii-tool` reads them
+- [ ] Questions with driver callbacks, strings, dates and passwords
 
 ## Phase 6 (optional): Inside the firmware
 
@@ -88,6 +96,8 @@ every vendor setting renders through our UI natively.
 - Tooling: UEFITool to repack, EDK2 to build the driver
 
 This is a stretch goal and stays out of scope until phases 2 to 5 are solid.
+The research (what blocks it, the routes, and what to try first) is in
+[DXE.md](DXE.md).
 
 ## Assets
 

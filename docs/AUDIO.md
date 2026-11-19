@@ -1,9 +1,9 @@
 # IPL audio map (for the Rust port)
 
 How BS2 (PAL 1.0) makes sound, from the JAudio decomp in `decomp/src/jaudio/`.
-JAudio is fully decompiled: every function has C. 669 of 678 compile
-byte-exact. The other 9 differ only in register choice and instruction order,
-not in logic (`fdiff -r` shows no logic change). 8 of those 9 are NEOS code,
+JAudio is fully decompiled: every function has C. 670 of 678 compile
+byte-exact. The other 8 differ only in register choice and instruction order,
+not in logic (`fdiff -r` shows no logic change). 7 of those 8 are NEOS code,
 which the IPL never runs (see below).
 
 ## In the app (status)

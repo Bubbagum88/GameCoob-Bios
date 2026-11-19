@@ -28,9 +28,11 @@ mod card;
 mod card_blocks;
 mod game;
 mod calendar;
+mod controls;
 mod options;
 pub mod icons;
 mod system;
+mod fwsetup;
 mod label_font;
 mod subcube;
 
@@ -397,6 +399,11 @@ pub struct Pad {
     pub system: bool,
     pub eject: bool,
     pub slot: [bool; 2],
+    /// GameCoob: the raw key pressed this frame and the gamepad buttons
+    /// ([`crate::gamepad::report::btn`] bits) newly pressed, for the
+    /// Controls page to bind.
+    pub key: Option<crate::input::KeyCode>,
+    pub pad_press: u32,
 }
 
 /// What the menu shows about this PC; the driver refreshes it.
@@ -412,6 +419,8 @@ pub struct SysInfo {
     /// Games an emulator on one of the PC's OSes can start
     /// (docs/EMULATORS.md), in the helper's list order.
     pub games: Vec<GameRow>,
+    /// The key and gamepad bindings (the Controls page edits them).
+    pub controls: crate::input::Bindings,
 }
 
 /// One game in Game Play's game list.
@@ -439,6 +448,8 @@ pub enum Action {
     SetCoobLogo(bool),
     /// Save the black hold before the intro: seconds, or None for Auto.
     SetIntroDelay(Option<u8>),
+    /// Save and use [`SysInfo::controls`] (changed on the Controls page).
+    SetControls,
     /// Save the Boot Jingle option (a `Sound_Play` jingle id, 0..2).
     SetJingle(u8),
     /// Set the firmware clock: year, month 1..12, day, hour, minute, second.
@@ -472,6 +483,9 @@ pub struct Menu {
     /// GameCoob's Card Files explorer and the drives it browses.
     pub explorer: explorer::Explorer,
     pub vols: Box<dyn volumes::Volumes>,
+    /// The firmware's setup forms and values (the Firmware page).
+    pub fw: Box<dyn crate::hii::Firmware>,
+    fwsetup: fwsetup::FwSetup,
     /// Card files backed up (as `.bak`) this boot before the first write.
     backed_up: Vec<String>,
     /// The image handle in each slot as last remembered (see
@@ -486,6 +500,7 @@ pub struct Menu {
     slot_glow: [i16; 2],
     // Submenus.
     boot_sel: usize,
+    controls: controls::Controls,
     options: options::Options,
     calendar: calendar::Calendar,
     highlight: i16,
@@ -518,7 +533,7 @@ impl Menu {
     /// The rest of Menu_Init (Menu_InitRes and the icons), on the
     /// `MenuWork` the scene made at boot and the spin-out has been
     /// wobbling since.
-    pub fn new(info: SysInfo, ma: &MenuAssets, drive: Box<dyn DiscDrive>, cards: Box<dyn MemCards>, vols: Box<dyn volumes::Volumes>, w: Work) -> Menu {
+    pub fn new(info: SysInfo, ma: &MenuAssets, drive: Box<dyn DiscDrive>, cards: Box<dyn MemCards>, vols: Box<dyn volumes::Volumes>, fw: Box<dyn crate::hii::Firmware>, w: Work) -> Menu {
         let mut cards = cards;
         let slot_seen = match cards.images() {
             Some(ic) => [0, 1].map(|s| ic.name(s).map(String::from)),
@@ -545,6 +560,8 @@ impl Menu {
             sys: system::System::new(info.fw_ui),
             explorer: explorer::Explorer::new(),
             vols,
+            fw,
+            fwsetup: fwsetup::FwSetup::new(),
             backed_up: Vec::new(),
             slot_seen,
             slot_fill: [0; 2],
@@ -555,6 +572,7 @@ impl Menu {
             lang: 0,
             slot_glow: [0; 2],
             boot_sel: 0,
+            controls: controls::Controls::new(),
             options: options::Options::new(&ma.option, 0, timeout),
             calendar: calendar::Calendar::new(),
             highlight: 50,
@@ -575,6 +593,12 @@ impl Menu {
         };
         m.calc_cube_mtx();
         m
+    }
+
+    /// GameCoob: the Controls page is waiting for a key or button to
+    /// bind; the app's own keys (reset, ...) stay out of it until then.
+    pub fn capturing(&self) -> bool {
+        self.state == St::Page && self.page == Page::Controls && self.controls.capturing()
     }
 
     /// Show a short note in the current submenu (e.g. a firmware error).
@@ -672,6 +696,12 @@ impl Menu {
                 Some(Target::Cube(_)) => {}
                 Some(Target::Page(pg)) => {
                     self.page = pg;
+                    if pg == subcube::Page::Firmware {
+                        self.fwsetup.enter();
+                    }
+                    if pg == subcube::Page::Controls {
+                        self.controls.enter();
+                    }
                     self.next = St::Page;
                 }
                 None => {}
@@ -902,8 +932,7 @@ impl Menu {
             }
             // Card Files draws its own help line.
             St::Page if self.page == Page::Files => [o; 8],
-            St::Page if self.page == Page::Firmware => [o, o, o, o, o, i, o, i],
-            St::Page if self.page == Page::BootNow => [o, o, o, i, o, i, o, i],
+            St::Page if matches!(self.page, Page::BootNow | Page::Firmware | Page::Controls) => [o, o, o, i, o, i, o, i],
             St::Page => [o, o, o, o, o, i, o, o],
         };
         // Glyph groups: 0..2 inside submenus, 3 the stick on the front
@@ -916,8 +945,7 @@ impl Menu {
             St::GameFace | St::CardFace | St::OptionFace | St::ClockFace => [false, false, false, false, true, true],
             St::Card | St::Option | St::Clock => [true, true, true, false, false, false],
             St::Page if self.page == Page::Files => [false; 6],
-            St::Page if self.page == Page::Firmware => [false, true, true, false, false, false],
-            St::Page if self.page == Page::BootNow => [true, true, true, false, false, false],
+            St::Page if matches!(self.page, Page::BootNow | Page::Firmware | Page::Controls) => [true, true, true, false, false, false],
             St::Page => [false, true, false, false, false, false],
         };
         for (f, on) in self.guide_text.iter_mut().zip(text) {
@@ -1158,11 +1186,35 @@ impl Menu {
                 }
                 return (St::Page, None);
             }
+            // Firmware is the firmware's own setup options: its lists
+            // take B themselves until the top one.
+            if self.page == Page::Firmware {
+                let o = self.fwsetup.update(p, &mut *self.fw, &mut *self.vols, self.info.time);
+                if o.system {
+                    self.sys.toggle();
+                }
+                if let Some(n) = o.note {
+                    self.notify(n);
+                }
+                if o.leave {
+                    return (self.page.face(), None);
+                }
+                return (St::Page, None);
+            }
+            if self.page == Page::Controls {
+                let mut note = None;
+                let r = self.controls.update(p, &mut self.info.controls, &mut note);
+                if let Some(n) = note {
+                    self.notify(n);
+                }
+                return match r {
+                    controls::Upd::Stay => (St::Page, None),
+                    controls::Upd::Back => (self.page.face(), None),
+                    controls::Upd::Changed => (St::Page, Some(Action::SetControls)),
+                };
+            }
             if p.b {
                 return (self.page.face(), None);
-            }
-            if p.a && self.page == Page::Firmware {
-                self.sys.toggle();
             }
             if self.page == Page::BootNow {
                 // A list like Game Play's boot list: pick, A boots it
@@ -1544,6 +1596,16 @@ impl Menu {
         draw_backdrop(ui, ma, &self.w, b);
         if self.page == Page::Files {
             // Card Files draws itself over everything.
+            return;
+        }
+        if self.page == Page::Firmware {
+            self.fwsetup.draw(ui, ma, t);
+            self.draw_message(ui, ma, t);
+            return;
+        }
+        if self.page == Page::Controls {
+            self.controls.draw(ui, ma, &self.info.controls, t);
+            self.draw_message(ui, ma, t);
             return;
         }
         let lines = self.page.lines(&self.info.entries, self.info.fw_ui);

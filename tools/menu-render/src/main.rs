@@ -9,7 +9,8 @@
 //! start, x, y, z, system (F10), eject (D), slot1, slot2, reset (R). Pad
 //! buttons are held on controller 1 for that one frame and go through BS2's
 //! pad code, so the same button on back-to-back frames is one long press.
-//! Lines starting with `#` are ignored. Without frames, every 10th
+//! `key:NAME` and `pad:NAME` are raw key / gamepad button presses for the
+//! Controls page (see the script loop). Lines starting with `#` are ignored. Without frames, every 10th
 //! frame up to the last scripted frame + 200 is written.
 //! Env: THREADS=n rasterizes on n threads; SKIP=1 skips the intro;
 //! CUBE=1 draws the console's intro logo ("GAMECUBE", default GAMECOOB);
@@ -18,6 +19,8 @@
 //! VOLS=dir,dir lists folders as drives for the Card Files explorer (F10);
 //! CARDS=a,b sets each slot to saves, none or a blank card of N blocks, or
 //! to a card image file (.raw/.mcp/.gcp) loaded as a real card (both slots then);
+//! HII=dir shows the hii.bin and config.txt in dir (the Firmware page's
+//! export) on Settings > Firmware; saves are printed, not applied;
 //! DUMP=layout:N, strings:N, model:N or raw:N prints that resource and exits
 //! (raw writes the decompressed bytes to stdout).
 
@@ -39,6 +42,10 @@ mod card;
 #[path = "../../../src/launch/mod.rs"]
 #[allow(dead_code)]
 mod launch;
+
+#[path = "../../../src/hii/mod.rs"]
+#[allow(dead_code)]
+mod hii;
 
 #[path = "../../../src/bs2/mod.rs"]
 #[allow(dead_code)]
@@ -84,6 +91,7 @@ fn info(frame: u32) -> SysInfo {
             GameRow { title: "Made-Up Racer".into(), detail: "Dolphin, windows".into() },
             GameRow { title: "Pretend Quest".into(), detail: "Dolphin, arch".into() },
         ],
+        controls: input::Bindings::default(),
     }
 }
 
@@ -207,7 +215,7 @@ fn main() {
     };
     // VOLS=dir,dir... are the drives the Card Files explorer browses.
     let roots: Vec<PathBuf> = std::env::var("VOLS").map(|v| v.split(',').map(PathBuf::from).collect()).unwrap_or_default();
-    let mut bs = Bs2Main::new(&assets, Box::new(FakeDrive::new()), cards, Box::new(HostVolumes { roots }));
+    let mut bs = Bs2Main::new(&assets, Box::new(FakeDrive::new()), cards, Box::new(HostVolumes { roots }), host_firmware());
     // MINIMAL=1: minimal mode (no sub-cubes, the console's labels).
     bs2::menu::set_minimal(std::env::var("MINIMAL").is_ok());
     // CUBE=1: the console's intro logo ("GAMECUBE") instead of GameCoob's.
@@ -243,6 +251,44 @@ fn main() {
         ] {
             if has(k) {
                 input.pads[0].button |= b;
+            }
+        }
+        // key:NAME is a raw key press (a letter, enter, esc, space, f1..f12,
+        // up/down/left/right), pad:NAME a gamepad button press (south,
+        // east, west, north, l1, r1, l2, r2, select, start, guide), both
+        // for the Controls page to bind.
+        for k in &keys {
+            if let Some(n) = k.strip_prefix("key:") {
+                use input::KeyCode::*;
+                input.key = Some(match n {
+                    "enter" => Char('\r'),
+                    "esc" => Esc,
+                    "space" => Char(' '),
+                    "backspace" => Char('\u{8}'),
+                    "up" => Up,
+                    "down" => Down,
+                    "left" => Left,
+                    "right" => Right,
+                    f if f.len() > 1 && f.starts_with('f') => F(f[1..].parse().expect("f-key")),
+                    c => Char(c.chars().next().expect("key")),
+                });
+            }
+            if let Some(n) = k.strip_prefix("pad:") {
+                use gamepad::report::btn;
+                input.pad_press |= match n {
+                    "south" => btn::SOUTH,
+                    "east" => btn::EAST,
+                    "west" => btn::WEST,
+                    "north" => btn::NORTH,
+                    "l1" => btn::L1,
+                    "r1" => btn::R1,
+                    "l2" => btn::L2,
+                    "r2" => btn::R2,
+                    "select" => btn::SELECT,
+                    "start" => btn::START,
+                    "guide" => btn::GUIDE,
+                    _ => panic!("pad button {n}"),
+                };
             }
         }
         let in_menu = bs.menu.is_some();
@@ -291,6 +337,34 @@ fn main() {
 
 /// Folders standing in for the PC's drives (the first is the boot drive);
 /// a volume's id is its folder.
+/// HII=dir: a firmware's setup forms from the Firmware page's export.
+struct HostFirmware {
+    dir: PathBuf,
+}
+
+fn host_firmware() -> Box<dyn hii::Firmware> {
+    match std::env::var("HII") {
+        Ok(d) => Box::new(HostFirmware { dir: PathBuf::from(d) }),
+        Err(_) => Box::new(hii::NoFirmware),
+    }
+}
+
+impl hii::Firmware for HostFirmware {
+    fn hii_export(&mut self) -> Result<Vec<u8>, String> {
+        std::fs::read(self.dir.join("hii.bin")).map_err(|e| e.to_string())
+    }
+    fn config_export(&mut self) -> Result<String, String> {
+        std::fs::read_to_string(self.dir.join("config.txt")).map_err(|e| e.to_string())
+    }
+    fn variable(&mut self, _name: &str, _guid: &[u8; 16]) -> Option<Vec<u8>> {
+        None
+    }
+    fn route_config(&mut self, cfg: &str) -> Result<(), String> {
+        eprintln!("RouteConfig {cfg}");
+        Ok(())
+    }
+}
+
 struct HostVolumes {
     roots: Vec<PathBuf>,
 }
