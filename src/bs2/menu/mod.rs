@@ -7,7 +7,7 @@
 //!
 //! | face        | console                 | here                                   |
 //! |-------------|-------------------------|----------------------------------------|
-//! | Game Play   | disc status, START boots | the same over a [`DiscDrive`]; START on a ready disc opens the firmware boot list (BootNext) |
+//! | Game Play   | disc status, START boots | the same over a [`DiscDrive`]; START boots a PC disc, launches a GameCube disc's game in its emulator, or (stand-in disc) opens the firmware boot list |
 //! | Memory Card | browse, copy, move, erase, format | the same over [`MemCards`] (fake cards in RAM for now) |
 //! | Options     | sound, screen, language | boot timeout, menu language            |
 //! | Calendar    | set the clock           | set the firmware clock (SetTime)       |
@@ -437,6 +437,9 @@ pub enum Action {
     /// Start game n of [`SysInfo::games`] in its emulator: record it for
     /// the OS's helper, then boot that OS.
     Launch(u16),
+    /// Start the disc in the drive ([`backend::DiscDrive::start`]): boot
+    /// a PC disc, or launch a GameCube disc's game in its emulator.
+    StartDisc,
     SetTimeout(u16),
     /// Save minimal mode (on or off).
     SetMinimal(bool),
@@ -446,6 +449,8 @@ pub enum Action {
     SetIntroDelay(Option<u8>),
     /// Save and use [`SysInfo::controls`] (changed on the Controls page).
     SetControls,
+    /// Save the Boot Jingle option (a `Sound_Play` jingle id, 0..2).
+    SetJingle(u8),
     /// Set the firmware clock: year, month 1..12, day, hour, minute, second.
     SetTime([i32; 6]),
     FirmwareSetup,
@@ -1024,6 +1029,8 @@ impl Menu {
             Some(Action::SetCoobLogo(on)) => crate::bs2::wordmark::set_coob(on),
             // Used from the next boot.
             Some(Action::SetIntroDelay(s)) => crate::bs2::intro_delay::set_setting(s),
+            // Played from the next intro.
+            Some(Action::SetJingle(j)) => crate::bs2::cube::Jingle::set_setting(crate::bs2::cube::Jingle::from_u8(j)),
             _ => {}
         }
         let busy = self.sys.visible() || self.explorer.visible();

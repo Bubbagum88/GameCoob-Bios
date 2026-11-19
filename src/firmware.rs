@@ -65,6 +65,10 @@ pub fn save_coob_logo(on: bool) -> Result<(), String> {
     vars::set_coob_logo(on).map_err(|err| format!("Could not save the intro logo: {:?}", err.status()))
 }
 
+pub fn save_jingle(j: u8) -> Result<(), String> {
+    vars::set_jingle(j).map_err(|err| format!("Could not save the boot jingle: {:?}", err.status()))
+}
+
 pub fn save_intro_delay(secs: Option<u8>) -> Result<(), String> {
     vars::set_intro_delay(secs).map_err(|err| format!("Could not save the intro delay: {:?}", err.status()))
 }

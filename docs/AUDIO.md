@@ -42,17 +42,29 @@ recordings of it.
 
 Mixing facts (the DSP side) come from Dolphin's notes on this microcode
 family (the IPL uses the light protocol, four mixing destinations per voice,
-no command 0x0D). Dolphin is GPL, so only facts were taken. Two guesses:
-bus 9 (0x0FA0, used only by the ambient's lead voice) plays on the right,
-and the third echo line's buffer is never played, so it is left out.
+no command 0x0D). Dolphin is GPL, so only facts were taken. Its notes
+leave two buffers open; the IPL's own microcode (`jdsp`, 0x813F4BA0, read
+with a small table-driven DSP decoder) settles both:
+
+- bus 9 (0x0FA0, the ambient's voices, panned against bus 1) is cleared
+  each frame and, after the left channel is sent, added into the right
+  one at volume 0x8000, which the signed 1.15 multiply makes -1.0: right,
+  inverted (DSP code 0x064E).
+- 0x09A0 (the third echo line's output) is added to both sides at 0x5A82
+  (DSP code 0x0630). That line reads bus 5 (0x0E80; reverb buffers sit at
+  0x0DC0 + 0x60 each, DSP code 0x0469), and no routing in the IPL sends
+  to bus 5, so it stays silent and is left out.
 
 Check on the host: `tools/audio-render <ipl.bin> <out-dir> [id | ambient |
 hold | spinout | bank ...]` writes 48 kHz WAVs (`sound_<name>.wav`). In
 QEMU, add `-audiodev wav,id=snd0,path=out.wav -device intel-hda -device
 hda-output,audiodev=snd0`.
 
-Later: a 32 kHz "Original" output for Minimal mode, and the jingle as a menu
-option (it is a plain 0/1/2 already).
+The boot jingle is a setting: Boot Jingle in the F10 dialog, saved as
+`GameCoobJingle` (0 normal, 1 the four-player Z jingle, 2 the one-player
+one). Holding Z still picks an egg, as on the console.
+
+Later: a 32 kHz "Original" output for Minimal mode.
 
 PAL 1.0 waves: 10 at 32000 Hz and 2 at 44100 Hz, AFC 4-bit. The jingles are
 prerecorded stereo (two waves, one per side) of 5.2 to 5.9 s.

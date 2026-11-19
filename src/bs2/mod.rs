@@ -101,9 +101,10 @@ impl Assets {
 
     /// The wordmark model the intro draws: GameCoob's when that option is
     /// on (and the dump's wordmark could be respelled), else the console's.
+    /// Minimal mode always draws the console's.
     pub fn wordmark(&self) -> &Prepared {
         match &self.text_coob {
-            Some(t) if wordmark::coob() => t,
+            Some(t) if wordmark::coob() && !menu::minimal() => t,
             _ => &self.text,
         }
     }
@@ -120,7 +121,7 @@ pub struct Input {
 
 /// Frames to hold the finished logo before it spins to the menu on its own
 /// when no disc is present. The real IPL holds none; GameCoob lingers one
-/// second (50 frames) on the logo.
+/// second (50 frames) on the logo, except in minimal mode.
 pub const HOLD_FRAMES: i32 = 50;
 
 /// The scene (`scene.c`, `scene_intro.c`, `scene_spinout.c`): the scene
@@ -180,7 +181,7 @@ impl Intro {
             state: SceneState::NoDisc,
             next_state: SceneState::NoDisc,
             disc: Disc::new(),
-            hold: HOLD_FRAMES,
+            hold: if menu::minimal() { 0 } else { HOLD_FRAMES },
             frame: 0,
             menu: menu::Work::new(),
             ortho: true,
