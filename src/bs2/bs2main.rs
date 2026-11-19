@@ -110,6 +110,10 @@ pub struct FrameInput {
     pub slot: [bool; 2],
     /// The reset switch is down (`OSGetResetSwitchState`).
     pub reset: bool,
+    /// GameCoob: the raw key pressed and the gamepad buttons newly
+    /// pressed, for the Controls page.
+    pub key: Option<crate::input::KeyCode>,
+    pub pad_press: u32,
 }
 
 impl Default for FrameInput {
@@ -117,7 +121,7 @@ impl Default for FrameInput {
     fn default() -> FrameInput {
         let mut pads = [PadStatus::NONE; 4];
         pads[0] = PadStatus::IDLE;
-        FrameInput { pads, system: false, eject: false, slot: [false; 2], reset: false }
+        FrameInput { pads, system: false, eject: false, slot: [false; 2], reset: false, key: None, pad_press: 0 }
     }
 }
 
@@ -143,6 +147,11 @@ impl Bs2Main {
         // is kept in RAM and starts out stereo.
         sound::set_output_mode(1);
         Bs2Main { intro: Intro::new(a), menu: None, pads: Pads::new(), backends: Some((drive, cards, vols, fw)) }
+    }
+
+    /// The Controls page is waiting for a key or button to bind.
+    pub fn capturing(&self) -> bool {
+        self.menu.as_ref().is_some_and(|m| m.capturing())
     }
 
     /// Run the intro to its end at once (a skip).
@@ -183,6 +192,8 @@ impl Bs2Main {
                     system: input.system,
                     eject: input.eject,
                     slot: input.slot,
+                    key: input.key,
+                    pad_press: input.pad_press,
                 };
                 action = m.update(ma, &self.intro.camera_view(), &p);
                 m.tick_guide();

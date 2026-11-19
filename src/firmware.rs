@@ -57,6 +57,10 @@ pub fn save_minimal(on: bool) -> Result<(), String> {
     vars::set_minimal(on).map_err(|err| format!("Could not save minimal mode: {:?}", err.status()))
 }
 
+pub fn save_controls(bytes: &[u8]) -> Result<(), String> {
+    vars::set_controls(bytes).map_err(|err| format!("Could not save the controls: {:?}", err.status()))
+}
+
 pub fn save_coob_logo(on: bool) -> Result<(), String> {
     vars::set_coob_logo(on).map_err(|err| format!("Could not save the intro logo: {:?}", err.status()))
 }

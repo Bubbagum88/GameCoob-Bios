@@ -50,8 +50,8 @@ The matching decompilation of the IPL's BS2 program lives in [decomp/](decomp/RE
   (left, the Options screen), Firmware (up), Controls (down). Each sub-menu has at most three sides; the fourth, the way it rolled in, goes back.
   B, or turning back the way it came, rolls back to the main front. Their labels use the console's own
   lettering, cut letter by letter from your dump's label pictures; the few
-  letters the IPL never drew come from M PLUS 1p (SIL Open Font License). Files, Drives and Controls are
-  placeholders for now.
+  letters the IPL never drew come from M PLUS 1p (SIL Open Font License). Drives is a
+  placeholder for now.
 - **BIOS settings.** Settings ▲ Firmware lists the PC's own setup pages
   (whatever the firmware publishes as HII forms) and their options with
   their current values. Left / Right (or A) change an option; nothing is
@@ -190,6 +190,17 @@ are X, Y, L and R, and z held at boot (shift-Z for all four controllers) picks a
 easter-egg jingle. Esc skips the intro, F10 opens the system dialog, R is the
 reset switch and F3 shows frame timings. Held arrows repeat at the IPL's own rate.
 
+These are the defaults. **Settings > Controls** remaps them: pick a GameCube button
+or one of the app's keys (System Menu, Disc Tray, Slot A/B Card, Reset, Skip Intro,
+Frame Times), press A, then press the new key or gamepad button within 5 seconds.
+A key changes the keyboard column, a gamepad button the controller column; the new
+one leaves whatever it did before (only Skip Intro can share a key with a button).
+The last row puts everything back to the
+defaults. The bindings are saved in the `GameCoobControls` UEFI variable. If a
+remap takes the last key of A, B, START or a direction, its default key comes back
+where it is free, and on the Controls page Enter and Esc always work as A and B if
+those have no key.
+
 USB controllers work alongside the keyboard (`src/gamepad/`), plugged in before
 or while GameCoob runs:
 
@@ -203,8 +214,8 @@ or while GameCoob runs:
 On non-GameCube pads the bottom face button is A, the right one B, the left one
 X, the top one Y; the triggers are L and R, either shoulder is Z, and the Xbox / PS
 / Home button opens the system dialog. Generic pads are read by button number in
-the usual DirectInput order (PlayStation layout); one that differs gets remapped
-once the Controls page lands. The firmware's own USB stack does the transport, so
+the usual DirectInput order (PlayStation layout); one that differs can be remapped
+on the Controls page. GameCube controllers on an adapter are never remapped. The firmware's own USB stack does the transport, so
 the firmware must have USB enabled (if a USB keyboard works in its setup screen,
 pads work too).
 

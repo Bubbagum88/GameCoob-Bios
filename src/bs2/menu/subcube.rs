@@ -195,14 +195,8 @@ impl Page {
             ]
             .map(s)
             .to_vec(),
-            Page::Controls => [
-                "Map keys and controllers",
-                "to the GameCube buttons.",
-                "",
-                "Coming soon.",
-            ]
-            .map(s)
-            .to_vec(),
+            // Drawn by the Controls page itself.
+            Page::Controls => Vec::new(),
         }
     }
 }
